@@ -1,0 +1,14 @@
+- name: Audit the existing host
+  ansible.builtin.import_playbook: audit.yml
+
+- name: Configure Docker, logging and lifecycle
+  ansible.builtin.import_playbook: docker.yml
+
+- name: Prepare shared infrastructure and environment isolation
+  ansible.builtin.import_playbook: environments.yml
+
+- name: Deploy the Cloudflare Tunnel connector
+  ansible.builtin.import_playbook: cloudflared.yml
+
+- name: Deploy private Coolify and its internal proxy
+  ansible.builtin.import_playbook: coolify.yml

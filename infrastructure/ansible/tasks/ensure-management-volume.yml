@@ -1,0 +1,31 @@
+- name: Inspect management volume {{ anico_management_volume }}
+  ansible.builtin.command:
+    argv: [docker, volume, inspect, '{{ anico_management_volume }}']
+  register: anico_management_volume_info
+  changed_when: false
+  failed_when: anico_management_volume_info.rc not in [0, 1]
+  check_mode: false
+
+- name: Require the expected management volume ownership
+  ansible.builtin.assert:
+    that:
+      - existing.Driver == 'local'
+      - (existing.Labels | default({}, true)).get('com.anico.managed-by') == 'ansible'
+      - (existing.Labels | default({}, true)).get('com.anico.role') == 'management-data'
+  vars:
+    existing: '{{ anico_management_volume_info.stdout | from_json | first }}'
+  when: anico_management_volume_info.rc == 0
+
+- name: Create management volume {{ anico_management_volume }}
+  ansible.builtin.command:
+    argv:
+      - docker
+      - volume
+      - create
+      - --label
+      - com.anico.managed-by=ansible
+      - --label
+      - com.anico.role=management-data
+      - '{{ anico_management_volume }}'
+  when: anico_management_volume_info.rc == 1
+  changed_when: true

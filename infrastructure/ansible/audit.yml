@@ -1,0 +1,41 @@
+- name: Inspect the existing AniCo server without changing its configuration
+  hosts: anico
+  gather_facts: true
+  tasks:
+    - name: Verify the supported operating system
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_version == '26.04'
+          - ansible_facts.architecture in ['x86_64', 'aarch64']
+        fail_msg: Expected Ubuntu 26.04 on amd64 or arm64. Review the installation role for this host.
+
+    - name: Read disk availability
+      ansible.builtin.command: df -h / /var
+      register: audit_disk
+      changed_when: false
+      check_mode: false
+
+    - name: Read listening TCP ports
+      ansible.builtin.command: ss -lnt
+      register: audit_ports
+      changed_when: false
+      check_mode: false
+
+    - name: Check whether Docker is already installed
+      ansible.builtin.command: docker --version
+      register: audit_docker
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Show the audit summary
+      ansible.builtin.debug:
+        msg:
+          os: '{{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}'
+          architecture: '{{ ansible_facts.architecture }}'
+          cpu_threads: '{{ ansible_facts.processor_vcpus }}'
+          memory_mb: '{{ ansible_facts.memtotal_mb }}'
+          disks: '{{ audit_disk.stdout_lines }}'
+          tcp_listeners: '{{ audit_ports.stdout_lines }}'
+          docker: '{{ audit_docker.stdout | default("not installed", true) }}'

@@ -1,0 +1,10 @@
+{
+  "administratorHostname": "admin.anico.online",
+  "developerEmails": [],
+  "administratorEmails": ["scotkaml@gmail.com"],
+  "publish": {
+    "production": false,
+    "dev": false,
+    "administration": true
+  }
+}

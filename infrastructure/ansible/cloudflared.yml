@@ -1,0 +1,148 @@
+- name: Deploy the remotely managed Cloudflare Tunnel connector
+  hosts: anico
+  become: true
+  gather_facts: false
+  vars:
+    anico_foundation: '{{ lookup("ansible.builtin.file", playbook_dir + "/../environments.json") | from_json }}'
+    anico_tunnel: '{{ lookup("ansible.builtin.file", playbook_dir + "/../cloudflared.json") | from_json }}'
+    anico_tunnel_directory: '{{ anico_foundation.rootDirectory }}/tunnel'
+  pre_tasks:
+    - name: Validate connector configuration
+      ansible.builtin.assert:
+        that:
+          - anico_tunnel.image is match('^cloudflare/cloudflared:[0-9.]+@sha256:[a-f0-9]{64}$')
+          - anico_tunnel.project == 'anico-tunnel'
+          - anico_tunnel.stack == 'shared'
+          - anico_foundation.rootDirectory == '/srv/anico'
+
+    - name: Verify Docker and the existing management network
+      ansible.builtin.command:
+        argv:
+          [docker, network, inspect, '{{ anico_foundation.managementNetwork }}']
+      register: anico_tunnel_network
+      changed_when: false
+      check_mode: false
+
+    - name: Require the management network prepared by Ansible
+      ansible.builtin.assert:
+        that:
+          - (anico_tunnel_network.stdout | from_json)[0].Labels['com.anico.managed-by'] == 'ansible'
+          - not (anico_tunnel_network.stdout | from_json)[0].Internal
+
+    - name: Inspect any existing connector container
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            container,
+            inspect,
+            '{{ anico_tunnel.project }}-cloudflared-1',
+          ]
+      register: anico_existing_connector
+      failed_when: anico_existing_connector.rc not in [0, 1]
+      changed_when: false
+      check_mode: false
+
+    - name: Refuse to adopt an unrelated container
+      ansible.builtin.assert:
+        that:
+          - (anico_existing_connector.stdout | from_json)[0].Config.Labels['com.anico.managed-by'] == 'ansible'
+          - (anico_existing_connector.stdout | from_json)[0].Config.Labels['com.docker.compose.project'] == anico_tunnel.project
+      when: anico_existing_connector.rc == 0
+
+    - name: Read the tunnel token from encrypted local Pulumi state
+      ansible.builtin.command:
+        argv:
+          - node
+          - '--env-file-if-exists={{ playbook_dir }}/../.env.local'
+          - '{{ playbook_dir }}/../scripts/run-pulumi.mjs'
+          - stack
+          - output
+          - tunnelToken
+          - --stack
+          - '{{ anico_tunnel.stack }}'
+          - --show-secrets
+          - --non-interactive
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      register: anico_tunnel_token
+      changed_when: false
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Require an actual tunnel token before deployment
+      ansible.builtin.assert:
+        that:
+          - (anico_tunnel_token.stdout | trim) is match('^[A-Za-z0-9+/=_-]{50,}$')
+      no_log: true
+      when: not ansible_check_mode
+
+  tasks:
+    - name: Create the connector directory
+      ansible.builtin.file:
+        path: '{{ anico_tunnel_directory }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+
+    - name: Create the connector secrets directory
+      ansible.builtin.file:
+        path: '{{ anico_tunnel_directory }}/secrets'
+        state: directory
+        owner: root
+        group: '65532'
+        mode: '0750'
+
+    - name: Install the tunnel token without logging its value
+      ansible.builtin.copy:
+        dest: '{{ anico_tunnel_directory }}/secrets/tunnel-token'
+        content: '{{ anico_tunnel_token.stdout | trim }}'
+        owner: root
+        group: '65532'
+        mode: '0440'
+      register: anico_tunnel_secret
+      no_log: true
+      diff: false
+      when: not ansible_check_mode
+
+    - name: Install the nonsecret connector Compose definition
+      ansible.builtin.template:
+        src: cloudflared.compose.yaml.j2
+        dest: '{{ anico_tunnel_directory }}/compose.yaml'
+        owner: root
+        group: root
+        mode: '0640'
+
+    - name: Start the connector and wait for an active edge connection
+      ansible.builtin.command:
+        argv: '{{ ["docker", "compose", "--project-name", anico_tunnel.project, "up", "--detach", "--wait", "--wait-timeout", "120"] + (["--force-recreate"] if anico_tunnel_secret.changed else []) }}'
+        chdir: '{{ anico_tunnel_directory }}'
+      register: anico_tunnel_up
+      changed_when: >-
+        'Creating' in anico_tunnel_up.stderr or
+        'Created' in anico_tunnel_up.stderr or
+        'Recreate' in anico_tunnel_up.stderr or
+        'Starting' in anico_tunnel_up.stderr or
+        'Started' in anico_tunnel_up.stderr
+      when: not ansible_check_mode
+
+    - name: Verify readiness using the binary in the running container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - '{{ anico_tunnel.project }}'
+          - exec
+          - -T
+          - cloudflared
+          - cloudflared
+          - tunnel
+          - --metrics
+          - 127.0.0.1:20241
+          - ready
+        chdir: '{{ anico_tunnel_directory }}'
+      changed_when: false
+      when: not ansible_check_mode

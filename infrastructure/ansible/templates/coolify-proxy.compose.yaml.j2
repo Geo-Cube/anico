@@ -1,0 +1,40 @@
+name: coolify-proxy
+services:
+  traefik:
+    image: {{ anico_coolify.images.proxy }}
+    container_name: coolify-proxy
+    restart: unless-stopped
+    extra_hosts: ['host.docker.internal:host-gateway']
+    networks: [coolify]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /data/coolify/proxy:/traefik
+    command:
+      - --ping=true
+      - --ping.entrypoint=http
+      - --api.dashboard=false
+      - --api.insecure=false
+      - --entrypoints.http.address=:80
+      - --entrypoints.http.forwardedheaders.trustedips={{ (anico_management_network.stdout | from_json)[0].IPAM.Config | map(attribute='Subnet') | join(',') }}
+      - --entrypoints.https.address=:443
+      - --providers.file.directory=/traefik/dynamic/
+      - --providers.file.watch=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+    labels:
+      traefik.enable: 'false'
+      coolify.managed: 'true'
+      coolify.proxy: 'true'
+      com.anico.managed-by: ansible
+    healthcheck:
+      test: [CMD-SHELL, 'wget -qO- http://127.0.0.1:80/ping || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: local
+      options: {max-size: 10m, max-file: '3'}
+networks:
+  coolify:
+    external: true
+    name: {{ anico_foundation.managementNetwork }}

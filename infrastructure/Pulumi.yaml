@@ -1,0 +1,7 @@
+name: anico-foundation
+description: Network foundation for the existing AniCo Hetzner server
+runtime:
+  name: nodejs
+  options:
+    typescript: false
+main: dist

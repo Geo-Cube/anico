@@ -1,0 +1,417 @@
+- name: Deploy private self-hosted Coolify and its internal Traefik proxy
+  hosts: anico
+  become: true
+  gather_facts: false
+  vars:
+    anico_foundation: '{{ lookup("ansible.builtin.file", playbook_dir + "/../environments.json") | from_json }}'
+    anico_coolify: '{{ lookup("ansible.builtin.file", playbook_dir + "/../coolify.json") | from_json }}'
+    anico_access: '{{ lookup("ansible.builtin.file", playbook_dir + "/../access.json") | from_json }}'
+    anico_coolify_compose: [docker, compose, --project-name, anico-management]
+  pre_tasks:
+    - name: Validate managed installation settings
+      ansible.builtin.assert:
+        that:
+          - anico_coolify.rootDirectory == '/data/coolify'
+          - anico_coolify.project == 'anico-management'
+          - anico_coolify.databaseNetwork == 'anico-management-data'
+          - item.value is match('^[a-z0-9./-]+:[a-zA-Z0-9.-]+@sha256:[a-f0-9]{64}$')
+      loop: '{{ anico_coolify.images | dict2items }}'
+      loop_control:
+        label: '{{ item.key }}'
+
+    - name: Prepare or preserve local installation secrets
+      ansible.builtin.command:
+        argv: [node, '{{ playbook_dir }}/../scripts/init-coolify.mjs']
+      delegate_to: localhost
+      become: false
+      register: anico_local_coolify_secrets
+      changed_when: "'prepared locally' in anico_local_coolify_secrets.stdout"
+      when: not ansible_check_mode
+
+    - name: Verify the existing management network
+      ansible.builtin.command:
+        argv:
+          [docker, network, inspect, '{{ anico_foundation.managementNetwork }}']
+      register: anico_management_network
+      changed_when: false
+      check_mode: false
+
+    - name: Require the management network created by Ansible
+      ansible.builtin.assert:
+        that:
+          - (anico_management_network.stdout | from_json)[0].Labels['com.anico.managed-by'] == 'ansible'
+
+    - name: Inspect existing management containers
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            container,
+            inspect,
+            --format,
+            '{{ "{{json .Config.Labels}}" }}',
+            '{{ item }}',
+          ]
+      register: anico_management_containers
+      failed_when: anico_management_containers.rc not in [0, 1]
+      changed_when: false
+      check_mode: false
+      loop: [coolify, coolify-db, coolify-redis, coolify-proxy]
+
+    - name: Refuse to adopt unrelated containers
+      ansible.builtin.assert:
+        that:
+          - (item.stdout | from_json | default({}, true)).get('com.anico.managed-by') == 'ansible'
+        quiet: true
+      loop: '{{ anico_management_containers.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+      when: item.rc == 0
+
+    - name: Inspect the initialization marker
+      ansible.builtin.stat:
+        path: /data/coolify/source/.anico-initialized
+      register: anico_coolify_marker
+
+    - name: Inspect the persistent management key
+      ansible.builtin.stat:
+        path: /data/coolify/ssh/management-key
+      register: anico_coolify_persistent_key
+
+    - name: Install the management key recovery helper for an existing instance
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../scripts/configure-coolify.php'
+        dest: /data/coolify/source/anico/configure.php
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+      when: anico_coolify_marker.stat.exists and not anico_coolify_persistent_key.stat.exists
+
+    - name: Recover the original management key from the encrypted database
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            exec,
+            coolify,
+            php,
+            /anico/configure.php,
+            --restore-management-key,
+          ]
+      no_log: true
+      when: anico_coolify_marker.stat.exists and not anico_coolify_persistent_key.stat.exists and not ansible_check_mode
+
+    - name: Inspect existing instance environment
+      ansible.builtin.stat:
+        path: /data/coolify/source/.env
+        checksum_algorithm: sha256
+      register: anico_existing_coolify_env
+
+    - name: Preserve existing installation secrets and refuse accidental replacement
+      ansible.builtin.assert:
+        that:
+          - anico_existing_coolify_env.stat.checksum == (lookup('ansible.builtin.file', playbook_dir + '/../../.pulumi/coolify.env', rstrip=false) | hash('sha256'))
+        fail_msg: Existing Coolify secrets differ; restore the matching local file before continuing.
+      no_log: true
+      when: anico_existing_coolify_env.stat.exists and not ansible_check_mode
+
+  tasks:
+    - name: Require the expected separate administration hostname
+      ansible.builtin.assert:
+        that:
+          - anico_access.administratorHostname == 'admin.' + anico_foundation.domain
+          - not anico_access.publish.administration or (anico_access.administratorEmails | length > 0)
+
+    - name: Prepare the private management database network
+      ansible.builtin.include_tasks: tasks/ensure-network.yml
+      vars:
+        anico_network:
+          name: '{{ anico_coolify.databaseNetwork }}'
+          environment: shared
+          role: management-data
+          internal: true
+
+    - name: Prepare persistent management volumes
+      ansible.builtin.include_tasks: tasks/ensure-management-volume.yml
+      loop: [coolify-db, coolify-redis]
+      loop_control:
+        loop_var: anico_management_volume
+
+    - name: Prepare Coolify directories using the upstream installation layout
+      ansible.builtin.file:
+        path: '/data/coolify/{{ item }}'
+        state: directory
+        owner: '9999'
+        group: '{{ "root" if item in ["ssh/keys", "ssh/mux"] else "9999" }}'
+        mode: '0750'
+      loop:
+        - ''
+        - source
+        - source/anico
+        - ssh
+        - ssh/keys
+        - ssh/mux
+        - applications
+        - databases
+        - services
+        - backups
+        - images
+        - proxy
+        - proxy/dynamic
+
+    - name: Install the instance environment without disclosing credentials
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/coolify.env'
+        dest: /data/coolify/source/.env
+        owner: '9999'
+        group: '9999'
+        mode: '0600'
+      no_log: true
+      diff: false
+      when: not ansible_check_mode
+
+    - name: Generate the dedicated local management SSH key only once
+      ansible.builtin.command:
+        argv:
+          [
+            ssh-keygen,
+            -t,
+            ed25519,
+            -a,
+            '100',
+            -f,
+            /data/coolify/ssh/management-key,
+            -N,
+            '',
+            -C,
+            anico-coolify,
+          ]
+        creates: /data/coolify/ssh/management-key
+
+    - name: Protect the dedicated private SSH key
+      ansible.builtin.file:
+        path: /data/coolify/ssh/management-key
+        owner: '9999'
+        group: '9999'
+        mode: '0600'
+      when: not ansible_check_mode
+
+    - name: Read the public management SSH key
+      ansible.builtin.command:
+        argv: [ssh-keygen, -y, -f, /data/coolify/ssh/management-key]
+      register: anico_coolify_public_key
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Seed the private key where the upstream first-run installer expects it
+      ansible.builtin.copy:
+        src: /data/coolify/ssh/management-key
+        remote_src: true
+        dest: /data/coolify/ssh/keys/id.root@host.docker.internal
+        owner: '9999'
+        group: root
+        mode: '0600'
+      no_log: true
+      when: not anico_coolify_marker.stat.exists and not ansible_check_mode
+
+    - name: Ensure the root SSH directory exists
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Authorize the dedicated management key without replacing administrator keys
+      ansible.builtin.lineinfile:
+        path: /root/.ssh/authorized_keys
+        line: 'no-agent-forwarding,no-X11-forwarding,no-port-forwarding {{ anico_coolify_public_key.stdout | trim }} anico-coolify'
+        create: true
+        owner: root
+        group: root
+        mode: '0600'
+      when: not ansible_check_mode
+
+    - name: Install the private management Compose definition
+      ansible.builtin.template:
+        src: coolify.compose.yaml.j2
+        dest: /data/coolify/source/compose.yaml
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Install the private proxy definition as controller input
+      ansible.builtin.template:
+        src: coolify-proxy.compose.yaml.j2
+        dest: /data/coolify/source/anico/proxy.yaml
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Install the private proxy definition on the host
+      ansible.builtin.template:
+        src: coolify-proxy.compose.yaml.j2
+        dest: /data/coolify/proxy/docker-compose.yml
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Install the controlled initialization and instance policy
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../scripts/configure-coolify.php'
+        dest: /data/coolify/source/anico/configure.php
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Install the desired access metadata for instance policy
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../access.json'
+        dest: /data/coolify/source/anico/access.json
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Install the administration HTTP routes behind the authenticated Tunnel
+      ansible.builtin.template:
+        src: coolify-admin.dynamic.yaml.j2
+        dest: /data/coolify/proxy/dynamic/anico-admin.yaml
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Install the read-only policy verification script
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../scripts/verify-coolify.php'
+        dest: /data/coolify/source/anico/verify.php
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Store the nonsecret pinned installation metadata
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../coolify.json'
+        dest: /data/coolify/source/anico/installation.json
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Validate Compose without printing interpolated secrets
+      ansible.builtin.command:
+        argv: '{{ anico_coolify_compose + ["config", "--quiet"] }}'
+        chdir: /data/coolify/source
+      changed_when: false
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Start the management databases before initialization
+      ansible.builtin.command:
+        argv: '{{ anico_coolify_compose + ["up", "--detach", "--wait", "--wait-timeout", "180", "postgres", "redis"] }}'
+        chdir: /data/coolify/source
+      register: anico_coolify_databases_up
+      changed_when: anico_coolify_databases_up.stderr is search('Creat|Recreat|Start|Pulling')
+      when: not ansible_check_mode
+
+    - name: Initialize schema, root user and private proxy settings before starting workers
+      ansible.builtin.command:
+        argv: '{{ anico_coolify_compose + ["run", "--rm", "--no-deps", "--entrypoint", "php", "coolify", "/anico/configure.php", "--initialize"] }}'
+        chdir: /data/coolify/source
+        creates: /data/coolify/source/.anico-initialized
+      register: anico_coolify_initialization
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Record successful initialization without storing credentials
+      ansible.builtin.copy:
+        dest: /data/coolify/source/.anico-initialized
+        content: "Initialized by AniCo Ansible. Preserve database volumes and installation secrets.\n"
+        owner: root
+        group: root
+        mode: '0640'
+      when: not ansible_check_mode and anico_coolify_initialization.changed
+
+    - name: Start Coolify and verify HTTP and realtime health
+      ansible.builtin.command:
+        argv: '{{ anico_coolify_compose + ["up", "--detach", "--wait", "--wait-timeout", "240"] }}'
+        chdir: /data/coolify/source
+      register: anico_coolify_up
+      changed_when: anico_coolify_up.stderr is search('Creat|Recreat|Start|Pulling')
+      when: not ansible_check_mode
+
+    - name: Start the internal Traefik proxy without host port mappings
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            compose,
+            --file,
+            /data/coolify/proxy/docker-compose.yml,
+            up,
+            --detach,
+            --wait,
+            --wait-timeout,
+            '120',
+          ]
+      register: anico_proxy_up
+      changed_when: anico_proxy_up.stderr is search('Creat|Recreat|Start|Pulling')
+      when: not ansible_check_mode
+
+    - name: Normalize SSH directories recreated by the upstream seeder
+      ansible.builtin.file:
+        path: '/data/coolify/ssh/{{ item }}'
+        state: directory
+        owner: '9999'
+        group: root
+        mode: '0750'
+      loop: [keys, mux]
+
+    - name: Persist instance policy and the applied proxy configuration in Coolify
+      ansible.builtin.command:
+        argv: [docker, exec, coolify, php, /anico/configure.php]
+      register: anico_coolify_policy
+      changed_when: "'ANICO_CHANGED' in anico_coolify_policy.stdout"
+      when: not ansible_check_mode
+
+    - name: Verify the private HTTP entrypoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8000/api/health
+        status_code: 200
+      when: not ansible_check_mode
+
+    - name: Verify the stored instance policy
+      ansible.builtin.command:
+        argv: [docker, exec, coolify, php, /anico/verify.php]
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Inspect any legacy first-run key file
+      ansible.builtin.stat:
+        path: /data/coolify/ssh/keys/id.root@host.docker.internal
+      register: anico_legacy_key
+
+    - name: Read the public part of a legacy bootstrap key
+      ansible.builtin.command:
+        argv:
+          [
+            ssh-keygen,
+            -y,
+            -f,
+            /data/coolify/ssh/keys/id.root@host.docker.internal,
+          ]
+      register: anico_legacy_public_key
+      changed_when: false
+      when: anico_legacy_key.stat.exists and not ansible_check_mode
+
+    - name: Remove authorization for a superseded bootstrap key only
+      ansible.builtin.lineinfile:
+        path: /root/.ssh/authorized_keys
+        line: 'no-agent-forwarding,no-X11-forwarding,no-port-forwarding {{ anico_legacy_public_key.stdout | trim }} anico-coolify'
+        state: absent
+      when: anico_legacy_key.stat.exists and not ansible_check_mode and (anico_legacy_public_key.stdout | trim) != (anico_coolify_public_key.stdout | trim)
+
+    - name: Remove obsolete first-run key files after the database owns its copy
+      ansible.builtin.file:
+        path: '/data/coolify/ssh/keys/{{ item }}'
+        state: absent
+      loop: [id.root@host.docker.internal, id.root@host.docker.internal.pub]
+      when: not ansible_check_mode

@@ -1,0 +1,21 @@
+{
+  "domain": "anico.online",
+  "rootDirectory": "/srv/anico",
+  "managementNetwork": "coolify",
+  "environments": {
+    "dev": {
+      "hostname": "dev.anico.online",
+      "project": "anico-dev",
+      "appNetwork": "anico-dev-app",
+      "dataNetwork": "anico-dev-data",
+      "databaseVolume": "anico-dev-mongodb"
+    },
+    "prod": {
+      "hostname": "anico.online",
+      "project": "anico-prod",
+      "appNetwork": "anico-prod-app",
+      "dataNetwork": "anico-prod-data",
+      "databaseVolume": "anico-prod-mongodb"
+    }
+  }
+}

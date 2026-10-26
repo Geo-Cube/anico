@@ -1,0 +1,13 @@
+{
+  "version": "4.4.7",
+  "sourceCommit": "86c21c0d5babfa8c7d65a9c27e5863c629a89c7c",
+  "project": "anico-management",
+  "rootDirectory": "/data/coolify",
+  "databaseNetwork": "anico-management-data",
+  "images": {
+    "coolify": "coollabsio/coolify:4.4.7@sha256:df5d62a743dd0a786cb604a9550243ef5ca04f610056852aff8b69faa9a06698",
+    "postgres": "postgres:15-alpine@sha256:d2c2ced0372e855e4c257a9e9b5725f403847c01cfb64facbf2b21dbdadb2d74",
+    "redis": "redis:7-alpine@sha256:892022f9f18c26c92c30e15194d132f90044af87b94a491a75429bbc3982eab1",
+    "proxy": "traefik:v3.7@sha256:22a759fb803abb5c3a7ba5d5a55a201c5fb0fc8993d5c72c47a89075e64f1953"
+  }
+}
