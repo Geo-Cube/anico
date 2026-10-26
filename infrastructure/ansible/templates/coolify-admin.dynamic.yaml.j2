@@ -1,0 +1,29 @@
+# Managed by AniCo Ansible. TLS terminates at Cloudflare; this proxy has no host ports.
+{% if anico_access.publish.administration %}
+http:
+  routers:
+    anico-admin:
+      rule: 'Host(`{{ anico_access.administratorHostname }}`)'
+      entryPoints: [http]
+      service: anico-admin
+    anico-admin-realtime:
+      rule: 'Host(`{{ anico_access.administratorHostname }}`) && (PathPrefix(`/app/`) || PathPrefix(`/apps`))'
+      entryPoints: [http]
+      service: anico-admin-realtime
+    anico-admin-terminal:
+      rule: 'Host(`{{ anico_access.administratorHostname }}`) && Path(`/terminal/ws`)'
+      entryPoints: [http]
+      service: anico-admin-terminal
+  services:
+    anico-admin:
+      loadBalancer:
+        servers: [{url: 'http://coolify:8080'}]
+    anico-admin-realtime:
+      loadBalancer:
+        servers: [{url: 'http://coolify:6001'}]
+    anico-admin-terminal:
+      loadBalancer:
+        servers: [{url: 'http://coolify:6002'}]
+{% else %}
+http: {}
+{% endif %}

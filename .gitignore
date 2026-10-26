@@ -1,0 +1,60 @@
+# Dependencies and generated output
+node_modules/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+.husky/_/
+.cache/
+
+# Local environment and credentials; only empty examples belong in Git
+.env
+.env.*
+*.env
+!.env.example
+.envrc.local
+.secrets/
+secrets/
+.ssh/
+.aws/
+.docker/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+id_ecdsa
+id_dsa
+
+# Python / Ansible tooling
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.retry
+
+# Local IaC state, plans, private inventories and recovery copies
+.pulumi/
+infrastructure/Pulumi.*.yaml
+infrastructure/Pulumi.*.yml
+!infrastructure/Pulumi.*.example.yaml
+!infrastructure/Pulumi.*.example.yml
+infrastructure/ansible/inventory*.local.yml
+infrastructure/ansible/inventory*.local.yaml
+/backups/
+/dumps/
+/infrastructure/backups/
+/infrastructure/dumps/
+/infrastructure/private/
+
+# OS, editor and log files
+.DS_Store
+*.log
+.idea/
+*.swp
+*.swo
+*~

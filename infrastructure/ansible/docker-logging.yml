@@ -1,0 +1,42 @@
+- name: Configure log rotation on an existing Docker installation
+  hosts: anico
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Verify that Docker is already running
+      ansible.builtin.command: systemctl is-active docker
+      changed_when: false
+      check_mode: false
+
+    - name: Read running containers before changing daemon configuration
+      ansible.builtin.command: docker ps --format '{{ "{{.Names}}" }}'
+      register: docker_running_containers
+      changed_when: false
+      check_mode: false
+
+    - name: Require a maintenance plan if containers are running
+      ansible.builtin.assert:
+        that:
+          - docker_running_containers.stdout_lines | length == 0
+        fail_msg: >-
+          Running containers were found. This playbook changes daemon defaults
+          and may restart Docker. Schedule maintenance and plan container
+          recreation before applying logging changes to an active deployment.
+
+  tasks:
+    - name: Configure bounded Docker logging
+      ansible.builtin.import_tasks: tasks/docker-logging.yml
+
+    - name: Apply changed daemon defaults
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify the effective logging driver
+      ansible.builtin.command: docker info --format '{{ "{{.LoggingDriver}}" }}'
+      register: docker_logging_driver
+      changed_when: false
+      failed_when: docker_logging_driver.stdout != 'local'
+      when: not ansible_check_mode
+
+  handlers:
+    - name: Import Docker handlers
+      ansible.builtin.import_tasks: handlers/docker.yml

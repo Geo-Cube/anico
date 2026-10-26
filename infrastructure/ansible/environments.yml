@@ -1,0 +1,47 @@
+- name: Prepare isolated dev and production infrastructure
+  hosts: anico
+  become: true
+  gather_facts: false
+  vars:
+    anico_foundation: '{{ lookup("ansible.builtin.file", playbook_dir + "/../environments.json") | from_json }}'
+  pre_tasks:
+    - name: Validate environment configuration on the controller
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '{{ playbook_dir }}/../scripts/validate_environments.py'
+          - '{{ playbook_dir }}/../environments.json'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+
+    - name: Verify the Docker API is available
+      ansible.builtin.command: docker info --format '{{ "{{.ServerVersion}}" }}'
+      changed_when: false
+      check_mode: false
+
+  tasks:
+    - name: Prepare the shared management network
+      ansible.builtin.include_tasks: tasks/ensure-network.yml
+      vars:
+        anico_network:
+          name: '{{ anico_foundation.managementNetwork }}'
+          environment: shared
+          role: management
+          internal: false
+
+    - name: Create the infrastructure root directory
+      ansible.builtin.file:
+        path: '{{ anico_foundation.rootDirectory }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+
+    - name: Prepare each environment from the same definition
+      ansible.builtin.include_tasks: tasks/environment.yml
+      loop: '{{ anico_foundation.environments | dict2items }}'
+      loop_control:
+        loop_var: anico_environment
+        label: '{{ anico_environment.key }}'

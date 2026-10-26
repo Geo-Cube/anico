@@ -1,0 +1,33 @@
+- name: Create the Docker configuration directory
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Check for existing Docker daemon configuration
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  register: docker_daemon_file
+
+- name: Read existing Docker daemon configuration
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: docker_daemon_content
+  when: docker_daemon_file.stat.exists
+
+- name: Set bounded default container logging while preserving other daemon settings
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'dockerd --validate --config-file %s'
+    content: >-
+      {{
+        (docker_daemon_content.content | default('e30=') | b64decode | from_json)
+        | combine({'log-driver': 'local', 'log-opts': {'max-size': '10m', 'max-file': '3'}})
+        | to_nice_json
+      }}
+  notify: Restart Docker

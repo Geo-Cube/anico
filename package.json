@@ -1,0 +1,43 @@
+{
+  "name": "anico",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "npm@11.6.0",
+  "engines": {
+    "node": ">=22.19.0",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "infrastructure"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run build --filter=@anico/shared-schemas && turbo watch dev",
+    "dev:frontend": "npm run dev -w @anico/frontend",
+    "dev:backend": "npm run build -w @anico/shared-schemas && npm run dev -w @anico/breeding-service",
+    "start": "npm run start --workspace=@anico/breeding-service",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "test:coverage": "turbo run test:coverage",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky",
+    "changeset": "changeset",
+    "version-packages": "changeset version && npm install --package-lock-only"
+  },
+  "lint-staged": {
+    "*": "prettier --write --ignore-unknown"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^3.0.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.0",
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.3"
+  }
+}

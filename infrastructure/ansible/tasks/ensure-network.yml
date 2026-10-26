@@ -1,0 +1,34 @@
+- name: Inspect network {{ anico_network.name }}
+  ansible.builtin.command:
+    argv: [docker, network, inspect, '{{ anico_network.name }}']
+  register: anico_network_inspection
+  changed_when: false
+  failed_when: anico_network_inspection.rc not in [0, 1]
+  check_mode: false
+
+- name: Reject unmanaged or incompatible network {{ anico_network.name }}
+  ansible.builtin.assert:
+    that:
+      - existing_network.Driver == 'bridge'
+      - existing_network.Internal == anico_network.internal
+      - (existing_network.Labels | default({}, true)).get('com.anico.environment') == anico_network.environment
+      - (existing_network.Labels | default({}, true)).get('com.anico.role') == anico_network.role
+      - (existing_network.Labels | default({}, true)).get('com.anico.managed-by') == 'ansible'
+    fail_msg: 'Existing network {{ anico_network.name }} differs from IaC. Review it instead of deleting or adopting it automatically.'
+  vars:
+    existing_network: '{{ anico_network_inspection.stdout | from_json | first }}'
+  when: anico_network_inspection.rc == 0
+
+- name: Create network {{ anico_network.name }}
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['docker', 'network', 'create', '--driver', 'bridge',
+         '--label', 'com.anico.managed-by=ansible',
+         '--label', 'com.anico.environment=' + anico_network.environment,
+         '--label', 'com.anico.role=' + anico_network.role]
+        + (['--internal'] if anico_network.internal else [])
+        + [anico_network.name]
+      }}
+  when: anico_network_inspection.rc == 1
+  changed_when: true

@@ -1,0 +1,85 @@
+name: {{ anico_coolify.project }}
+services:
+  coolify:
+    image: {{ anico_coolify.images.coolify }}
+    container_name: coolify
+    restart: unless-stopped
+    working_dir: /var/www/html
+    extra_hosts: ['host.docker.internal:host-gateway']
+    env_file: [.env]
+    environment:
+      APP_ENV: production
+      APP_URL: '{{ "https://" + anico_access.administratorHostname if anico_access.publish.administration else "http://localhost:8000" }}'
+      PHP_MEMORY_LIMIT: 256M
+      PHP_FPM_PM_CONTROL: dynamic
+      PHP_FPM_PM_START_SERVERS: '1'
+      PHP_FPM_PM_MIN_SPARE_SERVERS: '1'
+      PHP_FPM_PM_MAX_SPARE_SERVERS: '10'
+    ports:
+      - '127.0.0.1:8000:8080'
+      - '127.0.0.1:6001:6001'
+      - '127.0.0.1:6002:6002'
+    volumes:
+      - '{{ anico_coolify.rootDirectory }}/source/.env:/var/www/html/.env:ro'
+{% for directory in ['ssh', 'applications', 'databases', 'services', 'backups', 'images'] %}
+      - '{{ anico_coolify.rootDirectory }}/{{ directory }}:/var/www/html/storage/app/{{ directory }}'
+{% endfor %}
+      - '{{ anico_coolify.rootDirectory }}/source/anico:/anico:ro'
+    labels:
+      com.anico.managed-by: ansible
+      com.anico.role: management
+    networks: [management, database]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, 'curl --fail --silent http://127.0.0.1:8080/api/health && curl --fail --silent http://127.0.0.1:6001/up || exit 1']
+      interval: 5s
+      retries: 24
+      start_period: 60s
+      timeout: 5s
+    logging: &logging
+      driver: local
+      options: {max-size: 10m, max-file: '3'}
+  postgres:
+    image: {{ anico_coolify.images.postgres }}
+    container_name: coolify-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: '${DB_USERNAME}'
+      POSTGRES_PASSWORD: '${DB_PASSWORD}'
+      POSTGRES_DB: '${DB_DATABASE}'
+    volumes: ['coolify-db:/var/lib/postgresql/data']
+    labels: {com.anico.managed-by: ansible, com.anico.role: management-database}
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+  redis:
+    image: {{ anico_coolify.images.redis }}
+    container_name: coolify-redis
+    restart: unless-stopped
+    command: [sh, -c, 'exec redis-server --save 20 1 --loglevel warning --requirepass "$$REDIS_PASSWORD"']
+    environment: {REDIS_PASSWORD: '${REDIS_PASSWORD}'}
+    volumes: ['coolify-redis:/data']
+    labels: {com.anico.managed-by: ansible, com.anico.role: management-cache}
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+networks:
+  management:
+    external: true
+    name: {{ anico_foundation.managementNetwork }}
+  database:
+    external: true
+    name: {{ anico_coolify.databaseNetwork }}
+volumes:
+  coolify-db: {external: true, name: coolify-db}
+  coolify-redis: {external: true, name: coolify-redis}

@@ -1,0 +1,40 @@
+- name: Verify Docker lifecycle on an otherwise empty server
+  hosts: anico
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Run lifecycle verification with temporary artifacts
+      when: not ansible_check_mode
+      block:
+        - name: Create a private temporary test directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: anico-docker-lifecycle-
+          register: docker_lifecycle_directory
+
+        - name: Copy the lifecycle verification script
+          ansible.builtin.copy:
+            src: ../scripts/verify-docker-lifecycle.py
+            dest: '{{ docker_lifecycle_directory.path }}/verify.py'
+            owner: root
+            group: root
+            mode: '0600'
+
+        - name: Verify live restore, crash recovery and graceful stop
+          ansible.builtin.command:
+            argv:
+              - python3
+              - '{{ docker_lifecycle_directory.path }}/verify.py'
+          register: docker_lifecycle_result
+          changed_when: true
+
+        - name: Show verification results
+          ansible.builtin.debug:
+            var: docker_lifecycle_result.stdout_lines
+
+      always:
+        - name: Remove the temporary test directory
+          ansible.builtin.file:
+            path: '{{ docker_lifecycle_directory.path }}'
+            state: absent
+          when: docker_lifecycle_directory is defined and docker_lifecycle_directory.path is defined
