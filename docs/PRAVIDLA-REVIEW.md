@@ -1,10 +1,12 @@
 # Povinné pull requesty a code review
 
-Připravená pravidla pro `Geo-Cube/anico`, dohoda z 28. 10. 2026.
-Soubor JSON v repozitáři sám o sobě na GitHubu nic neaktivuje.
-Aktuálně je nastavený na `disabled`. V lokálním CODEOWNERS jsou `@Geo-Cube`
-a `@Zlytata` (doplněný 29. 10. 2026). Před aktivací zbývá ověřit Write
-oprávnění účtu `Zlytata` a dostat CODEOWNERS do obou cílových větví.
+Ochrana `main` a `dev` v `Geo-Cube/anico` je **aktivní od 29. 10. 2026**.
+Ruleset „AniCo main and dev: reviewed pull requests“ má ID `26148882` a žádné
+bypass výjimky. GitHub API potvrdilo pravidla pro obě větve. CODEOWNERS v obou
+větvích obsahuje `@Geo-Cube` a `@Zlytata`; oprávnění Write účtu `Zlytata`
+a platnost obou CODEOWNERS byly ověřené po přijetí pozvánky.
+
+Verzovaný JSON popisuje požadovanou konfiguraci; sám o sobě GitHub nemění.
 
 ## Dohodnuté chování
 
@@ -15,6 +17,8 @@ oprávnění účtu `Zlytata` a dostat CODEOWNERS do obou cílových větví.
 - Po nových změnách kódu se staré schválení zneplatní.
 - Musí projít CI kontroly `check` a `ansible` od GitHub Actions a větev musí
   být aktuální vůči cílové větvi. Otevřené review diskuse musí být vyřešené.
+- Job `check` začíná kontrolou celé Git historie pomocí Gitleaks. Nález
+  secrets nebo chyba kontroly způsobí neúspěšné CI a zablokuje merge.
 - Přímý push, force push a mazání chráněných větví jsou blokované.
 - Žádný bypass ani pro vlastníka repozitáře nebo automatizaci.
 - Běžné `feature/*` větve zůstávají volné pro vývoj a push.
@@ -27,7 +31,7 @@ Vlastník repozitáře nadále může změnit samotné nastavení pravidel. Prá
 bypass list znamená, že při platném rulesetu nemá běžnou výjimku pro push/merge;
 neodebírá mu administraci repozitáře.
 
-## Před aktivací
+## Před aktivací při obnově nebo změně pravidel
 
 1. Přidej `Zlytata` jako collaboratora s právem **Write** a nech ho
    přijmout pozvánku. Pouhé veřejné čtení repozitáře pro code owner review nestačí.
@@ -44,15 +48,16 @@ Repozitář je veřejný, takže branch rulesets a CODEOWNERS jsou dostupné i n
 GitHub Free. Není potřeba platit předplatné kvůli tomuto nastavení.
 
 1. Otevři [Settings → Rules → Rulesets](https://github.com/Geo-Cube/anico/settings/rules).
-2. Zvol **New ruleset → Import a ruleset** a vyber soubor
+2. Pokud pravidlo už existuje, uprav ho; nevytvářej další kopii. Při obnově
+   v jiném repozitáři zvol **New ruleset → Import a ruleset** a vyber
    [protected-branches.json](../.github/rulesets/protected-branches.json).
-3. Před uložením ověř cíle `main` i `dev`, prázdný seznam bypass a obě povinné
-   kontroly. Zachovej povinné schválení od Code Owners. Import zůstává ve stavu
-   **Disabled**, dokud nejsou oba code owneři připravení v obou cílových větvích.
-4. Teprve potom nastav **Active** a ulož pravidlo. Stejnou změnu `enforcement`
-   přenes do verzovaného JSON, aby předpis odpovídal GitHubu.
-   GitHub Desktop sám branch rulesety nekonfiguruje; pro jejich
-   zapnutí je potřeba tato webová administrace nebo přihlášený API klient.
+3. JSON nyní obsahuje **Active**. Neaktivuj jej, dokud nejsou oba code owneři
+   s Write oprávněním v CODEOWNERS obou cílových větví. Při přípravě nehotového
+   repozitáře nejdřív nastav **Disabled**.
+4. Ověř cíle `main` i `dev`, prázdný bypass seznam, Code Owner review a obě
+   povinné kontroly. Po uložení ověř živá pravidla přes API nebo web.
+   GitHub Desktop rulesety nespravuje; použij webovou administraci nebo
+   přihlášené GitHub CLI/API. Osobní tokeny nikdy nepatří do JSON ani do Gitu.
 
 Pro budoucí automatizaci je JSON také použitelný jako vstup API pro vytvoření
 repository rulesetu. Potřebuje oprávnění **Administration: write** pro tento

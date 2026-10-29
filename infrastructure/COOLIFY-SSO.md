@@ -17,7 +17,7 @@ V GitHub OAuth aplikaci jsou přesně dvě návratové URL, obě bez wildcard:
 
 - `Geo-Cube`: původní účet id `0`, Owner kořenového týmu. Propojení identity
   zachovává jeho účet, heslový hash, vlastnictví i existující zdroje.
-- `radekzik`, `elarkaso`, `tom-606`, `KatGall`, `thurukidor-ux`, `matejjanasek`: Admin
+- `radekzik`, `elarkaso`, `tom-606`, `KatGall`, `thurukidor-ux`, `matejjanasek`, `MoncaBrancuska`: Admin
   kořenového týmu, každý vlastní účet.
 
 Admin kořenového týmu může spravovat instanci, server, terminál a nasazení
@@ -71,7 +71,7 @@ jeho roli/účet v Coolify a odvolej aktivní session. Samotná absence v seznam
 Testy kontrolují privátní politiky, GitHub-only login a zachování hranic dev/produkce.
 Serverová kontrola ověřuje Owner/Admin role, shodu nastavení, blokaci heslových
 rout včetně koncového lomítka a dostupnost SSH obnovy. Čisté přihlášení přímým GitHub OAuth po přidání callback URL správce
-potvrdil v prohlížeči 29. 10. 2026. Přihlášení všech šesti připravených kolegů ještě
+potvrdil v prohlížeči 29. 10. 2026. Přihlášení všech sedmi připravených členů týmu ještě
 čeká na jejich vlastní ověření; testy nemohou autorizovat GitHub aplikaci za uživatele.
 
 Nouzový přístup je možný jen přes SSH tunel na neveřejný port Coolify:
