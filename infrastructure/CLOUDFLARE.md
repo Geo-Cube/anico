@@ -2,9 +2,9 @@
 
 ## Aktuální stav nasazení
 
-Ve stacku `shared` jsou vytvořené Tunnel s routingem, OTP provider, Access
+Ve stacku `shared` jsou vytvořené Tunnel s routingem, OTP a GitHub provider, Access
 aplikace pro dev/admin a připojený Hetzner firewall. Administrace je publikovaná
-na `https://admin.anico.online` s allowlistem `[redacted-email]`; dev má stále
+na `https://admin.anico.online` se soukromým allowlistem správců; dev má stále
 prázdný seznam a Deny Everyone. Veřejná produkce nemá Access aplikaci. Původní
 DNS A záznamy dev/prod zůstaly zachované, přibyl pouze admin CNAME na Tunnel.
 Cloudflared na serveru běží a Cloudflare hlásí zdravý Tunnel
@@ -30,7 +30,9 @@ V CI se token čte z CI secrets; změna `.env.local` tyto secrets neaktualizuje.
 | `dev.anico.online`   | Pouze výslovně povolení vývojáři     | Vlastní přihlášení AniCo zůstává samostatné |
 | `admin.anico.online` | Pouze výslovně povolení správci      | Navíc přihlášení do Coolify                 |
 
-Autoritativní nastavení je `access.json`. Prázdný seznam e-mailů vytváří jednu
+Domény a publikování řídí `access.json`; skutečné e-mailové seznamy jsou šifrovaný
+Pulumi secret `accessMembers`. Viz [správa přístupů](ACCESS-MEMBERS.md).
+Ve verzovaném JSON zůstávají seznamy prázdné. Prázdný soukromý seznam vytváří jednu
 politiku **Deny Everyone**, nikdy Allow Everyone. Při přidání e-mailů se politika
 nahradí explicitním Allow pro tyto adresy; ostatní Access implicitně odmítne.
 Nepřidáváme současně Deny Everyone, protože by přebilo i povolené uživatele.
@@ -163,7 +165,7 @@ Teprve po ověření reálného preview použijeme `up`. Náhled a aplikace pou�
 
 ## 4. Resources a pořadí zveřejnění
 
-Pulumi spravuje OTP provider, dvě oddělené Access aplikace (dev/admin), Tunnel
+Pulumi spravuje OTP a volitelný GitHub provider, dvě oddělené Access aplikace (dev/admin), Tunnel
 a jeho routing. Výstup `tunnelToken` je označený jako Pulumi secret; nesmí se
 vypisovat přes `--show-secrets` do terminálu nebo CI logů. Ansible jej načítá
 do paměti controlleru s `no_log: true` a přenáší přes SSH do chráněného souboru.

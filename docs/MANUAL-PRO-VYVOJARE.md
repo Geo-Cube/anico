@@ -216,12 +216,17 @@ Samotný changeset nic nenasazuje ani nepublikuje do npm registru.
 Do Gitu nepatří `node_modules`, `dist`, coverage, lokální `.env`, tokeny,
 privátní klíče, Pulumi state a zálohy. Šablony `.env.example` obsahují jen
 necitlivé výchozí nebo ukázkové hodnoty. Gitignore nenahrazuje kontrolu obsahu.
+Skutečné e-mailové allowlisty patří do šifrovaného Pulumi nastavení, viz
+[soukromá správa členů](../infrastructure/ACCESS-MEMBERS.md). Pro soukromí autorství
+commitů nastav v GitHub Desktop svou GitHub noreply adresu z GitHub Settings → Emails.
 
 ## 9. Lokální a serverové prostředí nejsou totéž
 
 - Lokální vývoj nyní funguje bez přístupů do Hetzneru, Cloudflare nebo Coolify.
 - `admin.anico.online` slouží ke správě infrastruktury, ne ke spuštění lokálního projektu.
-- Přihlášení přes GitHub do Cloudflare Access je dohodnuté, ale zatím nenastavené.
+- Administrace používá GitHub přihlášení přes Cloudflare a Coolify GitHub OAuth;
+  vlastní Coolify heslo pro běžný přístup nepotřebuješ. Přístup a role
+  jednotlivých kolegů popisuje [SSO návod](../infrastructure/COOLIFY-SSO.md).
 - Serverové aplikační prostředí dev/prod a vzdálené vývojářské databáze zatím
   nejsou nasazené. `npm run dev:remote` neexistuje.
 - Produkce bude veřejná, dev přístupný jen týmu; přístup k devu nebude znamenat

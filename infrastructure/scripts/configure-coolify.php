@@ -23,8 +23,10 @@ if ($initialize) {
     }
 }
 
+$sso = file_exists('/anico/sso.json') ? json_decode(file_get_contents('/anico/sso.json'), true, flags: JSON_THROW_ON_ERROR) : null;
+$ssoChanged = $sso ? (require '/anico/sso.php')($sso) : false;
 $user = App\Models\User::findOrFail(0);
-if ($user->email !== env('ROOT_USER_EMAIL')) {
+if ($user->email !== ($sso['owner']['email'] ?? env('ROOT_USER_EMAIL'))) {
     throw new RuntimeException('Administrator email does not match the initialized instance');
 }
 $settings = App\Models\InstanceSettings::findOrFail(0);
@@ -41,7 +43,7 @@ $settings->is_auto_update_enabled = false;
 $settings->do_not_track = true;
 $settings->is_dashboard_force_https_enabled = false; // Cloudflare terminates HTTPS; HTTP-origin redirects would loop.
 $settings->instance_timezone = 'Europe/Prague';
-$changed = $settings->isDirty() || $agentChanged;
+$changed = $settings->isDirty() || $agentChanged || $ssoChanged;
 if ($settings->isDirty()) $settings->save();
 
 $configuration = file_get_contents('/anico/proxy.yaml');

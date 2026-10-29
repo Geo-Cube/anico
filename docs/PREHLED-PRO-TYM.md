@@ -1,5 +1,12 @@
 # AniCo: co jsme připravili, proč a jaké nástroje používáme
 
+**Aktualizace 29. 10. 2026:** administrace používá GitHub-only přihlášení
+v Cloudflare Access i přímé GitHub OAuth v Coolify, bez běžného Coolify hesla.
+Owner má původní účet; šest kolegů má připravené vlastní Admin účty. E-maily
+jsou pouze v soukromé šifrované konfiguraci. Dev je dál zavřený a aplikace
+dev/prod ještě nejsou nasazené. Provozní postup: [COOLIFY-SSO.md](../infrastructure/COOLIFY-SSO.md).
+Níže uvedený text je původní historický přehled z počátečního nastavování.
+
 Podklad pro týmovou přednášku, stav k **22. 10. 2026**.
 Předpokládaná délka: 15–20 minut plus diskuse.
 

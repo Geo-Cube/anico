@@ -3,20 +3,45 @@ import * as cloudflare from '@pulumi/cloudflare';
 import * as pulumi from '@pulumi/pulumi';
 import {
   accessConfigSchema,
+  accessMembersSchema,
+  type AccessMembers,
   accessPolicies,
   assertPublicProduction,
   cloudflareConfigSchema,
+  githubClientIdSchema,
   ingressRoutes,
 } from './access.js';
+
+export interface GitHubLogin {
+  enabled: boolean;
+  only?: boolean;
+  clientId: string;
+  clientSecret: pulumi.Input<string>;
+}
 
 export function configureCloudflare(
   rawSettings: unknown,
   rawAccess: unknown = JSON.parse(
     readFileSync(new URL('../access.json', import.meta.url), 'utf8'),
   ),
+  githubLogin?: GitHubLogin,
+  privateMembers?: pulumi.Input<AccessMembers>,
 ) {
   const settings = cloudflareConfigSchema.parse(rawSettings);
   const access = accessConfigSchema.parse(rawAccess);
+  // Policies are secret even in tests/plain-input callers. Never print member
+  // addresses in previews, state exports or shared source configuration.
+  const members = pulumi
+    .secret(
+      privateMembers ?? {
+        developerEmails: access.developerEmails,
+        administratorEmails: access.administratorEmails,
+      },
+    )
+    .apply((value) => accessMembersSchema.parse(value));
+  const githubClientId = githubLogin
+    ? githubClientIdSchema.parse(githubLogin.clientId)
+    : undefined;
   const foundation = JSON.parse(
     readFileSync(new URL('../environments.json', import.meta.url), 'utf8'),
   ) as { domain: string };
@@ -85,7 +110,30 @@ export function configureCloudflare(
     },
   );
 
-  function privateApplication(name: string, domain: string, emails: string[]) {
+  // Keep the provider when login is disabled, so rollback does not delete a
+  // protected resource or require changing its OAuth credentials.
+  const github = githubLogin
+    ? new cloudflare.ZeroTrustAccessIdentityProvider(
+        'anico-github-login',
+        {
+          accountId,
+          name: 'AniCo GitHub login',
+          type: 'github',
+          config: {
+            clientId: githubClientId!,
+            clientSecret: pulumi.secret(githubLogin.clientSecret),
+          },
+        },
+        { protect: true },
+      )
+    : undefined;
+  const githubEnabled = github !== undefined && githubLogin?.enabled === true;
+
+  function privateApplication(
+    name: string,
+    domain: string,
+    role: keyof AccessMembers,
+  ) {
     return new cloudflare.ZeroTrustAccessApplication(
       name,
       {
@@ -94,10 +142,14 @@ export function configureCloudflare(
         domain,
         type: 'self_hosted',
         sessionDuration: '8h',
-        allowedIdps: [otp.id],
-        autoRedirectToIdentity: true,
+        allowedIdps: githubEnabled
+          ? githubLogin?.only
+            ? [github!.id]
+            : [github!.id, otp.id]
+          : [otp.id],
+        autoRedirectToIdentity: !githubEnabled || githubLogin?.only === true,
         appLauncherVisible: false,
-        policies: accessPolicies(emails),
+        policies: members.apply((value) => accessPolicies(value[role])),
       },
       { protect: true },
     );
@@ -105,12 +157,12 @@ export function configureCloudflare(
   const dev = privateApplication(
     'anico-dev-access',
     `dev.${foundation.domain}`,
-    access.developerEmails,
+    'developerEmails',
   );
   const administration = privateApplication(
     'anico-administration-access',
     access.administratorHostname,
-    access.administratorEmails,
+    'administratorEmails',
   );
   // Intentionally no Access application for foundation.domain (production).
 
@@ -185,5 +237,13 @@ export function configureCloudflare(
       tunnelId: tunnel.id,
     }).token,
   );
-  return { tunnel, token, dns, dev, administration, tunnelConfiguration };
+  return {
+    tunnel,
+    token,
+    dns,
+    dev,
+    administration,
+    tunnelConfiguration,
+    github,
+  };
 }

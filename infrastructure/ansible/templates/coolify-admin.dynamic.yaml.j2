@@ -2,6 +2,14 @@
 {% if anico_access.publish.administration %}
 http:
   routers:
+{% if anico_sso_only | default(false) %}
+    anico-admin-password-disabled:
+      rule: 'Host(`{{ anico_access.administratorHostname }}`) && ((PathRegexp(`^/login/*$`) && Method(`POST`)) || PathRegexp(`^/auth/link/*$`) || PathRegexp(`^/forgot-password/*$`) || PathPrefix(`/reset-password`))'
+      entryPoints: [http]
+      priority: 1000
+      service: anico-admin
+      middlewares: [anico-private-recovery-only]
+{% endif %}
     anico-admin:
       rule: 'Host(`{{ anico_access.administratorHostname }}`)'
       entryPoints: [http]
@@ -14,6 +22,12 @@ http:
       rule: 'Host(`{{ anico_access.administratorHostname }}`) && Path(`/terminal/ws`)'
       entryPoints: [http]
       service: anico-admin-terminal
+{% if anico_sso_only | default(false) %}
+  middlewares:
+    anico-private-recovery-only:
+      ipAllowList:
+        sourceRange: ['127.0.0.1/32', '::1/128']
+{% endif %}
   services:
     anico-admin:
       loadBalancer:

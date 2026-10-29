@@ -151,3 +151,10 @@ Pokud kopie existuje, obnov state dřív, než spustíš cloudové změny:
 
 Postup používá [Pulumi export/import](https://www.pulumi.com/docs/iac/cli/commands/pulumi_stack_import/)
 a lokální backend; nevyžaduje Pulumi Cloud ani další placenou službu.
+
+Přihlašování Coolify přes GitHub je součástí IaC. Obnov také šifrované položky
+`coolifyTeam`, `githubClientSecret` a `accessMembers` v soukromém stack configu;
+Ansible z nich znovu připraví `.pulumi/coolify-sso.json`. Původní instalační
+e-mail v `coolify.env` kvůli SSO neměň. Nouzový přístup a role popisuje
+[COOLIFY-SSO.md](COOLIFY-SSO.md). Zálohu Coolify databáze a odpovídající APP_KEY
+potřebuješ pro obnovu projektů, propojených identit i aktuálního hesla Ownera.

@@ -8,14 +8,19 @@ interní databázové sítě, rotace logů a externích volumes.
 
 ## První přihlášení
 
-Otevři **https://admin.anico.online**. Cloudflare Access nejdřív ověří povolený
-e-mail jednorázovým kódem; poté se přihlásíš samostatným účtem Coolify.
-Aktuálně je povolený pouze `[redacted-email]`. Další adresy patří do
-`access.json` → `administratorEmails` a změna se aplikuje přes Pulumi.
-Přidání e-mailu do Access samo nevytváří účet ani oprávnění v Coolify.
+Otevři **https://admin.anico.online** a přihlas se přes GitHub. Cloudflare Access
+i Coolify používají stejnou GitHub OAuth aplikaci. Coolify přihlášení zahájí
+automaticky a znovu použije GitHub session; vlastní Coolify heslo pro běžný
+přístup nepotřebuješ. Čistý GitHub OAuth průchod až dovnitř Coolify správce
+potvrdil v prohlížeči 29. 10. 2026.
 
-Pro běžný přístup není potřeba SSH, VPN ani klient Cloudflare. Kompletní
-přihlášení přes Access a Coolify potvrdil správce v prohlížeči.
+`Geo-Cube` zůstává Owner původního účtu. `radekzik`, `elarkaso`, `tom-606`,
+`KatGall`, `thurukidor-ux` a `matejjanasek` mají vlastní Admin účty.
+Skutečné adresy a GitHub OAuth secret jsou pouze v soukromé šifrované konfiguraci.
+
+Veřejné přihlašování heslem blokuje proxy. Nouzový přístup přes SSH tunel,
+role, přidávání členů a přepínače IaC popisuje [COOLIFY-SSO.md](COOLIFY-SSO.md).
+Pro běžný přístup není potřeba SSH, VPN ani klient Cloudflare.
 
 Počáteční `ROOT_USER_PASSWORD` je v lokálním `.pulumi/coolify.env`; pokud už jsi
 heslo změnil v UI, použij své nové heslo. Soubor obsahuje také instalační secrets,
