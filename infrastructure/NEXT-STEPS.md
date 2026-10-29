@@ -40,9 +40,10 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
 
 - [x] Doplnit `@Zlytata` jako druhého code ownera vedle `@Geo-Cube`
       do lokálního CODEOWNERS (29. 10. 2026).
-- [ ] Ověřit Write oprávnění účtu `Zlytata`, dostat CODEOWNERS do obou
-      cílových větví a potom aktivovat připravenou ochranu `main`/`dev`
-      bez výjimek. JSON je nyní disabled; viz [pravidla review](../docs/PRAVIDLA-REVIEW.md).
+- [x] Ověřit Write oprávnění účtu `Zlytata` a CODEOWNERS v obou větvích;
+      aktivovat ochranu `main`/`dev` bez výjimek (29. 10. 2026).
+      Ruleset ID `26148882`, živá pravidla ověřená přes GitHub API;
+      viz [pravidla review](../docs/PRAVIDLA-REVIEW.md).
 
 - [ ] Potvrdit stack v týmu, včetně databáze, případného brokeru, API kontraktů
       a struktury kódu. Přejmenování na `abl`/`dao`/`controller` dosud není schválené.

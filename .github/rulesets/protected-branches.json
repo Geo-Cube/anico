@@ -1,7 +1,7 @@
 {
   "name": "AniCo main and dev: reviewed pull requests",
   "target": "branch",
-  "enforcement": "disabled",
+  "enforcement": "active",
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
