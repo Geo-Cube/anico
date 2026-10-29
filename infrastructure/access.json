@@ -1,7 +1,7 @@
 {
   "administratorHostname": "admin.anico.online",
   "developerEmails": [],
-  "administratorEmails": ["[redacted-email]"],
+  "administratorEmails": [],
   "publish": {
     "production": false,
     "dev": false,
