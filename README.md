@@ -29,6 +29,9 @@ Konfiguraci, bezpečné zastavení a navazující cloudové kroky popisuje
 [Docker návod](docs/DOCKER.md). Tento Compose je pouze lokální; cloudové nasazení
 dev/prod je další fáze.
 
+Publikování images do GHCR po zeleném CI, oddělené Coolify environmenty a
+soukromou konfiguraci popisuje [nasazování](docs/NASAZOVANI.md).
+
 ## Jen frontend
 
 ```bash

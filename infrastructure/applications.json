@@ -1,0 +1,19 @@
+{
+  "projectName": "AniCo",
+  "managedDescription": "Managed by AniCo Ansible: application environments",
+  "databaseName": "anico_breeding",
+  "environments": {
+    "dev": {
+      "sourceBranch": "dev",
+      "logLevel": "debug"
+    },
+    "prod": {
+      "sourceBranch": "main",
+      "logLevel": "info"
+    }
+  },
+  "images": {
+    "backend": "ghcr.io/geo-cube/anico-breeding-service",
+    "frontend": "ghcr.io/geo-cube/anico-frontend"
+  }
+}

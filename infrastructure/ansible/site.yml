@@ -12,3 +12,6 @@
 
 - name: Deploy private Coolify and its internal proxy
   ansible.builtin.import_playbook: coolify.yml
+
+- name: Configure managed application projects and environment variables
+  ansible.builtin.import_playbook: application-environments.yml

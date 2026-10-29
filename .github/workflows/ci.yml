@@ -59,3 +59,10 @@ jobs:
           python-version: '3.14'
       - run: python -m pip install -r infrastructure/ansible/requirements.txt
       - run: bash infrastructure/ansible/check-local.sh
+  publish:
+    needs: [check, ansible]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish-images.yml

@@ -11,6 +11,7 @@ ansible-playbook -i inventory.example.yml verify-environments.yml --syntax-check
 ansible-playbook -i inventory.example.yml cloudflared.yml --syntax-check
 ansible-playbook -i inventory.example.yml coolify.yml --syntax-check
 ansible-playbook -i inventory.example.yml verify-coolify.yml --syntax-check
+ansible-playbook -i inventory.example.yml application-environments.yml --syntax-check
 ansible-playbook -i inventory.example.yml site.yml --syntax-check
 python3 ../scripts/validate_environments.py ../environments.json
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ../tests -p '*_test.py'
