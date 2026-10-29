@@ -1,8 +1,9 @@
 # AniCo: první commit a týmová práce s větvemi
 
-Navržený postup k 26. 10. 2026. Vzdálený repozitář je
-`https://github.com/Geo-Cube/anico.git`. Při kontrole měl lokální repozitář
-větev `main` bez commitů a vzdálený repozitář neměl žádné větve.
+Repozitář je `https://github.com/Geo-Cube/anico.git`. Větve `main` a `dev`
+jsou publikované; inicializační commit už existuje. Níže uvedená sekce
+prvního commitu slouží pouze jako historický návod pro úplně prázdný repozitář.
+Pro další vývoj používej feature větev a pull request do `dev`.
 
 ## Úloha větví
 
@@ -93,6 +94,9 @@ Zástupné názvy nahraď konkrétními hodnotami. Na GitHubu otevři PR s cílo
 verze a changelogy pak řeší workflow po sloučení do `main`.
 
 ## 3. Kontroly a pravidla na GitHubu
+
+Konkrétní dohodnuté nastavení bez výjimek, s druhým code ownerem a importovatelným
+JSON, popisují [pravidla review](PRAVIDLA-REVIEW.md). Samotný JSON ochranu nezapíná.
 
 CI je připravené pro push na `main` i `dev` a pro pull requesty. Ověřuje formát,
 typy, build, infrastrukturu a backendové testy s coverage. Frontend je nyní
