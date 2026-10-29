@@ -6,12 +6,26 @@ import {
   accessPolicies,
   assertPublicProduction,
   cloudflareConfigSchema,
+  githubClientIdSchema,
   ingressRoutes,
 } from '../src/access.js';
 
 const settings = accessConfigSchema.parse(
   JSON.parse(readFileSync(new URL('../access.json', import.meta.url), 'utf8')),
 );
+
+test('GitHub Client ID rejects application names, logins and placeholders', () => {
+  for (const value of [
+    'AniCo Access',
+    'AniCo Acces',
+    'Geo-Cube',
+    '',
+    'CLIENT_ID',
+  ])
+    assert.equal(githubClientIdSchema.safeParse(value).success, false);
+  for (const value of ['0123456789abcdefabcd', 'Ov23liTestClient12345'])
+    assert.equal(githubClientIdSchema.safeParse(value).success, true);
+});
 
 test('empty email list explicitly denies everyone', () => {
   assert.deepEqual(accessPolicies([]), [
@@ -68,7 +82,8 @@ test('only administration is published with an explicit allowlist; dev and produ
   assert.equal(settings.publish.dev, false);
   assert.equal(settings.publish.production, false);
   assert.equal(settings.publish.administration, true);
-  assert.ok(settings.administratorEmails.length > 0);
+  // Actual members must come from encrypted Pulumi config, never this file.
+  assert.deepEqual(settings.administratorEmails, []);
 });
 
 test('administration cannot be mapped to the public production hostname', () => {

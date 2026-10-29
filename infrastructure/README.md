@@ -1,14 +1,22 @@
 # AniCo infrastructure
 
+E-mailové allowlisty jsou soukromý šifrovaný Pulumi secret `accessMembers`.
+Postup jejich změny je v [ACCESS-MEMBERS.md](ACCESS-MEMBERS.md); skutečné adresy nepatří do Gitu.
+
 Dohodnuté odložené úkoly jsou v [NEXT-STEPS.md](NEXT-STEPS.md). Navazující
 nasazení a provozní nastavení provedeme společně po potvrzení celého stacku týmem.
 
 Cloudflare příprava, veřejná produkce, privátní dev/admin a potřebné API
 přístupy jsou popsané v [CLOUDFLARE.md](CLOUDFLARE.md). Přes Pulumi jsou vytvořené
-Tunnel a jeho routing, OTP přihlášení, Access aplikace pro dev/admin a
+Tunnel a jeho routing, OTP a GitHub přihlášení, Access aplikace pro dev/admin a
 připojený Hetzner firewall. State je zatím pouze na Macu v `.pulumi/`.
 Cloudflared běží na serveru přes Ansible; bootstrap jej zahrnuje a konfiguraci
 na Cloudflare nemění.
+
+GitHub přihlášení, uložení OAuth údajů, test a návrat k e-mailu jsou popsané
+v [GITHUB-ACCESS.md](GITHUB-ACCESS.md). Login metody i nadále respektují konkrétní allowlisty.
+Jednotné GitHub přihlášení Coolify, role a nouzový SSH přístup popisuje
+[COOLIFY-SSO.md](COOLIFY-SSO.md).
 
 Aktivní pravidla a nouzový přístup popisuje [FIREWALL.md](FIREWALL.md).
 Postup výměny serveru a obnovy lokálního state je v [RECOVERY.md](RECOVERY.md).

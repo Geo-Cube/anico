@@ -24,6 +24,32 @@ assert f'https://{hostname}' in body, 'Secure application URLs were not generate
 assert f'http://{hostname}' not in body, 'Application generated insecure absolute URLs'
 connection.close()
 
+sso_path = root / 'anico/sso.json'
+if sso_path.exists() and json.loads(sso_path.read_text()).get('only'):
+    assert '/auth/github/redirect' in body, 'SSO login button is missing'
+    assert 'name="password"' not in body, 'Public login still offers a password'
+    for method, path in [('POST', '/login'), ('POST', '/login/'), ('GET', '/auth/link'),
+                         ('GET', '/forgot-password'), ('POST', '/reset-password')]:
+        connection = http.client.HTTPConnection(address, 80, timeout=15)
+        # A spoofed forwarding header must not bypass the recovery restriction.
+        connection.request(method, path, headers={**headers, 'X-Forwarded-For': '127.0.0.1'})
+        response = connection.getresponse()
+        response.read()
+        assert response.status == 403, 'Public password/recovery route was not blocked'
+        connection.close()
+    connection = http.client.HTTPConnection('127.0.0.1', 8000, timeout=15)
+    connection.request('GET', '/login?recovery=1')
+    response = connection.getresponse()
+    recovery_body = response.read().decode()
+    assert response.status == 200 and 'name="password"' in recovery_body, 'SSH recovery form is unavailable'
+    connection.close()
+    connection = http.client.HTTPConnection('127.0.0.1', 8000, timeout=15)
+    connection.request('POST', '/login')
+    response = connection.getresponse()
+    response.read()
+    assert response.status == 419, 'Direct SSH recovery route must reach Laravel CSRF validation'
+    connection.close()
+
 # The browser-visible Reverb app key is public; app secrets are never printed.
 env = dict(line.split('=', 1) for line in (root / '.env').read_text().splitlines() if line and not line.startswith('#'))
 app_key = json.loads(env['PUSHER_APP_KEY'])

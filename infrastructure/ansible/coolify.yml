@@ -8,6 +8,20 @@
     anico_access: '{{ lookup("ansible.builtin.file", playbook_dir + "/../access.json") | from_json }}'
     anico_coolify_compose: [docker, compose, --project-name, anico-management]
   pre_tasks:
+    - name: Prepare private SSO settings from encrypted Pulumi state
+      ansible.builtin.command:
+        argv: [node, '{{ playbook_dir }}/../scripts/prepare-coolify-sso.mjs']
+      delegate_to: localhost
+      become: false
+      register: anico_sso_prepared
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Read nonsecret SSO feature flags
+      ansible.builtin.set_fact:
+        anico_sso_enabled: '{{ (anico_sso_prepared.stdout | from_json).enabled }}'
+        anico_sso_only: '{{ (anico_sso_prepared.stdout | from_json).only }}'
     - name: Validate managed installation settings
       ansible.builtin.assert:
         that:
@@ -120,7 +134,9 @@
       ansible.builtin.assert:
         that:
           - anico_access.administratorHostname == 'admin.' + anico_foundation.domain
-          - not anico_access.publish.administration or (anico_access.administratorEmails | length > 0)
+          # Actual allowlists are encrypted Pulumi inputs, not host metadata.
+          - anico_access.administratorEmails | length == 0
+          - anico_access.developerEmails | length == 0
 
     - name: Prepare the private management database network
       ansible.builtin.include_tasks: tasks/ensure-network.yml
@@ -272,6 +288,34 @@
         group: '9999'
         mode: '0640'
 
+    - name: Install the SSO and membership policy implementation
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../scripts/configure-coolify-sso.php'
+        dest: /data/coolify/source/anico/sso.php
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Install private SSO credentials and approved identities
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/coolify-sso.json'
+        dest: /data/coolify/source/anico/sso.json
+        owner: '9999'
+        group: '9999'
+        mode: '0600'
+      no_log: true
+      diff: false
+      when: anico_sso_enabled
+
+    - name: Install the GitHub-only login view
+      ansible.builtin.copy:
+        src: templates/coolify-sso-login.blade.php
+        dest: /data/coolify/source/anico/login.blade.php
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+      register: anico_sso_login_view
+
     - name: Install the administration HTTP routes behind the authenticated Tunnel
       ansible.builtin.template:
         src: coolify-admin.dynamic.yaml.j2
@@ -330,6 +374,27 @@
         mode: '0640'
       when: not ansible_check_mode and anico_coolify_initialization.changed
 
+    - name: Inspect the mounted login view before starting Coolify
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            exec,
+            coolify,
+            sha256sum,
+            /var/www/html/resources/views/auth/login.blade.php,
+          ]
+      register: anico_sso_mounted_view
+      changed_when: false
+      failed_when: false
+      when: anico_sso_only and anico_coolify_marker.stat.exists and not ansible_check_mode
+
+    - name: Refresh the file bind mount when the login view changed
+      ansible.builtin.command:
+        argv: '{{ anico_coolify_compose + ["up", "--detach", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "240", "coolify"] }}'
+        chdir: /data/coolify/source
+      when: anico_sso_only and not ansible_check_mode and anico_sso_mounted_view.rc | default(1) == 0 and anico_sso_mounted_view.stdout.split()[0] != (lookup('ansible.builtin.file', playbook_dir + '/templates/coolify-sso-login.blade.php', rstrip=false) | hash('sha256'))
+
     - name: Start Coolify and verify HTTP and realtime health
       ansible.builtin.command:
         argv: '{{ anico_coolify_compose + ["up", "--detach", "--wait", "--wait-timeout", "240"] }}'
@@ -371,6 +436,11 @@
       register: anico_coolify_policy
       changed_when: "'ANICO_CHANGED' in anico_coolify_policy.stdout"
       when: not ansible_check_mode
+
+    - name: Clear compiled login views after changing the managed view
+      ansible.builtin.command:
+        argv: [docker, exec, coolify, php, artisan, view:clear]
+      when: anico_sso_login_view.changed and not ansible_check_mode
 
     - name: Verify the private HTTP entrypoint
       ansible.builtin.uri:

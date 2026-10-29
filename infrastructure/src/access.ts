@@ -4,6 +4,14 @@ const emails = z
   .array(z.email().trim().toLowerCase())
   .transform((values) => [...new Set(values)]);
 
+export const githubClientIdSchema = z
+  .string()
+  .trim()
+  .regex(
+    /^[A-Za-z0-9]{16,100}$/,
+    'Use the OAuth Client ID from GitHub, not the application name or GitHub login',
+  );
+
 export const accessConfigSchema = z.strictObject({
   administratorHostname: z.string().min(1),
   developerEmails: emails,
@@ -26,6 +34,11 @@ export const cloudflareConfigSchema = z.strictObject({
 
 export type AccessConfig = z.infer<typeof accessConfigSchema>;
 export type CloudflareConfig = z.infer<typeof cloudflareConfigSchema>;
+export const accessMembersSchema = accessConfigSchema.pick({
+  developerEmails: true,
+  administratorEmails: true,
+});
+export type AccessMembers = z.infer<typeof accessMembersSchema>;
 
 export function accessPolicies(allowedEmails: string[]) {
   // With users, Access implicitly denies everyone else. A Deny Everyone rule
