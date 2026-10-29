@@ -2,7 +2,7 @@
 
 **Aktualizace 29. 10. 2026:** administrace používá GitHub-only přihlášení
 v Cloudflare Access i přímé GitHub OAuth v Coolify, bez běžného Coolify hesla.
-Owner má původní účet; šest kolegů má připravené vlastní Admin účty. E-maily
+Owner má původní účet; sedm členů týmu má připravené vlastní Admin účty. E-maily
 jsou pouze v soukromé šifrované konfiguraci. Dev je dál zavřený a aplikace
 dev/prod ještě nejsou nasazené. Provozní postup: [COOLIFY-SSO.md](../infrastructure/COOLIFY-SSO.md).
 Níže uvedený text je původní historický přehled z počátečního nastavování.
