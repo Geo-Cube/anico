@@ -22,12 +22,16 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
 
 ## Rozhodnutí a realizace v navazující fázi
 
+- [x] Přidat Gitleaks do povinného CI jobu `check` pro PR a push na `main`/`dev`.
+      Připnutá verze, SHA-256 kontrola binárky, celá Git historie a redakce výpisů;
+      lokální příkaz `npm run secrets:check`. Viz [postup](../docs/SECRETS.md).
+
 - [x] Přesunout e-mailové allowlisty mimo verzované soubory do šifrovaného Pulumi
       nastavení `accessMembers` (29. 10. 2026). Členy evidujeme GitHub loginem;
       jejich adresy se spravují podle [soukromého postupu](ACCESS-MEMBERS.md).
 
 - [x] Rozhodnutí 29. 10. 2026: GitHub SSO do Coolify; `Geo-Cube` Owner,
-      ostatní schválení kolegové Admin. Všech šest evidovaných kolegů má vytvořené
+      ostatní schválení kolegové Admin. Všech sedm evidovaných členů týmu má vytvořené
       Admin účty a jejich adresy jsou jen v šifrované konfiguraci.
       Čistý Owner GitHub OAuth průchod potvrzený v prohlížeči.
 - [x] Doplnit identity `tom-606`, `KatGall`, `thurukidor-ux` do soukromého
@@ -35,14 +39,18 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
       (29. 10. 2026). GitHub účet `thurukidor-ux` odpovídá označení „thudor“.
 - [x] Přidat `matejjanasek` jako dalšího Admina přes šifrovanou konfiguraci,
       Cloudflare allowlist a Ansible (29. 10. 2026).
-- [ ] Ověřit vlastní první přihlášení všech šesti kolegů přes GitHub.
+- [x] Přidat `MoncaBrancuska` jako Admina Coolify přes šifrovanou IaC
+      konfiguraci a poslat GitHub pozvánku s Write oprávněním (29. 10. 2026).
+      GitHub pozvánku musí přijmout a vlastní přihlášení do Coolify ještě ověřit.
+- [ ] Ověřit vlastní první přihlášení všech sedmi členů týmu přes GitHub.
       Tyto role nedávají automaticky code owner ani GitHub Write oprávnění.
 
 - [x] Doplnit `@Zlytata` jako druhého code ownera vedle `@Geo-Cube`
       do lokálního CODEOWNERS (29. 10. 2026).
-- [ ] Ověřit Write oprávnění účtu `Zlytata`, dostat CODEOWNERS do obou
-      cílových větví a potom aktivovat připravenou ochranu `main`/`dev`
-      bez výjimek. JSON je nyní disabled; viz [pravidla review](../docs/PRAVIDLA-REVIEW.md).
+- [x] Ověřit Write oprávnění účtu `Zlytata` a CODEOWNERS v obou větvích;
+      aktivovat ochranu `main`/`dev` bez výjimek (29. 10. 2026).
+      Ruleset ID `26148882`, živá pravidla ověřená přes GitHub API;
+      viz [pravidla review](../docs/PRAVIDLA-REVIEW.md).
 
 - [ ] Potvrdit stack v týmu, včetně databáze, případného brokeru, API kontraktů
       a struktury kódu. Přejmenování na `abl`/`dao`/`controller` dosud není schválené.
@@ -60,7 +68,7 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
       Alternativou je již připravená lokální MongoDB přes Compose. Rozhodnutí
       o umístění DB a způsobu tunelování ještě nepadlo; připravit jeden vstupní
       příkaz pro vývojáře podle finálního stacku.
-- [x] Zavést vlastní účty Coolify a role Owner/Admin; všech šest kolegů má
+- [x] Zavést vlastní účty Coolify a role Owner/Admin; všech sedm členů týmu má
       připravený Admin účet. Viz [SSO postup](COOLIFY-SSO.md).
 - [ ] Připravit produkční Dockerfiles, health/readiness kontroly, konfiguraci
       a graceful shutdown podle finálního stacku.
@@ -89,7 +97,7 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
 
 Zdrojový předpis musí být uložený v Gitu a vzdáleném repozitáři; secrets,
 state a databázové zálohy do Gitu nepatří. Gitignore nenahrazuje kontrolu
-obsahu změn ani případné budoucí skenování secrets v CI.
+obsahu změn. Automatické skenování secrets nyní doplňuje povinný CI job `check`.
 
 Související postupy: [obnova](RECOVERY.md), [firewall](FIREWALL.md),
 [Coolify](COOLIFY.md), [Cloudflare](CLOUDFLARE.md).
