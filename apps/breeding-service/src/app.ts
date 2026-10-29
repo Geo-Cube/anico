@@ -9,12 +9,20 @@ export function createApp(dependencies: {
   repository: BreedingPlanRepository;
   logger: Logger;
   health: HealthResponse;
+  isReady: () => boolean;
 }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(pinoHttp({ logger: dependencies.logger }));
   app.use(express.json({ limit: '32kb' }));
   app.get('/health', (_req, res) => res.json(dependencies.health));
+  app.get('/ready', (_req, res) => {
+    if (!dependencies.isReady()) {
+      res.status(503).json({ error: 'Service unavailable' });
+      return;
+    }
+    res.json(dependencies.health);
+  });
   app.use('/breeding-plans', breedingRouter(dependencies.repository));
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 

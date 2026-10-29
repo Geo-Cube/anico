@@ -6,9 +6,32 @@ on:
 permissions:
   contents: read
 jobs:
+  containers:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Build and run container checks
+        shell: bash
+        run: bash scripts/check-containers.sh
   check:
+    needs: containers
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
+      - name: Require successful container checks on both architectures
+        env:
+          CONTAINER_RESULT: ${{ needs.containers.result }}
+        run: test "$CONTAINER_RESULT" = success
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0

@@ -27,9 +27,11 @@ try {
   await connection.openUri(env.MONGODB_URI, {
     serverSelectionTimeoutMS: 10_000,
   });
+  let stopping = false;
   const app = createApp({
     repository: mongooseBreedingPlanRepository(connection),
     logger,
+    isReady: () => !stopping && connection.readyState === 1,
     health: HealthResponseSchema.parse({
       status: 'ok',
       service: 'breeding-service',
@@ -43,7 +45,6 @@ try {
     void shutdown(1);
   });
 
-  let stopping = false;
   async function shutdown(code: number) {
     if (stopping) return;
     stopping = true;

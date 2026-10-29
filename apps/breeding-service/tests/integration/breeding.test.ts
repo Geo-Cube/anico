@@ -23,6 +23,7 @@ describe('breeding API + MongoDB', () => {
   let connection: Connection | undefined;
   let app: ReturnType<typeof createApp>;
   let repository: ReturnType<typeof mongooseBreedingPlanRepository>;
+  const isReady = vi.fn(() => true);
 
   beforeAll(async () => {
     mongo = await MongoMemoryServer.create();
@@ -34,11 +35,13 @@ describe('breeding API + MongoDB', () => {
       repository,
       logger: pino({ level: 'silent' }),
       health: { status: 'ok', service: 'breeding-service' },
+      isReady,
     });
   });
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    isReady.mockReturnValue(true);
     await connection!.collection('breedingplans').deleteMany({});
   });
 
@@ -115,5 +118,17 @@ describe('breeding API + MongoDB', () => {
 
   it('returns 404 for unknown routes', async () => {
     await request(app).get('/missing').expect(404);
+  });
+
+  it('reports readiness when its dependencies are available', async () => {
+    const response = await request(app).get('/ready').expect(200);
+    expect(HealthResponseSchema.parse(response.body).status).toBe('ok');
+  });
+
+  it('fails readiness while keeping liveness available', async () => {
+    isReady.mockReturnValue(false);
+    const response = await request(app).get('/ready').expect(503);
+    expect(response.body).toEqual({ error: 'Service unavailable' });
+    await request(app).get('/health').expect(200);
   });
 });

@@ -1,6 +1,9 @@
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongo:8.0@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142
+    # Local DB: avoid the per-CPU allocator/kernel compatibility issue.
+    environment:
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
     ports:
       - '127.0.0.1:27017:27017'
     volumes:

@@ -70,8 +70,10 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
       příkaz pro vývojáře podle finálního stacku.
 - [x] Zavést vlastní účty Coolify a role Owner/Admin; všech sedm členů týmu má
       připravený Admin účet. Viz [SSO postup](COOLIFY-SSO.md).
-- [ ] Připravit produkční Dockerfiles, health/readiness kontroly, konfiguraci
-      a graceful shutdown podle finálního stacku.
+- [x] Připravit Dockerfiles pro současný React frontend a Express backend,
+      lokální `compose.app.yaml`, readiness a graceful shutdown. CI sestavuje
+      a spouští sestavu na amd64 i arm64 včetně výpadku DB. Viz
+      [Docker návod](../docs/DOCKER.md). Serverové nasazení tím nevzniká.
 - [ ] Zavést CI pro sestavení a registry images, kontroly změn, dev deployment,
       schvalované produkční nasazení a rollback na předchozí image.
 - [ ] Nastavit projekty a obě prostředí v Coolify; oddělené DB účty, secrets,
