@@ -15,7 +15,7 @@ přístup nepotřebuješ. Čistý GitHub OAuth průchod až dovnitř Coolify spr
 potvrdil v prohlížeči 29. 10. 2026.
 
 `Geo-Cube` zůstává Owner původního účtu. `radekzik`, `elarkaso`, `tom-606`,
-`KatGall`, `thurukidor-ux` a `matejjanasek` mají vlastní Admin účty.
+`KatGall`, `thurukidor-ux`, `matejjanasek` a `MoncaBrancuska` mají vlastní Admin účty.
 Skutečné adresy a GitHub OAuth secret jsou pouze v soukromé šifrované konfiguraci.
 
 Veřejné přihlašování heslem blokuje proxy. Nouzový přístup přes SSH tunel,

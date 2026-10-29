@@ -27,7 +27,7 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
       jejich adresy se spravují podle [soukromého postupu](ACCESS-MEMBERS.md).
 
 - [x] Rozhodnutí 29. 10. 2026: GitHub SSO do Coolify; `Geo-Cube` Owner,
-      ostatní schválení kolegové Admin. Všech šest evidovaných kolegů má vytvořené
+      ostatní schválení kolegové Admin. Všech sedm evidovaných členů týmu má vytvořené
       Admin účty a jejich adresy jsou jen v šifrované konfiguraci.
       Čistý Owner GitHub OAuth průchod potvrzený v prohlížeči.
 - [x] Doplnit identity `tom-606`, `KatGall`, `thurukidor-ux` do soukromého
@@ -35,7 +35,10 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
       (29. 10. 2026). GitHub účet `thurukidor-ux` odpovídá označení „thudor“.
 - [x] Přidat `matejjanasek` jako dalšího Admina přes šifrovanou konfiguraci,
       Cloudflare allowlist a Ansible (29. 10. 2026).
-- [ ] Ověřit vlastní první přihlášení všech šesti kolegů přes GitHub.
+- [x] Přidat `MoncaBrancuska` jako Admina Coolify přes šifrovanou IaC
+      konfiguraci a poslat GitHub pozvánku s Write oprávněním (29. 10. 2026).
+      GitHub pozvánku musí přijmout a vlastní přihlášení do Coolify ještě ověřit.
+- [ ] Ověřit vlastní první přihlášení všech sedmi členů týmu přes GitHub.
       Tyto role nedávají automaticky code owner ani GitHub Write oprávnění.
 
 - [x] Doplnit `@Zlytata` jako druhého code ownera vedle `@Geo-Cube`
@@ -61,7 +64,7 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
       Alternativou je již připravená lokální MongoDB přes Compose. Rozhodnutí
       o umístění DB a způsobu tunelování ještě nepadlo; připravit jeden vstupní
       příkaz pro vývojáře podle finálního stacku.
-- [x] Zavést vlastní účty Coolify a role Owner/Admin; všech šest kolegů má
+- [x] Zavést vlastní účty Coolify a role Owner/Admin; všech sedm členů týmu má
       připravený Admin účet. Viz [SSO postup](COOLIFY-SSO.md).
 - [ ] Připravit produkční Dockerfiles, health/readiness kontroly, konfiguraci
       a graceful shutdown podle finálního stacku.
