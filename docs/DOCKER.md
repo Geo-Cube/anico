@@ -65,6 +65,18 @@ docker compose -p anico-local -f infrastructure/compose.app.yaml down
 `down --volumes` maže lokální databázi. Původní `infrastructure/compose.yaml`
 nadále spouští jen MongoDB pro aplikace běžící na hostiteli s hot-reloadem.
 
+Oba lokální Compose soubory používají MongoDB 8.0.34 a nastavují
+`GLIBC_TUNABLES=glibc.pthread.rseq=1`: glibc registruje rseq a TCMalloc přejde
+na per-thread cache. Tím se lokální/testovací DB vyhne nekompatibilní per-CPU
+cestě a chybě rozpoznání Ubuntu kernelu
+[SERVER-131779](https://jira.mongodb.org/browse/SERVER-131779). Smoke test ověřuje,
+že per-CPU cache skutečně nejsou aktivní. Je to volba pro lokální vývoj/testy
+s možným dopadem na výkon, nikoli návrh produkčního ladění. Před nasazením DB
+ověříme podporovaný kernel a opravenou maintenance verzi MongoDB; 8.0.35 image
+v době přípravy ještě nebyl publikovaný. Viz
+[MongoDB TCMalloc](https://www.mongodb.com/docs/manual/administration/tcmalloc-performance/)
+a [kernel compatibility](https://www.mongodb.com/docs/manual/administration/production-notes/).
+
 Samostatné buildy:
 
 ```bash

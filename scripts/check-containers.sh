@@ -57,6 +57,8 @@ for container in "$backend" "$frontend"; do
   test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true
 done
 test -z "$(docker port "$database")"
+docker exec "$database" mongosh --quiet --eval \
+  'if (db.serverStatus().tcmalloc.usingPerCPUCaches !== false) quit(1)'
 docker exec "$backend" sh -c '
   test ! -e /app/.env && test ! -e /app/.git && test ! -e /app/infrastructure \
     && test ! -e /app/apps/breeding-service/src \

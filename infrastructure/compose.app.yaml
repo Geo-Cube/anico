@@ -2,6 +2,9 @@
 services:
   mongodb:
     image: mongo:8.0@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142
+    # Local/test DB: use per-thread caches until SERVER-131779 is in the 8.0 image.
+    environment:
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
     volumes:
       - mongodb-data:/data/db
     healthcheck:
