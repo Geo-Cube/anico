@@ -25,6 +25,7 @@
     "test:coverage": "turbo run test:coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "secrets:check": "bash .github/scripts/check-secrets.sh",
     "prepare": "husky",
     "changeset": "changeset",
     "version-packages": "changeset version && npm install --package-lock-only"

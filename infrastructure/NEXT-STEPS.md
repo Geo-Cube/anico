@@ -22,6 +22,10 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
 
 ## Rozhodnutí a realizace v navazující fázi
 
+- [x] Přidat Gitleaks do povinného CI jobu `check` pro PR a push na `main`/`dev`.
+      Připnutá verze, SHA-256 kontrola binárky, celá Git historie a redakce výpisů;
+      lokální příkaz `npm run secrets:check`. Viz [postup](../docs/SECRETS.md).
+
 - [x] Přesunout e-mailové allowlisty mimo verzované soubory do šifrovaného Pulumi
       nastavení `accessMembers` (29. 10. 2026). Členy evidujeme GitHub loginem;
       jejich adresy se spravují podle [soukromého postupu](ACCESS-MEMBERS.md).
@@ -93,7 +97,7 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
 
 Zdrojový předpis musí být uložený v Gitu a vzdáleném repozitáři; secrets,
 state a databázové zálohy do Gitu nepatří. Gitignore nenahrazuje kontrolu
-obsahu změn ani případné budoucí skenování secrets v CI.
+obsahu změn. Automatické skenování secrets nyní doplňuje povinný CI job `check`.
 
 Související postupy: [obnova](RECOVERY.md), [firewall](FIREWALL.md),
 [Coolify](COOLIFY.md), [Cloudflare](CLOUDFLARE.md).
