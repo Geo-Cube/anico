@@ -44,5 +44,5 @@ console.log(
   'Public admin checks passed: anonymous Access login, invalid-token rejection and HTTPS redirect.',
 );
 console.log(
-  'Email OTP and the authenticated browser session must be verified by the administrator.',
+  'The authenticated GitHub OAuth browser session must be verified by the administrator.',
 );

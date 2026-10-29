@@ -6,6 +6,13 @@ config:
   anico-foundation:sshPort: 22
   # First preview/up creates an unattached firewall. It does not filter the server.
   anico-foundation:attachFirewall: false
+  # OAuth credentials are entered interactively using Pulumi config; see GITHUB-ACCESS.md.
+  anico-foundation:githubEnabled: false
+  # Enable only after testing the complete login flow; see COOLIFY-SSO.md.
+  anico-foundation:githubOnly: false
+  anico-foundation:coolifySsoEnabled: false
+  anico-foundation:coolifySsoOnly: false
+  # Real coolifyTeam and githubClientSecret are encrypted secrets, never examples.
   # Keep disabled until the read-only preflight and Pulumi preview have been reviewed.
   anico-foundation:cloudflare:
     enabled: false

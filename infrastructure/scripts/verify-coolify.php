@@ -6,8 +6,9 @@ $settings = App\Models\InstanceSettings::findOrFail(0);
 $server = App\Models\Server::findOrFail(0);
 $user = App\Models\User::findOrFail(0);
 $access = json_decode(file_get_contents('/anico/access.json'), true, flags: JSON_THROW_ON_ERROR);
+$sso = file_exists('/anico/sso.json') ? json_decode(file_get_contents('/anico/sso.json'), true, flags: JSON_THROW_ON_ERROR) : null;
 $checks = [
-    'administrator_exists' => $user->email === env('ROOT_USER_EMAIL'),
+    'administrator_exists' => $user->email === ($sso['owner']['email'] ?? env('ROOT_USER_EMAIL')),
     'management_key_matches_database' => trim(App\Models\PrivateKey::findOrFail(0)->private_key) === trim(file_get_contents('/var/www/html/storage/app/ssh/management-key')),
     'administrator_is_owner' => $user->teams()->where('team_id', 0)->wherePivot('role', 'owner')->exists(),
     'registration_disabled' => !$settings->is_registration_enabled,
@@ -19,6 +20,16 @@ $checks = [
     'proxy_config_matches_iac' => $server->proxy->get('last_saved_proxy_configuration') === file_get_contents('/anico/proxy.yaml'),
     'applied_proxy_config_matches' => $server->proxy->get('last_applied_settings') === md5(base64_encode(file_get_contents('/anico/proxy.yaml'))),
 ];
+if ($sso) {
+    $oauth = App\Models\OauthSetting::where('provider', 'github')->firstOrFail();
+    $checks['github_oauth_enabled'] = $oauth->enabled;
+    $checks['github_registration_closed'] = !$oauth->allow_registration && !$oauth->auto_join_root_team;
+    $checks['github_configuration_matches'] = $oauth->client_id === $sso['clientId'] && $oauth->client_secret === $sso['clientSecret'] && $oauth->redirect_uri === $sso['redirectUri'];
+    foreach ($sso['admins'] as $index => $member) {
+        $admin = App\Models\User::whereEmail($member['email'])->first();
+        $checks['approved_admin_'.$index] = $admin && $admin->teams()->where('team_id', 0)->wherePivot('role', 'admin')->exists();
+    }
+}
 if (in_array(false, $checks, true)) {
     fwrite(STDERR, json_encode($checks)."\n");
     exit(1);
