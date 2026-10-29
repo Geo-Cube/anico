@@ -187,6 +187,15 @@ Otevři **http://127.0.0.1:4173**. Vite preview slouží pro místní kontrolu v
 v `apps/frontend/dist`, není to produkční hosting. Server ukončíš pomocí Ctrl+C.
 Kořenový `npm run start` nyní spouští pouze sestavený backend.
 
+### Ověření v kontejnerech
+
+Produkční build obou aplikací a lokální MongoDB spustíš přes
+`docker compose -p anico-local -f infrastructure/compose.app.yaml up --build -d --wait`.
+Frontend pak běží na portu 8080, backend na 3000; MongoDB nemá publikovaný port.
+Jde o alternativu k hot-reload vývoji výše, nikoli o cloudové nasazení.
+`npm run containers:check` provede izolované smoke testy a vlastní testovací data
+uklidí. Podrobnosti, zastavení a další kroky jsou v [Docker návodu](DOCKER.md).
+
 ## 8. Běžná práce s Gitem a závislostmi
 
 První commit, vytvoření větví a doporučený tok `feature/*` → `dev` → `main`

@@ -26,6 +26,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "secrets:check": "bash .github/scripts/check-secrets.sh",
+    "containers:check": "bash scripts/check-containers.sh",
     "prepare": "husky",
     "changeset": "changeset",
     "version-packages": "changeset version && npm install --package-lock-only"

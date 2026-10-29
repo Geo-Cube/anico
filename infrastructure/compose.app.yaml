@@ -1,0 +1,57 @@
+# Local verification of production-style images. Not a cloud deployment manifest.
+services:
+  mongodb:
+    image: mongo:8.0@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - 'quit(db.adminCommand({ping: 1}).ok ? 0 : 1)'
+      interval: 5s
+      timeout: 5s
+      start_period: 15s
+      retries: 10
+    restart: unless-stopped
+
+  breeding-service:
+    image: anico/breeding-service:local
+    build:
+      context: ..
+      dockerfile: apps/breeding-service/Dockerfile
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/anico_breeding
+      LOG_LEVEL: info
+    ports:
+      - '127.0.0.1:${ANICO_BACKEND_PORT:-3000}:3000'
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+  frontend:
+    image: anico/frontend:local
+    build:
+      context: ..
+      dockerfile: apps/frontend/Dockerfile
+    ports:
+      - '127.0.0.1:${ANICO_FRONTEND_PORT:-8080}:8080'
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+volumes:
+  mongodb-data:

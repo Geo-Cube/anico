@@ -14,6 +14,21 @@ Podklad pro týmovou přednášku a vysvětlení použitých nástrojů je v
 NPM workspaces + Turborepo, Node.js 22.19+, TypeScript a ESM.
 Frontend: React + Vite v `apps/frontend`.
 
+## Docker images
+
+Backend a frontend mají samostatné produkční Dockerfiles. Lokální ověření celé
+sestavy v kontejnerech:
+
+```bash
+docker compose -p anico-local -f infrastructure/compose.app.yaml up --build -d --wait
+```
+
+Frontend: http://127.0.0.1:8080, backend: http://127.0.0.1:3000.
+Automatické ověření: `npm run containers:check`.
+Konfiguraci, bezpečné zastavení a navazující cloudové kroky popisuje
+[Docker návod](docs/DOCKER.md). Tento Compose je pouze lokální; cloudové nasazení
+dev/prod je další fáze.
+
 ## Jen frontend
 
 ```bash
@@ -121,8 +136,9 @@ curl -X POST http://localhost:3000/breeding-plans \
 ```
 
 Pro spuštění služby musí běžet MongoDB a být nastavené `MONGODB_URI` (lokálně
-v `apps/breeding-service/.env`, v produkci v prostředí). `/health` je liveness,
-nikoli kontrola připravenosti MongoDB. Compose je určený pro lokální vývoj.
+v `apps/breeding-service/.env`, v produkci v prostředí). `/health` je liveness;
+`/ready` vrací 503, když spojení s MongoDB není připravené. Oba Compose soubory
+jsou určené pro lokální použití.
 
 Unit testy používají pouze repository port a nespouštějí databázi. Integrační
 testy používají reálný HTTP stack přes Supertest, Mongoose a vlastní dočasný
