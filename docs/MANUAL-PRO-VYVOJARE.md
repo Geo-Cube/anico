@@ -220,6 +220,12 @@ Skutečné e-mailové allowlisty patří do šifrovaného Pulumi nastavení, viz
 [soukromá správa členů](../infrastructure/ACCESS-MEMBERS.md). Pro soukromí autorství
 commitů nastav v GitHub Desktop svou GitHub noreply adresu z GitHub Settings → Emails.
 
+CI před instalací závislostí spouští Gitleaks v povinném jobu `check`.
+Kontroluje celou dostupnou historii a nález tajného údaje zablokuje merge.
+Stejnou kontrolu commitnutých změn spustíš na Macu nebo Linuxu přes
+`npm run secrets:check`; nevyžaduje instalaci Gitleaks ani API token.
+Podrobnosti a postup při nálezu jsou v [kontrole secrets](SECRETS.md).
+
 ## 9. Lokální a serverové prostředí nejsou totéž
 
 - Lokální vývoj nyní funguje bez přístupů do Hetzneru, Cloudflare nebo Coolify.

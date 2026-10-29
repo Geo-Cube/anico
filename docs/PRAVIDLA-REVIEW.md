@@ -17,6 +17,8 @@ Verzovaný JSON popisuje požadovanou konfiguraci; sám o sobě GitHub nemění.
 - Po nových změnách kódu se staré schválení zneplatní.
 - Musí projít CI kontroly `check` a `ansible` od GitHub Actions a větev musí
   být aktuální vůči cílové větvi. Otevřené review diskuse musí být vyřešené.
+- Job `check` začíná kontrolou celé Git historie pomocí Gitleaks. Nález
+  secrets nebo chyba kontroly způsobí neúspěšné CI a zablokuje merge.
 - Přímý push, force push a mazání chráněných větví jsou blokované.
 - Žádný bypass ani pro vlastníka repozitáře nebo automatizaci.
 - Běžné `feature/*` větve zůstávají volné pro vývoj a push.
