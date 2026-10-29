@@ -25,6 +25,9 @@ services:
       - '{{ anico_coolify.rootDirectory }}/{{ directory }}:/var/www/html/storage/app/{{ directory }}'
 {% endfor %}
       - '{{ anico_coolify.rootDirectory }}/source/anico:/anico:ro'
+{% if anico_sso_only | default(false) %}
+      - '{{ anico_coolify.rootDirectory }}/source/anico/login.blade.php:/var/www/html/resources/views/auth/login.blade.php:ro'
+{% endif %}
     labels:
       com.anico.managed-by: ansible
       com.anico.role: management

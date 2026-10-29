@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as pulumi from '@pulumi/pulumi';
+import { unwrapMockSecrets } from './mock-secrets.js';
 
 test('Cloudflare plan protects only dev/admin, validates private origins, and publishes no DNS by default', async () => {
   const resources: pulumi.runtime.MockResourceArgs[] = [];
   await pulumi.runtime.setMocks(
     {
       newResource(args) {
-        resources.push(args);
+        resources.push({ ...args, inputs: unwrapMockSecrets(args.inputs) });
         return {
           id: `${args.name}-id`,
           state: { ...args.inputs, aud: `${args.name}-aud` },
@@ -66,6 +67,14 @@ test('Cloudflare plan protects only dev/admin, validates private origins, and pu
   ]);
   for (const app of applications)
     assert.equal(app.inputs.policies[0].decision, 'deny');
+  for (const app of applications) {
+    assert.deepEqual(app.inputs.allowedIdps, ['anico-email-login-id']);
+    assert.equal(app.inputs.autoRedirectToIdentity, true);
+  }
+  assert.equal(
+    resources.some((resource) => resource.inputs.type === 'github'),
+    false,
+  );
   assert.equal(
     resources.some((resource) => resource.type.endsWith(':DnsRecord')),
     false,

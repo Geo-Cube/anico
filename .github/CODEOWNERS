@@ -1,0 +1,3 @@
+# Default reviewer for all files, including CODEOWNERS and GitHub rules.
+# Each listed owner must have write access; one owner's approval will be enough.
+* @Geo-Cube @Zlytata
