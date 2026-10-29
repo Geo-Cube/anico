@@ -22,11 +22,37 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
 
 ## Rozhodnutí a realizace v navazující fázi
 
+- [x] Přesunout e-mailové allowlisty mimo verzované soubory do šifrovaného Pulumi
+      nastavení `accessMembers` (29. 10. 2026). Členy evidujeme GitHub loginem;
+      jejich adresy se spravují podle [soukromého postupu](ACCESS-MEMBERS.md).
+
+- [x] Rozhodnutí 29. 10. 2026: GitHub SSO do Coolify; `Geo-Cube` Owner,
+      ostatní schválení kolegové Admin. Všech šest evidovaných kolegů má vytvořené
+      Admin účty a jejich adresy jsou jen v šifrované konfiguraci.
+      Čistý Owner GitHub OAuth průchod potvrzený v prohlížeči.
+- [x] Doplnit identity `tom-606`, `KatGall`, `thurukidor-ux` do soukromého
+      `coolifyTeam` a admin allowlistu a vytvořit jim Admin účty přes IaC
+      (29. 10. 2026). GitHub účet `thurukidor-ux` odpovídá označení „thudor“.
+- [x] Přidat `matejjanasek` jako dalšího Admina přes šifrovanou konfiguraci,
+      Cloudflare allowlist a Ansible (29. 10. 2026).
+- [ ] Ověřit vlastní první přihlášení všech šesti kolegů přes GitHub.
+      Tyto role nedávají automaticky code owner ani GitHub Write oprávnění.
+
+- [x] Doplnit `@Zlytata` jako druhého code ownera vedle `@Geo-Cube`
+      do lokálního CODEOWNERS (29. 10. 2026).
+- [ ] Ověřit Write oprávnění účtu `Zlytata`, dostat CODEOWNERS do obou
+      cílových větví a potom aktivovat připravenou ochranu `main`/`dev`
+      bez výjimek. JSON je nyní disabled; viz [pravidla review](../docs/PRAVIDLA-REVIEW.md).
+
 - [ ] Potvrdit stack v týmu, včetně databáze, případného brokeru, API kontraktů
       a struktury kódu. Přejmenování na `abl`/`dao`/`controller` dosud není schválené.
-- [ ] Nastavit dohodnutý přístup k dev/admin: Cloudflare Access s přihlášením
-      přes GitHub, bez VPN. Doplnit požadavek na zabezpečení účtů a ověřit přechod
-      z OTP. Samostatné skupiny
+- [x] Přidat GitHub login metodu do existujících admin/dev Access aplikací přes
+      Pulumi, vedle OTP a se zachováním allowlistů (28. 10. 2026). API a veřejné testy prošly.
+- [x] Ověřit GitHub přihlášení správce v prohlížeči: průchod až na login stránku
+      Coolify potvrzený po doplnění jeho GitHub primary e-mailu.
+- [ ] Doplnit členy týmu, požadavky na zabezpečení jejich GitHub účtů a rozhodnout
+      o případné OTP záloze. Přihlášení Coolify nyní používá přímé GitHub OAuth.
+      Samostatné skupiny
       vývojářů a správců; přístup k devu sám nedává správu Coolify ani produkce.
 - [ ] Domluvit databáze pro lokálně běžící aplikace: možnost osobních logických
       DB v neprodukční instanci se samostatnými omezenými účty, jednotným seedem
@@ -34,7 +60,8 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
       Alternativou je již připravená lokální MongoDB přes Compose. Rozhodnutí
       o umístění DB a způsobu tunelování ještě nepadlo; připravit jeden vstupní
       příkaz pro vývojáře podle finálního stacku.
-- [ ] Doplnit konkrétní uživatele, jejich vlastní účty a oprávnění v Coolify.
+- [x] Zavést vlastní účty Coolify a role Owner/Admin; všech šest kolegů má
+      připravený Admin účet. Viz [SSO postup](COOLIFY-SSO.md).
 - [ ] Připravit produkční Dockerfiles, health/readiness kontroly, konfiguraci
       a graceful shutdown podle finálního stacku.
 - [ ] Zavést CI pro sestavení a registry images, kontroly změn, dev deployment,

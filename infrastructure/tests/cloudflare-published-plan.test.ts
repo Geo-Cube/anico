@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as pulumi from '@pulumi/pulumi';
+import { unwrapMockSecrets } from './mock-secrets.js';
 
 test('publishing production creates public DNS without an Access application or origin JWT requirement', async () => {
   const resources: pulumi.runtime.MockResourceArgs[] = [];
   await pulumi.runtime.setMocks(
     {
       newResource(args) {
-        resources.push(args);
+        resources.push({ ...args, inputs: unwrapMockSecrets(args.inputs) });
         return {
           id: `${args.name}-id`,
           state: { ...args.inputs, aud: `${args.name}-aud` },

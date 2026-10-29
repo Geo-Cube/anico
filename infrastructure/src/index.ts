@@ -2,6 +2,7 @@ import * as hcloud from '@pulumi/hcloud';
 import * as pulumi from '@pulumi/pulumi';
 import { foundationConfigSchema } from './config.js';
 import { configureCloudflare } from './cloudflare.js';
+import type { AccessMembers } from './access.js';
 
 const config = new pulumi.Config();
 const settings = foundationConfigSchema.parse({
@@ -60,8 +61,25 @@ export const attachmentId = attachment?.id ?? null;
 const cloudflareSettings = config.getObject<{ enabled?: boolean }>(
   'cloudflare',
 );
+const githubEnabled = config.getBoolean('githubEnabled') ?? false;
+const hasGitHubCredentials =
+  config.get('githubClientId') !== undefined ||
+  config.getSecret('githubClientSecret') !== undefined;
 const edge = cloudflareSettings?.enabled
-  ? configureCloudflare(cloudflareSettings)
+  ? configureCloudflare(
+      cloudflareSettings,
+      undefined,
+      githubEnabled || hasGitHubCredentials
+        ? {
+            enabled: githubEnabled,
+            only: config.getBoolean('githubOnly') ?? false,
+            clientId: config.require('githubClientId'),
+            clientSecret: config.requireSecret('githubClientSecret'),
+          }
+        : undefined,
+      config.requireSecretObject<AccessMembers>('accessMembers'),
+    )
   : undefined;
 export const tunnelId = edge?.tunnel.id ?? null;
 export const tunnelToken = edge?.token ?? null;
+export const githubIdentityProviderId = edge?.github?.id ?? null;
