@@ -136,6 +136,8 @@ jejich selhání zablokuje merge. Images se zatím nepublikují ani nenasazují.
    a ověření po deployi.
 
 Navazující úkoly jsou také v [NEXT-STEPS.md](../infrastructure/NEXT-STEPS.md).
+Konkrétní GHCR workflow, přípravu Coolify prostředí a jejich soukromých proměnných
+popisuje [nasazování](NASAZOVANI.md).
 
 Zdroje: [Docker multi-stage builds](https://docs.docker.com/build/building/multi-stage/),
 [build context a Dockerignore](https://docs.docker.com/build/concepts/context/#dockerignore-files),

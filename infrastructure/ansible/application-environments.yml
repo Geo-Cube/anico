@@ -1,0 +1,74 @@
+- name: Configure managed Coolify application environments without starting applications
+  hosts: anico
+  become: true
+  gather_facts: false
+  vars:
+    anico_coolify: '{{ lookup("ansible.builtin.file", playbook_dir + "/../coolify.json") | from_json }}'
+  pre_tasks:
+    - name: Prepare private environment inputs from encrypted Pulumi configuration
+      ansible.builtin.command:
+        argv:
+          [
+            node,
+            --import,
+            tsx,
+            '{{ playbook_dir }}/../scripts/prepare-application-environments.mjs',
+          ]
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      check_mode: false
+      changed_when: false
+      no_log: true
+
+    - name: Verify the pinned management image before using its model API
+      ansible.builtin.command:
+        argv: [docker, inspect, --format, '{{ "{{.Config.Image}}" }}', coolify]
+      register: anico_application_coolify_image
+      changed_when: false
+      check_mode: false
+
+    - name: Require the supported Coolify version
+      ansible.builtin.assert:
+        that: anico_application_coolify_image.stdout == anico_coolify.images.coolify
+
+  tasks:
+    - name: Install the managed environment configurator
+      ansible.builtin.copy:
+        src: ../scripts/configure-application-environments.php
+        dest: /data/coolify/source/anico/application-environments.php
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+
+    - name: Inspect the configurator for check mode on a new installation
+      ansible.builtin.stat:
+        path: /data/coolify/source/anico/application-environments.php
+      register: anico_application_configurator
+
+    - name: Reconcile managed projects, environments and encrypted shared variables
+      ansible.builtin.command:
+        argv: '{{ ["docker", "exec", "-i", "coolify", "php", "/anico/application-environments.php"] + (["--plan"] if ansible_check_mode else []) }}'
+        stdin: '{{ lookup("ansible.builtin.file", playbook_dir + "/../../.pulumi/application-environments.json") }}'
+      register: anico_application_environments
+      changed_when: "'ANICO_CHANGED' in anico_application_environments.stdout"
+      check_mode: false
+      no_log: true
+      when: anico_application_configurator.stat.exists
+
+    - name: Verify the managed application environment configuration
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            exec,
+            -i,
+            coolify,
+            php,
+            /anico/application-environments.php,
+            --verify,
+          ]
+        stdin: '{{ lookup("ansible.builtin.file", playbook_dir + "/../../.pulumi/application-environments.json") }}'
+      changed_when: false
+      no_log: true
+      when: not ansible_check_mode

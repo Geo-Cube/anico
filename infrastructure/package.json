@@ -7,6 +7,8 @@
     "bootstrap": "bash scripts/bootstrap.sh",
     "deploy:tunnel": "bash scripts/deploy-tunnel.sh",
     "deploy:coolify": "bash scripts/deploy-coolify.sh",
+    "prepare:applications": "node --import tsx scripts/prepare-application-environments.mjs",
+    "configure:applications": "bash scripts/configure-applications.sh",
     "coolify:init": "node scripts/init-coolify.mjs",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",

@@ -5,6 +5,12 @@ Zbývající nasazení a provozní nastavení připravíme společně po odsouhl
 celého aplikačního stacku. Níže uvedené položky jsou odložené, nikoli hotové.
 Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
 
+Doplnění 29. 10. 2026: propojení Reactu s API řeší vývojáři; infrastrukturní
+práce připravují registry images, prostředí a jejich runtime konfiguraci.
+Owner chce zálohy dokončit na konci přípravy. **Před prvními skutečnými
+produkčními daty je výslovně připomenout a vyřešit**, včetně obnovy a kopie
+mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
+
 ## Současný ověřený stav
 
 - Aplikační monorepo nově zahrnuje React + TypeScript frontend přes Vite
@@ -76,6 +82,15 @@ Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
       [Docker návod](../docs/DOCKER.md). Serverové nasazení tím nevzniká.
 - [ ] Zavést CI pro sestavení a registry images, kontroly změn, dev deployment,
       schvalované produkční nasazení a rollback na předchozí image.
+- [x] Připravit GHCR publishing obou multi-platform images po zeleném CI na
+      `dev`/`main`, tag podle SHA a artifact s digestem. První publikování
+      proběhne až po merge; owner následně přepne balíčky na Public.
+- [x] Připravit idempotentní IaC projektu AniCo a prostředí `dev`/`prod` v Coolify,
+      oddělené shared variables a podporu šifrovaného `applicationVariables`.
+      Samotné aplikační kontejnery ani DB tím nevznikají.
+- [ ] Před serverovou MongoDB vyřešit kernel: zjištěná upstream verze 7.0.12
+      je v nekompatibilním rozsahu MongoDB 8. Připravit opravu a řízený reboot;
+      neobcházet problém nasazením lokální testovací konfigurace do produkce.
 - [ ] Nastavit projekty a obě prostředí v Coolify; oddělené DB účty, secrets,
       sítě a data. Dev nesmí používat produkční data nebo přístupy.
 - [ ] Připravit přístup CI/testů/webhooků přes Access bez interaktivního OTP
