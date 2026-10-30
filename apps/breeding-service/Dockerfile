@@ -15,6 +15,7 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY tsconfig.base.json ./
 COPY packages/shared-schemas/tsconfig.json ./packages/shared-schemas/
 COPY packages/shared-schemas/src ./packages/shared-schemas/src
+COPY packages/shared-schemas/catalogs ./packages/shared-schemas/catalogs
 COPY apps/breeding-service/tsconfig.json ./apps/breeding-service/
 COPY apps/breeding-service/src ./apps/breeding-service/src
 RUN npm run build --workspace=@anico/shared-schemas \
@@ -33,6 +34,7 @@ COPY --from=production-dependencies /app/apps/breeding-service ./apps/breeding-s
 COPY --from=production-dependencies /app/packages/shared-schemas ./packages/shared-schemas
 COPY --from=build /app/apps/breeding-service/dist ./apps/breeding-service/dist
 COPY --from=build /app/packages/shared-schemas/dist ./packages/shared-schemas/dist
+COPY --from=build /app/packages/shared-schemas/catalogs ./packages/shared-schemas/catalogs
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \

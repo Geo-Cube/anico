@@ -12,6 +12,7 @@ RUN --mount=type=cache,target=/root/.npm \
     --workspace=@anico/frontend
 COPY apps/frontend/tsconfig.json apps/frontend/tsconfig.node.json apps/frontend/vite.config.ts apps/frontend/index.html ./apps/frontend/
 COPY apps/frontend/src ./apps/frontend/src
+COPY packages/shared-schemas/catalogs ./packages/shared-schemas/catalogs
 RUN npm run build --workspace=@anico/frontend
 
 FROM nginx:stable-alpine@sha256:0e52bd054126cdc040b1276c0af347aeb02a41b9cfe305d6094767ac30e97949 AS runtime
