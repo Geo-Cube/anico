@@ -31,6 +31,9 @@ packages/shared-schemas/**
 !packages/shared-schemas/tsconfig.json
 !packages/shared-schemas/src/
 !packages/shared-schemas/src/**
+!packages/shared-schemas/catalogs/
+packages/shared-schemas/catalogs/**
+!packages/shared-schemas/catalogs/*.json
 !infrastructure/
 infrastructure/**
 !infrastructure/package.json

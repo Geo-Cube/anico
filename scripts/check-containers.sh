@@ -68,6 +68,15 @@ docker exec "$backend" sh -c '
     && test ! -e /app/node_modules/@pulumi
 '
 docker exec "$frontend" sh -c 'test ! -e /app && test ! -e /usr/share/nginx/html/.env'
+docker exec "$backend" node --input-type=module -e '
+  import dogs from "@anico/shared-schemas/catalogs/dog-breeds.json" with { type: "json" };
+  import horses from "@anico/shared-schemas/catalogs/horse-breeds.json" with { type: "json" };
+  for (const catalog of [dogs, horses]) {
+    if (!catalog.breeds.length || new Set(catalog.breeds.map((breed) => breed.id)).size !== catalog.breeds.length) {
+      throw new Error("Shared breed catalog is incomplete in the runtime image");
+    }
+  }
+'
 
 curl --fail --silent --show-error "$backend_url/ready" >/dev/null
 plan_id="$(curl --fail --silent --show-error "$backend_url/breeding-plans" \

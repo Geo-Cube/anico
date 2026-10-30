@@ -1,0 +1,629 @@
+{
+  "species": "dog",
+  "breeds": [
+    {
+      "id": "aljassky-malamut",
+      "name": "Aljašský malamut"
+    },
+    {
+      "id": "australska-kelpie",
+      "name": "Australská kelpie"
+    },
+    {
+      "id": "australsky-honacky-pes",
+      "name": "Australský honácký pes"
+    },
+    {
+      "id": "australsky-ovcak",
+      "name": "Australský ovčák"
+    },
+    {
+      "id": "australsky-silky-terier",
+      "name": "Australský silky teriér"
+    },
+    {
+      "id": "auvergensky-ohar-kratkosrsty",
+      "name": "Auvergneský ohař krátkosrstý"
+    },
+    {
+      "id": "barevny-bolonsky-psik",
+      "name": "Barevný boloňský psík"
+    },
+    {
+      "id": "barzoj-rusky-chrt",
+      "name": "Barzoj - ruský chrt"
+    },
+    {
+      "id": "basenji",
+      "name": "Basenji"
+    },
+    {
+      "id": "baset",
+      "name": "Baset"
+    },
+    {
+      "id": "bavorsky-barvar",
+      "name": "Bavorský barvář"
+    },
+    {
+      "id": "bearded-kolie",
+      "name": "Bearded kolie"
+    },
+    {
+      "id": "beauceron",
+      "name": "Beauceron"
+    },
+    {
+      "id": "bedlington-terier",
+      "name": "Bedlington teriér"
+    },
+    {
+      "id": "belgicky-ovcak-tervueren",
+      "name": "Belgický ovčák - Tervueren"
+    },
+    {
+      "id": "belgicky-ovcak-groenendael",
+      "name": "Belgický ovčák – Groenendael"
+    },
+    {
+      "id": "belgicky-ovcak-malinois",
+      "name": "Belgický ovčák – Malinois"
+    },
+    {
+      "id": "bernsky-salasnicky-pes",
+      "name": "Bernský salašnický pes"
+    },
+    {
+      "id": "bigl",
+      "name": "Bígl"
+    },
+    {
+      "id": "bily-svycarsky-ovcak",
+      "name": "Bílý švýcarský ovčák"
+    },
+    {
+      "id": "bisonek",
+      "name": "Bišonek"
+    },
+    {
+      "id": "bladhaund",
+      "name": "Bladhaund"
+    },
+    {
+      "id": "bolonsky-psik",
+      "name": "Boloňský psík"
+    },
+    {
+      "id": "bordeauxska-doga",
+      "name": "Bordeauxská doga"
+    },
+    {
+      "id": "border-kolie",
+      "name": "Border kolie"
+    },
+    {
+      "id": "border-terier",
+      "name": "Border teriér"
+    },
+    {
+      "id": "bostonsky-terier",
+      "name": "Bostonský teriér"
+    },
+    {
+      "id": "brabantik",
+      "name": "Brabantík"
+    },
+    {
+      "id": "brazilska-fila",
+      "name": "Brazilská fila"
+    },
+    {
+      "id": "bretansky-ohar-dlouhosrsty",
+      "name": "Bretaňský ohař dlouhosrstý"
+    },
+    {
+      "id": "briard",
+      "name": "Briard"
+    },
+    {
+      "id": "bruselsky-grifonek",
+      "name": "Bruselský grifonek"
+    },
+    {
+      "id": "bullterier",
+      "name": "Bullterier"
+    },
+    {
+      "id": "bulmastif",
+      "name": "Bulmastif"
+    },
+    {
+      "id": "bursky-buldok",
+      "name": "Búrský buldok"
+    },
+    {
+      "id": "cau-cau",
+      "name": "Čau Čau"
+    },
+    {
+      "id": "cerny-terier",
+      "name": "Černý teriér"
+    },
+    {
+      "id": "ceskoslovensky-vlcak",
+      "name": "Československý vlčák"
+    },
+    {
+      "id": "cesky-fousek",
+      "name": "Český fousek"
+    },
+    {
+      "id": "cesky-terier",
+      "name": "Český teriér"
+    },
+    {
+      "id": "chesapeake-bay-retrivr",
+      "name": "Chesapeake Bay retrívr"
+    },
+    {
+      "id": "chodsky-pes",
+      "name": "Chodský pes"
+    },
+    {
+      "id": "cinsky-chocholaty-pes",
+      "name": "Čínský chocholatý pes"
+    },
+    {
+      "id": "civava",
+      "name": "Čivava"
+    },
+    {
+      "id": "coton-de-tulear",
+      "name": "Coton de Tuléar"
+    },
+    {
+      "id": "curly-coated-retrivr",
+      "name": "Curly coated retrívr"
+    },
+    {
+      "id": "dalmatin",
+      "name": "Dalmatin"
+    },
+    {
+      "id": "entlebussky-salasnicky-pes",
+      "name": "Entlebušský salašnický pes"
+    },
+    {
+      "id": "erdelterier",
+      "name": "Erdelteriér"
+    },
+    {
+      "id": "flandersky-bouvier",
+      "name": "Flanderský bouvier"
+    },
+    {
+      "id": "flat-coated-retrivr",
+      "name": "Flat coated retrívr"
+    },
+    {
+      "id": "foxterier-drsnosrsty",
+      "name": "Foxteriér drsnosrstý"
+    },
+    {
+      "id": "foxterier-hladkosrsty",
+      "name": "Foxteriér hladkosrstý"
+    },
+    {
+      "id": "francouzsky-buldocek",
+      "name": "Francouzský buldoček"
+    },
+    {
+      "id": "gordonsetr",
+      "name": "Gordonsetr"
+    },
+    {
+      "id": "hannoversky-barvar",
+      "name": "Hannoverský barvář"
+    },
+    {
+      "id": "havansky-psik",
+      "name": "Havanský psík"
+    },
+    {
+      "id": "hovawart",
+      "name": "Hovawart"
+    },
+    {
+      "id": "ibizsky-podenco",
+      "name": "Ibizský podenco"
+    },
+    {
+      "id": "irish-soft-coated-wheaten-terier",
+      "name": "Irish soft coated wheaten teriér"
+    },
+    {
+      "id": "irsky-cervenobily-setr",
+      "name": "Irský červenobílý setr"
+    },
+    {
+      "id": "irsky-setr",
+      "name": "Irský setr"
+    },
+    {
+      "id": "irsky-terier",
+      "name": "Irský teriér"
+    },
+    {
+      "id": "irsky-vlkodav",
+      "name": "Irský vlkodav"
+    },
+    {
+      "id": "italsky-chrtik",
+      "name": "Italský chrtík"
+    },
+    {
+      "id": "italsky-corso-pes",
+      "name": "Italský corso pes"
+    },
+    {
+      "id": "italsky-spinone",
+      "name": "Italský spinone"
+    },
+    {
+      "id": "jack-russell-terier",
+      "name": "Jack Russell teriér"
+    },
+    {
+      "id": "jezevcik",
+      "name": "Jezevčík"
+    },
+    {
+      "id": "jorksirsky-terier",
+      "name": "Jorkšírský teriér"
+    },
+    {
+      "id": "kanaansky-pes",
+      "name": "Kanaánský pes"
+    },
+    {
+      "id": "kanarska-doga",
+      "name": "Kanárská doga"
+    },
+    {
+      "id": "kanarsky-podenco",
+      "name": "Kanárský podenco"
+    },
+    {
+      "id": "karelsky-medvedi-pes",
+      "name": "Karelský medvědí pes"
+    },
+    {
+      "id": "kavalir-king-charles-spanel",
+      "name": "Kavalír King Charles španěl"
+    },
+    {
+      "id": "kavkazsky-pastevecky-pes",
+      "name": "Kavkazský pastevecký pes"
+    },
+    {
+      "id": "kernterier-cairn-terier",
+      "name": "Kernteriér (Cairn teriér)"
+    },
+    {
+      "id": "knirac-maly",
+      "name": "Knírač malý"
+    },
+    {
+      "id": "knirac-stredni",
+      "name": "Knírač střední"
+    },
+    {
+      "id": "knirac-velky",
+      "name": "Knírač velký"
+    },
+    {
+      "id": "kolie-dlouhosrsta",
+      "name": "Kolie dlouhosrstá"
+    },
+    {
+      "id": "kolie-kratkosrsta",
+      "name": "Kolie krátkosrstá"
+    },
+    {
+      "id": "komondor",
+      "name": "Komondor"
+    },
+    {
+      "id": "kooikerhondje",
+      "name": "Kooikerhondje"
+    },
+    {
+      "id": "labradorsky-retrivr",
+      "name": "Labradorský retrívr"
+    },
+    {
+      "id": "landseer",
+      "name": "Landseer"
+    },
+    {
+      "id": "leonberger",
+      "name": "Leonberger"
+    },
+    {
+      "id": "lhasa-apso",
+      "name": "Lhasa Apso"
+    },
+    {
+      "id": "louisiansky-leopardi-pes",
+      "name": "Louisianský leopardí pes"
+    },
+    {
+      "id": "madarsky-chrt",
+      "name": "Maďarský chrt"
+    },
+    {
+      "id": "madarsky-ohar",
+      "name": "Maďarský ohař"
+    },
+    {
+      "id": "maltezsky-psik",
+      "name": "Maltézský psík"
+    },
+    {
+      "id": "maly-kontinentalni-spanel-papillon",
+      "name": "Malý kontinentální španěl (Papillon)"
+    },
+    {
+      "id": "maly-munsterlandsky-ohar",
+      "name": "Malý münsterlandský ohař"
+    },
+    {
+      "id": "manchestersky-terier",
+      "name": "Manchesterský teriér"
+    },
+    {
+      "id": "miniaturni-bullterier",
+      "name": "Miniaturní bullterier"
+    },
+    {
+      "id": "modry-pikardsky-ohar-dlouhosrsty",
+      "name": "Modrý pikardský ohař dlouhosrstý"
+    },
+    {
+      "id": "mops",
+      "name": "Mops"
+    },
+    {
+      "id": "moskevsky-strazni-pes",
+      "name": "Moskevský strážní pes"
+    },
+    {
+      "id": "neapolsky-mastin",
+      "name": "Neapolský mastin"
+    },
+    {
+      "id": "nemecka-doga",
+      "name": "Německá doga"
+    },
+    {
+      "id": "nemecky-boxer",
+      "name": "Německý boxer"
+    },
+    {
+      "id": "nemecky-honic",
+      "name": "Německý honič"
+    },
+    {
+      "id": "nemecky-krepelak",
+      "name": "Německý křepelák"
+    },
+    {
+      "id": "nemecky-lovecky-terier-jagdterrier",
+      "name": "Německý lovecký teriér"
+    },
+    {
+      "id": "nemecky-ovcak",
+      "name": "Německý ovčák"
+    },
+    {
+      "id": "nemecky-pinc",
+      "name": "Německý pinč"
+    },
+    {
+      "id": "nemecky-spic-pomeranian",
+      "name": "Německý špic (Pomeranian)"
+    },
+    {
+      "id": "norfolk-terier",
+      "name": "Norfolk teriér"
+    },
+    {
+      "id": "norsky-losi-pes-sedy",
+      "name": "Norský losí pes šedý"
+    },
+    {
+      "id": "norvicsky-terier",
+      "name": "Norvičský teriér"
+    },
+    {
+      "id": "nova-scotia-duck-tolling-retrivr",
+      "name": "Nova Scotia duck tolling retrívr"
+    },
+    {
+      "id": "novofundlandsky-pes",
+      "name": "Novofundlandský pes"
+    },
+    {
+      "id": "parson-russell-terier",
+      "name": "Parson Russell Teriér"
+    },
+    {
+      "id": "patterdale-terier",
+      "name": "Patterdale teriér"
+    },
+    {
+      "id": "pekingsky-palacovy-psik",
+      "name": "Pekingský palácový psík"
+    },
+    {
+      "id": "peruansky-nahac",
+      "name": "Peruánský naháč"
+    },
+    {
+      "id": "pointr",
+      "name": "Pointr"
+    },
+    {
+      "id": "portugalsky-vodni-pes",
+      "name": "Portugalský vodní pes"
+    },
+    {
+      "id": "prazsky-krysarik",
+      "name": "Pražský krysařík"
+    },
+    {
+      "id": "pudl",
+      "name": "Pudl"
+    },
+    {
+      "id": "pyrenejsky-horsky-pes",
+      "name": "Pyrenejský horský pes"
+    },
+    {
+      "id": "pyrenejsky-mastin",
+      "name": "Pyrenejský mastin"
+    },
+    {
+      "id": "pyrenejsky-ovcak",
+      "name": "Pyrenejský ovčák"
+    },
+    {
+      "id": "rhodesky-ridgeback",
+      "name": "Rhodéský ridgeback"
+    },
+    {
+      "id": "rotvajler",
+      "name": "Rotvajler"
+    },
+    {
+      "id": "saluki-persky-chrt",
+      "name": "Saluki - Perský chrt"
+    },
+    {
+      "id": "samojed",
+      "name": "Samojed"
+    },
+    {
+      "id": "sarpej",
+      "name": "Šarpej"
+    },
+    {
+      "id": "shetlandsky-ovcak-seltie",
+      "name": "Shetlandský ovčák (Šeltie)"
+    },
+    {
+      "id": "shiba-inu",
+      "name": "Shiba-Inu"
+    },
+    {
+      "id": "shih-tzu",
+      "name": "Shih-tzu"
+    },
+    {
+      "id": "sibirsky-husky",
+      "name": "Sibiřský husky"
+    },
+    {
+      "id": "siperka",
+      "name": "Šiperka"
+    },
+    {
+      "id": "skotsky-terier",
+      "name": "Skotský teriér"
+    },
+    {
+      "id": "stafordsirsky-bulterier",
+      "name": "Stafordšírský bulteriér"
+    },
+    {
+      "id": "stredoasijsky-pastevecky-pes",
+      "name": "Středoasijský pastevecký pes"
+    },
+    {
+      "id": "styrsky-hrubosrsty-brakyr",
+      "name": "Štýrský hrubosrstý brakýř"
+    },
+    {
+      "id": "svatobernardsky-pes-bernardyn",
+      "name": "Svatobernardský pes (bernardýn)"
+    },
+    {
+      "id": "thajsky-ridgeback",
+      "name": "Thajský ridgeback"
+    },
+    {
+      "id": "tibetska-doga",
+      "name": "Tibetská doga"
+    },
+    {
+      "id": "tibetsky-spanel",
+      "name": "Tibetský španěl"
+    },
+    {
+      "id": "tibetsky-terier",
+      "name": "Tibetský teriér"
+    },
+    {
+      "id": "tosa-inu",
+      "name": "Tosa-Inu"
+    },
+    {
+      "id": "trpaslici-pinc",
+      "name": "Trpasličí pinč"
+    },
+    {
+      "id": "velky-munsterlandsky-ohar",
+      "name": "Velký münsterlandský ohař"
+    },
+    {
+      "id": "velky-svycarsky-salasnicky-pes",
+      "name": "Velký švýcarský salašnický pes"
+    },
+    {
+      "id": "velskorgi-cardigan",
+      "name": "Velškorgi Cardigan"
+    },
+    {
+      "id": "velskorgi-pembroke",
+      "name": "Velškorgi Pembroke"
+    },
+    {
+      "id": "velsterier",
+      "name": "Velšteriér"
+    },
+    {
+      "id": "vipet",
+      "name": "Vipet"
+    },
+    {
+      "id": "vymarsky-ohar",
+      "name": "Výmarský ohař"
+    },
+    {
+      "id": "welsspringrspanel",
+      "name": "Welššpringršpaněl"
+    },
+    {
+      "id": "west-highland-white-terier",
+      "name": "West highland white teriér"
+    },
+    {
+      "id": "zapadosibirska-lajka",
+      "name": "Západosibiřská lajka"
+    },
+    {
+      "id": "zlaty-retrivr",
+      "name": "Zlatý retrívr"
+    }
+  ]
+}

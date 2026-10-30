@@ -1,0 +1,409 @@
+{
+  "species": "horse",
+  "breeds": [
+    {
+      "id": "akhal-teke",
+      "name": "Akhal-Teke"
+    },
+    {
+      "id": "paint-horse",
+      "name": "American Paint Horse"
+    },
+    {
+      "id": "quarter-horse",
+      "name": "Americký quarter horse"
+    },
+    {
+      "id": "americky-saddlebred",
+      "name": "Americký saddlebred"
+    },
+    {
+      "id": "andalusky-kun",
+      "name": "Andaluský kůň"
+    },
+    {
+      "id": "anglicky-plnokrevnik",
+      "name": "Anglický plnokrevník"
+    },
+    {
+      "id": "anglo-arabsky-kun",
+      "name": "Anglo-arabský kůň"
+    },
+    {
+      "id": "appaloosa",
+      "name": "Appaloosa"
+    },
+    {
+      "id": "arabsky-kun",
+      "name": "Arabský plnokrevník"
+    },
+    {
+      "id": "ardensky-kun",
+      "name": "Ardenský kůň"
+    },
+    {
+      "id": "australsky-stajovy-kun",
+      "name": "Australský stájový kůň"
+    },
+    {
+      "id": "azteca",
+      "name": "Azteca"
+    },
+    {
+      "id": "bardigiano",
+      "name": "Bardigiano"
+    },
+    {
+      "id": "belgicky-chladnokrevnik",
+      "name": "Belgický chladnokrevník (Brabant)"
+    },
+    {
+      "id": "berbersky-kun",
+      "name": "Berberský kůň"
+    },
+    {
+      "id": "boulonsky-kun",
+      "name": "Boulonneský kůň"
+    },
+    {
+      "id": "bretonsky-kun",
+      "name": "Bretonský kůň"
+    },
+    {
+      "id": "brumby",
+      "name": "Brumby"
+    },
+    {
+      "id": "budonovsky-kun",
+      "name": "Buďonovský kůň"
+    },
+    {
+      "id": "camargue",
+      "name": "Camargue"
+    },
+    {
+      "id": "cernolesni-kun",
+      "name": "Černolesní kůň"
+    },
+    {
+      "id": "cesky-teplokrevnik",
+      "name": "Český teplokrevník"
+    },
+    {
+      "id": "cleveland-bay",
+      "name": "Cleveland Bay"
+    },
+    {
+      "id": "clydesdale",
+      "name": "Clydesdale"
+    },
+    {
+      "id": "comtois",
+      "name": "Comtois"
+    },
+    {
+      "id": "connemara-pony",
+      "name": "Connemara pony"
+    },
+    {
+      "id": "criollo",
+      "name": "Criollo"
+    },
+    {
+      "id": "curly-horse",
+      "name": "Curly Horse"
+    },
+    {
+      "id": "dartmoor-pony",
+      "name": "Dartmoor pony"
+    },
+    {
+      "id": "dole-gudbrandsdal",
+      "name": "Dole Gudbrandsdal"
+    },
+    {
+      "id": "donsky-kun",
+      "name": "Donský kůň"
+    },
+    {
+      "id": "exmoor-pony",
+      "name": "Exmoor pony"
+    },
+    {
+      "id": "falabella",
+      "name": "Falabella"
+    },
+    {
+      "id": "fell-pony",
+      "name": "Fell pony"
+    },
+    {
+      "id": "finsky-kun",
+      "name": "Finský kůň"
+    },
+    {
+      "id": "fjordsky-kun",
+      "name": "Fjordský kůň"
+    },
+    {
+      "id": "freiberger",
+      "name": "Freiberger"
+    },
+    {
+      "id": "frisky-kun",
+      "name": "Frísský kůň"
+    },
+    {
+      "id": "furioso-north-star",
+      "name": "Furioso-North Star"
+    },
+    {
+      "id": "gotlandsky-pony",
+      "name": "Gotlandský poník"
+    },
+    {
+      "id": "hackney-kun",
+      "name": "Hackney"
+    },
+    {
+      "id": "hafling",
+      "name": "Hafling"
+    },
+    {
+      "id": "hannoversky-kun",
+      "name": "Hannoverský kůň"
+    },
+    {
+      "id": "highland-pony",
+      "name": "Highland pony"
+    },
+    {
+      "id": "holstynsky-kun",
+      "name": "Holštýnský kůň"
+    },
+    {
+      "id": "hucul",
+      "name": "Hucul"
+    },
+    {
+      "id": "irsky-sportovni-kun",
+      "name": "Irský sportovní kůň"
+    },
+    {
+      "id": "irsky-tazny-kun",
+      "name": "Irský tažný kůň"
+    },
+    {
+      "id": "islandsky-kun",
+      "name": "Islandský kůň"
+    },
+    {
+      "id": "jakutsky-kun",
+      "name": "Jakutský kůň"
+    },
+    {
+      "id": "jutsky-kun",
+      "name": "Jutský kůň"
+    },
+    {
+      "id": "kabardin",
+      "name": "Kabardin"
+    },
+    {
+      "id": "karabassky-kun",
+      "name": "Karabašský kůň"
+    },
+    {
+      "id": "kaspicky-kun",
+      "name": "Kaspický kůň"
+    },
+    {
+      "id": "kathiawari",
+      "name": "Kathiawari"
+    },
+    {
+      "id": "kinsky-kun",
+      "name": "Kinský kůň"
+    },
+    {
+      "id": "kladrubsky-belous",
+      "name": "Kladrubský bělouš"
+    },
+    {
+      "id": "knabstrupp",
+      "name": "Knabstrupp"
+    },
+    {
+      "id": "konik-polski",
+      "name": "Konik polski"
+    },
+    {
+      "id": "kun-prevalskeho",
+      "name": "Kůň Převalského"
+    },
+    {
+      "id": "kwpn",
+      "name": "KWPN (Nizozemský teplokrevník)"
+    },
+    {
+      "id": "lipican",
+      "name": "Lipicán"
+    },
+    {
+      "id": "lusitano",
+      "name": "Lusitano"
+    },
+    {
+      "id": "maremmano",
+      "name": "Maremmano"
+    },
+    {
+      "id": "marwari",
+      "name": "Marwari"
+    },
+    {
+      "id": "missouri-fox-trotter",
+      "name": "Missouri Fox Trotter"
+    },
+    {
+      "id": "mongolsky-kun",
+      "name": "Mongolský kůň"
+    },
+    {
+      "id": "morgan-horse",
+      "name": "Morgan horse"
+    },
+    {
+      "id": "murgese",
+      "name": "Murgese"
+    },
+    {
+      "id": "mustang",
+      "name": "Mustang"
+    },
+    {
+      "id": "new-forest-pony",
+      "name": "New Forest pony"
+    },
+    {
+      "id": "nonius",
+      "name": "Nonius"
+    },
+    {
+      "id": "norik",
+      "name": "Norik"
+    },
+    {
+      "id": "oldenbursky-kun",
+      "name": "Oldenburský kůň"
+    },
+    {
+      "id": "orlovsky-klusak",
+      "name": "Orlovský klusák"
+    },
+    {
+      "id": "paso-peruansky",
+      "name": "Paso Peruánský"
+    },
+    {
+      "id": "percheron",
+      "name": "Percheron"
+    },
+    {
+      "id": "pony-of-the-americas",
+      "name": "Pony of the Americas"
+    },
+    {
+      "id": "pottok",
+      "name": "Pottok"
+    },
+    {
+      "id": "rocky-mountain-horse",
+      "name": "Rocky Mountain Horse"
+    },
+    {
+      "id": "schleswigsky-kun",
+      "name": "Schleswigský kůň"
+    },
+    {
+      "id": "selle-francais",
+      "name": "Selle Français"
+    },
+    {
+      "id": "severosvedsky-kun",
+      "name": "Severošvédský kůň"
+    },
+    {
+      "id": "shagya-arab",
+      "name": "Shagya arab"
+    },
+    {
+      "id": "shetland-pony",
+      "name": "Shetlandský pony"
+    },
+    {
+      "id": "shire-horse",
+      "name": "Shire horse"
+    },
+    {
+      "id": "slezsky-norik",
+      "name": "Slezský norik"
+    },
+    {
+      "id": "sorraia",
+      "name": "Sorraia"
+    },
+    {
+      "id": "standardbred",
+      "name": "Standardbred"
+    },
+    {
+      "id": "starokladrubsky-vranik",
+      "name": "Starokladrubský vraník"
+    },
+    {
+      "id": "suffolk-punch",
+      "name": "Suffolk Punch"
+    },
+    {
+      "id": "tennessee-walker",
+      "name": "Tennessee Walking Horse"
+    },
+    {
+      "id": "tersky-kun",
+      "name": "Terský kůň"
+    },
+    {
+      "id": "tinker",
+      "name": "Tinker (Gypsy Vanner)"
+    },
+    {
+      "id": "trakensky-kun",
+      "name": "Trakénský kůň"
+    },
+    {
+      "id": "velkopolsky-kun",
+      "name": "Velkopolský kůň"
+    },
+    {
+      "id": "vladimirsky-tazny-kun",
+      "name": "Vladimirský tažný kůň"
+    },
+    {
+      "id": "welsh-cob",
+      "name": "Welsh cob"
+    },
+    {
+      "id": "welsh-pony",
+      "name": "Welsh pony"
+    },
+    {
+      "id": "westfalsky-kun",
+      "name": "Westfálský kůň"
+    },
+    {
+      "id": "zmudsky-kun",
+      "name": "Žmuďský kůň"
+    }
+  ]
+}
