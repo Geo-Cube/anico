@@ -8,6 +8,8 @@ import {
 import {
   devDatabaseSettingsSchema,
   databaseCredentialsSchema,
+  databaseProvisioningAccounts,
+  discoverDatabaseServices,
 } from '../src/dev-database.ts';
 
 try {
@@ -33,18 +35,10 @@ try {
       new URL('mongodb/root-password', directory),
       credentials.root.password,
     );
-    const users = [
-      credentials.app,
-      ...credentials.developers.map(
-        ({ login, username, database, password, active }) => ({
-          login,
-          username,
-          database,
-          password,
-          active,
-        }),
-      ),
-    ];
+    const users = databaseProvisioningAccounts(
+      credentials,
+      discoverDatabaseServices(),
+    );
     privateFile(
       new URL('mongodb/users.json', directory),
       JSON.stringify(users),

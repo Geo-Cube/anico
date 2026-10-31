@@ -5,10 +5,12 @@ import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import {
   remoteDevelopmentConfig,
   redactRemoteLog,
   remoteArguments,
+  remoteServiceMetadata,
 } from './remote-dev-config.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -94,10 +96,28 @@ function launch(binary, args, options = {}) {
 }
 
 try {
-  const { check, command, extra, reuse } = remoteArguments(
-    process.argv.slice(2),
-  );
+  const {
+    check,
+    command,
+    extra,
+    reuse,
+    service: selectedService,
+  } = remoteArguments(process.argv.slice(2));
   databaseTask = command !== undefined;
+  const name = selectedService ?? 'breeding-service';
+  const serviceDirectory = join(root, 'apps', name);
+  let service;
+  try {
+    service = remoteServiceMetadata(
+      name,
+      JSON.parse(readFileSync(join(serviceDirectory, 'package.json'), 'utf8')),
+      readFileSync(join(serviceDirectory, '.env.example'), 'utf8'),
+    );
+  } catch {
+    throw new Error(
+      `Workspace apps/${name} is missing or is not a configured AniCo MongoDB service`,
+    );
+  }
   const settings = JSON.parse(
     readFileSync(
       new URL('../infrastructure/dev-database.json', import.meta.url),
@@ -105,17 +125,27 @@ try {
     ),
   );
   let text;
-  try {
-    text = readFileSync(
-      new URL('../apps/breeding-service/.env.remote.local', import.meta.url),
-      'utf8',
-    );
-  } catch {
+  for (const file of new Set([
+    join(root, '.env.remote.local'),
+    join(serviceDirectory, '.env.remote.local'),
+    join(root, 'apps/breeding-service/.env.remote.local'),
+  ])) {
+    try {
+      text = readFileSync(file, 'utf8');
+      break;
+    } catch (error) {
+      if (error.code !== 'ENOENT')
+        throw new Error(
+          'Cannot read personal remote configuration; check file permissions',
+        );
+    }
+  }
+  if (text === undefined) {
     throw new Error(
-      'Ask the administrator for your personal .env.remote.local and save it in apps/breeding-service/',
+      'Ask the administrator for your personal .env.remote.local and save it at the repository root (the existing breeding-service location is also supported)',
     );
   }
-  const config = remoteDevelopmentConfig(text, settings);
+  const config = remoteDevelopmentConfig(text, settings, service);
   if (
     !reuse &&
     spawnSync('cloudflared', ['version'], { stdio: 'ignore' }).status !== 0
@@ -127,7 +157,7 @@ try {
     ? []
     : check || command
       ? [settings.localPort]
-      : [settings.localPort, config.port, 5173])
+      : [settings.localPort, config.port, ...(selectedService ? [] : [5173])])
     await freePort(port);
   const tunnel = reuse
     ? undefined
@@ -158,9 +188,7 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 750));
   if (tunnel && tunnel.exitCode !== null)
     throw new Error('Cloudflare client stopped before connecting');
-  const backendRequire = createRequire(
-    new URL('../apps/breeding-service/package.json', import.meta.url),
-  );
+  const backendRequire = createRequire(join(serviceDirectory, 'package.json'));
   const mongoose = backendRequire('mongoose');
   const connection = mongoose.createConnection();
   try {
@@ -170,9 +198,16 @@ try {
       autoIndex: false,
     });
     await connection.db.command({ ping: 1 });
+    const authentication = await connection.db.command({ connectionStatus: 1 });
+    if (
+      !authentication.authInfo.authenticatedUserRoles.some(
+        (role) => role.role === 'readWrite' && role.db === config.database,
+      )
+    )
+      throw new Error('Missing scoped role');
   } catch {
     throw new Error(
-      'Database connection failed. Check GitHub login, your private configuration and server availability; credentials hidden.',
+      'Database connection or service permission check failed. Ask the administrator to apply dev database provisioning for this service; also check GitHub login and private configuration. Credentials hidden.',
     );
   } finally {
     await connection.close().catch(() => {});
@@ -181,15 +216,14 @@ try {
   console.log(`Connected to your workspace ${config.database}.`);
   if (!check) {
     const task = command
-      ? [
+      ? ['run', `db:${command}`, '-w', service.workspace, '--', ...extra]
+      : [
           'run',
-          `db:${command}`,
-          '-w',
-          '@anico/breeding-service',
+          'dev',
           '--',
-          ...extra,
-        ]
-      : ['run', 'dev'];
+          `--filter=${service.workspace}`,
+          ...(selectedService ? [] : ['--filter=@anico/frontend']),
+        ];
     const npmArgs = process.env.npm_execpath
       ? [process.env.npm_execpath, ...task]
       : task;

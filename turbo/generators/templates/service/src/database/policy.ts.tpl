@@ -28,24 +28,27 @@ export function databaseTarget(
     );
   }
   const database = url.pathname.slice(1);
-  if (
-    !['mongodb:', 'mongodb+srv:'].includes(url.protocol) ||
-    !/^__DATABASE__(?:_[a-z0-9_]+)?$/.test(database) ||
-    ['root', 'admin', 'anico_root'].includes(url.username) ||
-    (url.username && url.searchParams.get('authSource') !== database)
-  )
-    throw new DatabaseTaskError(
-      'INVALID_TARGET',
-      'Use an explicit __SERVICE_NAME__ database and its own scoped account',
-    );
-  const loopback = ['127.0.0.1', 'localhost'].includes(url.hostname);
   const suffix = database.replace(/^__DATABASE___/, '');
+  const authenticationDatabase = url.searchParams.get('authSource');
+  const loopback = ['127.0.0.1', 'localhost'].includes(url.hostname);
   const remotePersonal =
     loopback &&
     url.port === '27018' &&
     /^__DATABASE___[a-z0-9_]+$/.test(database) &&
     url.username === `dev_${suffix}` &&
-    !!url.password;
+    !!url.password &&
+    (authenticationDatabase === database ||
+      authenticationDatabase === `anico_breeding_${suffix}`);
+  if (
+    !['mongodb:', 'mongodb+srv:'].includes(url.protocol) ||
+    !/^__DATABASE__(?:_[a-z0-9_]+)?$/.test(database) ||
+    ['root', 'admin', 'anico_root'].includes(url.username) ||
+    (url.username && authenticationDatabase !== database && !remotePersonal)
+  )
+    throw new DatabaseTaskError(
+      'INVALID_TARGET',
+      'Use an explicit __SERVICE_NAME__ database and its own scoped account',
+    );
   const localPersonal =
     loopback &&
     (url.port || '27017') === '27017' &&

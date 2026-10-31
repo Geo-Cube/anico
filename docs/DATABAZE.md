@@ -1,8 +1,9 @@
 # Vývojář: migrace, seed a vlastní DB
 
 **Datový model své služby měníš sám. Správce řeší přidělení přístupu, ne jednotlivá pole.**
-Tento postup je zatím zavedený pro `breeding-service`. Nová mikroservisa potřebuje
-vlastní DB/účty a přizpůsobený provisioning i launcher.
+Výchozí příkazy míří na `breeding-service`. Pro jinou službu přidej například
+`-- --service auth`. Jeden osobní účet zpřístupní oddělené DB jednotlivých služeb
+po aplikování správcovského DB provisioningu.
 
 ## Nejčastější příkazy
 

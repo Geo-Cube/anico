@@ -8,22 +8,29 @@ try {
     const connection = new Mongo(
       `mongodb://127.0.0.1:27017/${account.database}`,
     );
-    const own = connection.getDB(account.database);
-    own.auth({ user: account.username, pwd: account.password });
-    const collection = own.getCollection(
-      `_anico_permission_probe_${new ObjectId().toString()}`,
-    );
+    const authentication = connection.getDB(account.database);
+    authentication.auth({ user: account.username, pwd: account.password });
     try {
-      collection.insertOne({ test: true });
-      if (!collection.findOne({ test: true }))
-        throw new Error('Own database unavailable');
-      for (const forbidden of [
+      for (const database of account.databases) {
+        const own = connection.getDB(database);
+        const collection = own.getCollection(
+          `_anico_permission_probe_${new ObjectId().toString()}`,
+        );
+        try {
+          collection.insertOne({ test: true });
+          if (!collection.findOne({ test: true }))
+            throw new Error('Own service database unavailable');
+        } finally {
+          collection.drop();
+        }
+      }
+      const allDatabases = accounts.flatMap((value) => value.databases);
+      for (const forbidden of new Set([
         'admin',
         'anico_prod',
-        ...accounts
-          .filter((value) => value.database !== account.database)
-          .map((value) => value.database),
-      ]) {
+        'anico_auth',
+        ...allDatabases.filter((name) => !account.databases.includes(name)),
+      ])) {
         let denied = false;
         try {
           connection
@@ -37,13 +44,12 @@ try {
         if (!denied) throw new Error('Cross-database access was not denied');
       }
     } finally {
-      collection.drop();
       connection.close();
     }
     verified++;
   }
   print(
-    `Verified ${verified} scoped accounts: own DB writable, other databases denied.`,
+    `Verified ${verified} scoped accounts: own service DBs writable, other developers/shared databases denied.`,
   );
 } catch (error) {
   print(

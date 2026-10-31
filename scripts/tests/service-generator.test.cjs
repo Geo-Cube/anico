@@ -16,6 +16,7 @@ const { copyFile, symlink, access } = require('node:fs/promises');
 const {
   createService,
   normalizeName,
+  registerDatabaseService,
 } = require('../../turbo/generators/service.cjs');
 
 test('validates service names without allowing paths, shell input or reserved names', () => {
@@ -98,7 +99,8 @@ test('renders independent workspaces, allocates ports and never copies credentia
       'utf8',
     );
     assert.match(policy, /anico_animal_dev_app/);
-    assert.doesNotMatch(policy, /breeding/);
+    assert.match(policy, /anico_breeding_\$\{suffix\}/);
+    assert.doesNotMatch(policy, /\^anico_breeding/);
     await writeFile(join(folder, 'src/server.ts'), 'user-owned edits\n');
     await assert.rejects(
       createService('animal-service', root),
@@ -121,6 +123,27 @@ test('renders independent workspaces, allocates ports and never copies credentia
       'breeding-service',
       'pet-care-service',
     ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('service registration preserves earlier services even when their source is absent locally', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'anico-service-registry-'));
+  try {
+    await registerDatabaseService('animal', root);
+    await registerDatabaseService('auth-service', root);
+    await registerDatabaseService('animal-service', root);
+    assert.deepEqual(
+      JSON.parse(
+        await readFile(
+          join(root, 'infrastructure/dev-database-services.json'),
+          'utf8',
+        ),
+      ),
+      ['animal-service', 'auth-service', 'breeding-service'],
+    );
+    await assert.rejects(registerDatabaseService('../admin', root));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

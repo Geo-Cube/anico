@@ -164,4 +164,43 @@ function installDependencies(root) {
   });
 }
 
-module.exports = { normalizeName, createService, installDependencies };
+async function registerDatabaseService(input, root = repositoryRoot) {
+  const { name } = normalizeName(input);
+  const directory = path.join(root, 'infrastructure');
+  const registry = path.join(directory, 'dev-database-services.json');
+  const services = (await exists(registry))
+    ? JSON.parse(await readFile(registry, 'utf8'))
+    : ['breeding-service'];
+  if (
+    !Array.isArray(services) ||
+    services.some((value) => normalizeName(value).name !== value) ||
+    new Set(services).size !== services.length
+  )
+    throw new Error(
+      'Invalid database service registry; service files were created but registration must be corrected.',
+    );
+  if (services.includes(name)) return;
+  services.push(name);
+  await mkdir(directory, { recursive: true });
+  const temporary = path.join(
+    directory,
+    `.database-services-${randomUUID()}.tmp`,
+  );
+  try {
+    await writeFile(
+      temporary,
+      JSON.stringify(services.sort(), null, 2) + '\n',
+      { flag: 'wx' },
+    );
+    await rename(temporary, registry);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
+module.exports = {
+  normalizeName,
+  createService,
+  installDependencies,
+  registerDatabaseService,
+};

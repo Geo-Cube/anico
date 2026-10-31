@@ -17,6 +17,7 @@
         "MONGODB_URI",
         "LOG_LEVEL",
         "NODE_ENV",
+        "APP_ENV",
         "MIGRATE_ON_START"
       ]
     },
