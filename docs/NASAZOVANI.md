@@ -22,6 +22,10 @@ Publikování **není nasazení** a samo nezmění běžící aplikaci.
 
 ## Jednorázově po prvním publikování
 
+Ověřeno 31. 10. 2026: obě images pro commit `ab89a6c` jsou publikované a lze
+je anonymně stáhnout v architekturách amd64 i arm64. Následující postup
+viditelnosti slouží pro případ obnovy nebo založení nového balíčku.
+
 GHCR vytváří nové balíčky jako private i u veřejného repozitáře. Protože tento
 projekt má veřejný zdrojový kód a images neobsahují secrets, použijeme veřejné
 images, které VPS stáhne bez dalšího dlouhodobého tokenu.
@@ -103,13 +107,13 @@ runtime secrets Nginx. Backendové DB URI do frontendových proměnných nepatř
 
 ## Navazující nasazení
 
-1. Po review a merge ověřit první publikování do GHCR a veřejnou viditelnost
-   obou balíčků. Tato změna ještě nezakládá aplikační kontejnery/databáze.
-2. Vyřešit kompatibilitu MongoDB a kernelu VPS. Při kontrole byl na VPS kernel
-   `7.0.0-30-generic` s upstream verzí `7.0.12`, kterou MongoDB 8 označuje za
-   nekompatibilní. Je potřeba připravit a ověřit aktualizaci kernelu a vhodnou
-   maintenance verzi MongoDB. Lokální per-thread workaround nepřebíráme
-   automaticky do produkčního návrhu. Řízený reboot bude samostatný provozní krok.
+1. Publikování a veřejná dostupnost obou GHCR balíčků už jsou ověřené.
+   Po review a merge změn vzdáleného vývoje ověřit nové CI a nové image digesty.
+   Samotné publikování ještě nezakládá aplikační kontejnery/databáze.
+2. Kernelová oprava pro dev je hotová: `7.0.0-42-generic`, upstream `7.0.14`.
+   Vývojová MongoDB, osobní účty a chráněný tunel jsou připravené podle
+   [vzdáleného vývoje](VZDALENY-VYVOJ.md). Produkční DB a její konfiguraci
+   zvolíme samostatně; neprodukční allocator režim není automatický prod návrh.
 3. Připravit konkrétní služby pro oba environmenty, autentizované MongoDB,
    vlastní omezené aplikační DB účty a volumes, runtime URI a síťové routování.
    Nasadit dev a ověřit týmový GitHub Access. Žádný veřejný port MongoDB.
