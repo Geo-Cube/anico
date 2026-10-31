@@ -32,14 +32,17 @@ Sdílené API kontrakty přidej do `@anico/shared-schemas` pro frontend i backen
 Migrace začínají prázdné; `db:new` vytvoří soubor, který musíš implementovat.
 Seed je záměrně prázdný ping; doplň vlastní opakovatelné ukázkové záznamy.
 Pravidla zámků, retry a neměnných migrací: [databázový postup](../../docs/DATABAZE.md).
-DB příkazy zde spouštěj s `-w @anico/__SERVICE_NAME__`; kořenové `db:remote:*`
-a `dev:remote` zatím spravují pouze breeding-service.
+Vzdáleně spusť z kořene `npm run dev:remote -- --service __SERVICE_NAME__`,
+nebo ze složky této služby `npm run dev:remote`. DB příkazy mají také wrappery
+`db:remote:status`, `db:remote:migrate`, `db:remote:seed`, `db:remote:reset`.
 
-Správce musí před vzdáleným vývojem založit účty omezené na databázi této služby.
-Konvence pro osobní DB je `__DATABASE___LOGIN`, účet `dev_LOGIN` a vlastní
-`authSource`; pro sdílený dev DB `__DATABASE__`, účet `__DATABASE___dev_app`.
-Do `.env` se zapisují skutečné údaje **jen lokálně**. Nedávej do Gitu URI s heslem.
-Reset vyžaduje osobní DB a její přesný název v `--confirm`; není pro společný dev.
+Osobní `.env.remote.local` stačí jeden v kořeni repozitáře; původní umístění
+v breeding-service funguje také. Launcher zachová účet a jeho `authSource`
+a vybere `__DATABASE___LOGIN`. Správce musí pro novou službu nejprve znovu
+aplikovat `deploy:dev-database`, který rozšíří role stávajících osobních účtů.
+Neměň vlastní heslo ani ručně nepřepisuj databázi v původním URI.
+Reset je povolen jen pro potvrzenou osobní DB této služby, nikoli společný dev.
+[Podrobný postup](../../docs/VZDALENY-VYVOJ.md).
 
 ```bash
 docker build -f apps/__SERVICE_NAME__/Dockerfile -t anico/__SERVICE_NAME__:local .

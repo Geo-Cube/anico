@@ -1,4 +1,82 @@
 import { z } from 'zod';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const serviceName = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-service$/);
+
+export function discoverDatabaseServices(
+  root = fileURLToPath(new URL('../../', import.meta.url)),
+): string[] {
+  const registry = join(root, 'infrastructure/dev-database-services.json');
+  const services = existsSync(registry)
+    ? z
+        .array(serviceName)
+        .min(1)
+        .parse(JSON.parse(readFileSync(registry, 'utf8')))
+    : ['breeding-service'];
+  if (new Set(services).size !== services.length)
+    throw new Error('Duplicate registered database service');
+  for (const directory of readdirSync(join(root, 'apps'), {
+    withFileTypes: true,
+  })) {
+    if (!directory.isDirectory() || directory.name.startsWith('.')) continue;
+    let manifest: { name?: string; dependencies?: Record<string, string> };
+    try {
+      manifest = JSON.parse(
+        readFileSync(
+          join(root, 'apps', directory.name, 'package.json'),
+          'utf8',
+        ),
+      );
+    } catch {
+      throw new Error(
+        'Every app must have a valid package manifest before database provisioning',
+      );
+    }
+    if (!manifest.dependencies?.mongoose) continue;
+    const name = serviceName.parse(directory.name);
+    if (manifest.name !== `@anico/${name}`)
+      throw new Error(
+        'Database service workspace does not match its directory',
+      );
+    if (!services.includes(name)) services.push(name);
+  }
+  if (!services.includes('breeding-service'))
+    throw new Error(
+      'The existing authentication service database must remain registered',
+    );
+  return services.sort();
+}
+
+export function databaseProvisioningAccounts(
+  credentials: DatabaseCredentials,
+  rawServices: string[],
+) {
+  const services = z.array(serviceName).min(1).parse(rawServices);
+  if (
+    !services.includes('breeding-service') ||
+    new Set(services).size !== services.length
+  )
+    throw new Error(
+      'Database services must be unique and include breeding-service',
+    );
+  return [
+    { ...credentials.app, databases: [credentials.app.database] },
+    ...credentials.developers.map(({ email: _email, ...member }) => {
+      const suffix = member.login.toLowerCase().replaceAll('-', '_');
+      const databases = services
+        .map(
+          (name) =>
+            `anico_${name.replace(/-service$/, '').replaceAll('-', '_')}_${suffix}`,
+        )
+        .sort();
+      if (databases.some((name) => Buffer.byteLength(name) > 63))
+        throw new Error('Personal database identifier exceeds MongoDB limits');
+      return { ...member, databases };
+    }),
+  ];
+}
 
 export const devDatabaseSettingsSchema = z.strictObject({
   hostname: z.literal('db-dev.anico.online'),

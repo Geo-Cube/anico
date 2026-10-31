@@ -21,6 +21,10 @@ běžný backendový `.env` a dostupnou DB; pro osobní vzdálenou DB používej
 Nová mikroservisa: `npm run service:new -- --args animal`.
 Vytvoří workspace a nainstaluje závislosti; [postup](NOVA-SLUZBA.md).
 
+Konkrétní backend proti vlastní vzdálené DB: `npm run dev:remote -- --service auth`.
+Stav jeho DB: `npm run db:remote:status -- --service auth`.
+Používají jeden osobní konfigurační soubor; [více služeb a společný tunel](VZDALENY-VYVOJ.md).
+
 ## Databáze: osobní vzdálená breeding DB
 
 | Chci                      | Příkaz                                                   |

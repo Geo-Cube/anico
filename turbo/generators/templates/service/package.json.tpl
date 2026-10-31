@@ -17,7 +17,13 @@
     "db:seed": "tsx --env-file-if-exists=.env src/database/cli.ts seed",
     "db:reset": "tsx --env-file-if-exists=.env src/database/cli.ts reset",
     "db:unlock": "tsx --env-file-if-exists=.env src/database/cli.ts unlock",
-    "db:new": "tsx src/database/cli.ts new"
+    "db:new": "tsx src/database/cli.ts new",
+    "dev:remote": "node ../../scripts/dev-remote.mjs --service=__SERVICE_NAME__",
+    "db:remote:status": "node ../../scripts/dev-remote.mjs --service=__SERVICE_NAME__ --db=status",
+    "db:remote:migrate": "node ../../scripts/dev-remote.mjs --service=__SERVICE_NAME__ --db=migrate",
+    "db:remote:seed": "node ../../scripts/dev-remote.mjs --service=__SERVICE_NAME__ --db=seed",
+    "db:remote:reset": "node ../../scripts/dev-remote.mjs --service=__SERVICE_NAME__ --db=reset",
+    "db:remote:unlock": "node ../../scripts/dev-remote.mjs --service=__SERVICE_NAME__ --db=unlock"
   },
   "dependencies": {
     "@anico/shared-schemas": "^0.1.0",

@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import {
   remoteDevelopmentConfig,
   redactRemoteLog,
+  remoteServiceMetadata,
+  remoteServiceName,
+  remoteArguments,
 } from '../remote-dev-config.mjs';
 
 const settings = { hostname: 'db-dev.anico.online', localPort: 27018 };
@@ -45,6 +48,78 @@ test('errors do not expose MongoDB connection strings', () => {
       'https://db-dev.anico.online/cdn-cgi/access/cli?token=example-only',
     ),
     '[Cloudflare login opened in browser; private parameters hidden]',
+  );
+});
+
+test('selected service reuses credentials/authSource but isolates database and application port', () => {
+  const service = remoteServiceMetadata(
+    'auth-service',
+    {
+      name: '@anico/auth-service',
+      scripts: { dev: 'tsx watch src/server.ts' },
+      dependencies: { mongoose: '*' },
+    },
+    'PORT=3001',
+  );
+  const config = remoteDevelopmentConfig(valid, settings, service);
+  const uri = new URL(config.env.MONGODB_URI);
+  assert.equal(config.database, 'anico_auth_example');
+  assert.equal(uri.pathname, '/anico_auth_example');
+  assert.equal(uri.username, 'dev_example');
+  assert.equal(uri.password, 'example-only');
+  assert.equal(uri.searchParams.get('authSource'), 'anico_breeding_example');
+  assert.equal(config.port, 3001);
+  assert.equal(remoteServiceName('auth'), 'auth-service');
+  assert.equal(remoteArguments(['--service', 'auth']).service, 'auth-service');
+  assert.equal(
+    remoteArguments(['--service=auth', '--use-running-tunnel']).reuse,
+    true,
+  );
+  for (const value of ['../auth', '@anico/auth', 'auth;echo'])
+    assert.throws(() => remoteServiceName(value));
+  assert.throws(() =>
+    remoteServiceMetadata(
+      'auth-service',
+      { name: '@anico/other-service' },
+      'PORT=3001',
+    ),
+  );
+  assert.throws(() =>
+    remoteServiceMetadata(
+      'auth-service',
+      {
+        name: '@anico/auth-service',
+        scripts: { dev: 'x' },
+        dependencies: { mongoose: '*' },
+      },
+      'PORT=22',
+    ),
+  );
+});
+
+test('animal service accepts existing credentials or a service URI and never changes the auth database', () => {
+  const service = remoteServiceMetadata(
+    'animal-service',
+    {
+      name: '@anico/animal-service',
+      scripts: { dev: 'tsx watch src/server.ts' },
+      dependencies: { mongoose: '*' },
+    },
+    'PORT=3002',
+  );
+  const tom = valid.replaceAll('example', 'tom_606');
+  const original = remoteDevelopmentConfig(tom, settings, service);
+  assert.equal(original.database, 'anico_animal_tom_606');
+  const uri = new URL(original.env.MONGODB_URI);
+  assert.equal(uri.searchParams.get('authSource'), 'anico_breeding_tom_606');
+  assert.equal(
+    remoteDevelopmentConfig(`MONGODB_URI=${uri.href}`, settings, service)
+      .database,
+    original.database,
+  );
+  uri.pathname = '/anico_animal_another_developer';
+  assert.throws(() =>
+    remoteDevelopmentConfig(`MONGODB_URI=${uri.href}`, settings, service),
   );
 });
 

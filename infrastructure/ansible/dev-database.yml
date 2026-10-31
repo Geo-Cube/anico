@@ -171,7 +171,7 @@
           register: anico_database_users
           changed_when: "'ANICO_CHANGED' in anico_database_users.stdout"
           when: not ansible_check_mode
-        - name: Verify each account can write only its own database
+        - name: Verify each account can write only its own service databases
           ansible.builtin.command:
             argv:
               [
