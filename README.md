@@ -34,6 +34,10 @@ soukromou konfiguraci popisuje [nasazování](docs/NASAZOVANI.md).
 
 ## Jen frontend
 
+Celý projekt bez lokální MongoDB: [vzdálený vývoj](docs/VZDALENY-VYVOJ.md).
+Po jednorázovém převzetí osobní konfigurace a instalaci `cloudflared` stačí
+`npm run dev:remote`.
+
 ```bash
 npm ci
 npm run dev:frontend

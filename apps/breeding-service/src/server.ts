@@ -8,6 +8,7 @@ import { mongooseBreedingPlanRepository } from './modules/breeding/infrastructur
 const env = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    HOST: z.enum(['127.0.0.1', '0.0.0.0', '::1', '::']).default('0.0.0.0'),
     MONGODB_URI: z.string().regex(/^mongodb(?:\+srv)?:\/\//),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -37,7 +38,7 @@ try {
       service: 'breeding-service',
     }),
   });
-  const server = app.listen(env.PORT, () =>
+  const server = app.listen(env.PORT, env.HOST, () =>
     logger.info({ port: env.PORT }, 'Server listening'),
   );
   server.on('error', (error) => {

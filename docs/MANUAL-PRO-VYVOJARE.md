@@ -91,6 +91,15 @@ a není součástí běžného nástupu vývojáře.
 
 ## 5. Spuštění backendu a celého lokálního prostředí
 
+### Bez lokální MongoDB
+
+Pokud máš od správce osobní `.env.remote.local` a nainstalovaný `cloudflared`,
+spusť `npm run dev:remote`. Frontend i backend běží lokálně, databáze je tvá
+vlastní vývojová DB na VPS. Docker ani SSH pro tento režim nepotřebuješ.
+Jednorázovou přípravu a přihlášení popisuje [vzdálený vývoj](VZDALENY-VYVOJ.md).
+
+### S lokální MongoDB
+
 Nejdřív spusť Docker aplikaci na svém počítači, potom z kořene repozitáře:
 
 ```bash
@@ -242,8 +251,8 @@ Podrobnosti a postup při nálezu jsou v [kontrole secrets](SECRETS.md).
 - Administrace používá GitHub přihlášení přes Cloudflare a Coolify GitHub OAuth;
   vlastní Coolify heslo pro běžný přístup nepotřebuješ. Přístup a role
   jednotlivých kolegů popisuje [SSO návod](../infrastructure/COOLIFY-SSO.md).
-- Serverové aplikační prostředí dev/prod a vzdálené vývojářské databáze zatím
-  nejsou nasazené. `npm run dev:remote` neexistuje.
+- Aplikační kontejnery dev/prod zatím nejsou nasazené. Osobní vzdálené
+  vývojářské databáze používá `npm run dev:remote`, viz [postup](VZDALENY-VYVOJ.md).
 - Produkce bude veřejná, dev přístupný jen týmu; přístup k devu nebude znamenat
   přístup ke správě produkce.
 - Příkazy Pulumi `up` a infrastrukturní bootstrap mění skutečné prostředky.

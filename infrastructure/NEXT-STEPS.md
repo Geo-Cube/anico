@@ -24,7 +24,11 @@ mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
 - Hetzner firewall: SSH jen z administrátorské IP, ICMP, ostatní příchozí porty zavřené.
 - Obnovovací postup a místní recovery kopie, ověřený import Pulumi state
   a dešifrování secrets. Úplná obnova na náhradním VPS zatím neproběhla.
-- Aplikace a databázové služby pro dev/prod ještě nejsou nasazené.
+- Aplikační kontejnery dev/prod a produkční databáze ještě nejsou nasazené.
+- Doplnění 31. 10. 2026: vývojová MongoDB s osobními workspace DB a vlastní
+  DB nasazené dev aplikace už je připravená, aplikační kontejnery a produkční DB
+  nadále čekají. Přístup přes samostatný GitHub Access TCP tunel
+  `db-dev.anico.online`, bez veřejného DB portu; viz [návod](../docs/VZDALENY-VYVOJ.md).
 
 ## Rozhodnutí a realizace v navazující fázi
 
@@ -48,7 +52,7 @@ mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
 - [x] Přidat `MoncaBrancuska` jako Admina Coolify přes šifrovanou IaC
       konfiguraci a poslat GitHub pozvánku s Write oprávněním (29. 10. 2026).
       GitHub pozvánku musí přijmout a vlastní přihlášení do Coolify ještě ověřit.
-- [ ] Ověřit vlastní první přihlášení všech sedmi členů týmu přes GitHub.
+- [ ] Ověřit vlastní první přihlášení všech aktuálních členů týmu přes GitHub.
       Tyto role nedávají automaticky code owner ani GitHub Write oprávnění.
 
 - [x] Doplnit `@Zlytata` jako druhého code ownera vedle `@Geo-Cube`
@@ -68,12 +72,11 @@ mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
       o případné OTP záloze. Přihlášení Coolify nyní používá přímé GitHub OAuth.
       Samostatné skupiny
       vývojářů a správců; přístup k devu sám nedává správu Coolify ani produkce.
-- [ ] Domluvit databáze pro lokálně běžící aplikace: možnost osobních logických
-      DB v neprodukční instanci se samostatnými omezenými účty, jednotným seedem
-      a přístupem přes šifrovaný tunel bez VPN. Nasazený dev musí mít vlastní DB.
-      Alternativou je již připravená lokální MongoDB přes Compose. Rozhodnutí
-      o umístění DB a způsobu tunelování ještě nepadlo; připravit jeden vstupní
-      příkaz pro vývojáře podle finálního stacku.
+- [x] Připravit osobní logické DB v neprodukční instanci s vlastními omezenými
+      účty, oddělenou DB dev aplikace a GitHub Access tunelem bez VPN. Lokální
+      příkaz `npm run dev:remote`, vlastní ignorovaná konfigurace každého člena,
+      původní lokální MongoDB zůstává alternativou (31. 10. 2026).
+- [ ] Doplnit jednotný seed a migrační mechanismus podle aplikačního modelu.
 - [x] Zavést vlastní účty Coolify a role Owner/Admin; všech sedm členů týmu má
       připravený Admin účet. Viz [SSO postup](COOLIFY-SSO.md).
 - [x] Připravit Dockerfiles pro současný React frontend a Express backend,
@@ -85,12 +88,17 @@ mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
 - [x] Připravit GHCR publishing obou multi-platform images po zeleném CI na
       `dev`/`main`, tag podle SHA a artifact s digestem. První publikování
       proběhne až po merge; owner následně přepne balíčky na Public.
+- [x] Ověřit první publikování a anonymní stažení obou GHCR images pro amd64
+      i arm64: ověřeno 31. 10. 2026 pro commit `ab89a6c`. Není potřeba
+      přidávat registry token na VPS. Automatické nasazení aplikací ještě chybí.
 - [x] Připravit idempotentní IaC projektu AniCo a prostředí `dev`/`prod` v Coolify,
       oddělené shared variables a podporu šifrovaného `applicationVariables`.
       Samotné aplikační kontejnery ani DB tím nevznikají.
-- [ ] Před serverovou MongoDB vyřešit kernel: zjištěná upstream verze 7.0.12
-      je v nekompatibilním rozsahu MongoDB 8. Připravit opravu a řízený reboot;
-      neobcházet problém nasazením lokální testovací konfigurace do produkce.
+- [x] Opravit VPS kernel přes samostatný Ansible maintenance playbook a řízený
+      reboot: `7.0.0-42-generic`, upstream `7.0.14`; původní management služby
+      se obnovily a jsou healthy (31. 10. 2026). Dev MongoDB má explicitní
+      per-thread allocator kvůli zatím nedostupné maintenance image s opravenou
+      detekcí Ubuntu; produkční DB tímto nastavená není.
 - [ ] Nastavit projekty a obě prostředí v Coolify; oddělené DB účty, secrets,
       sítě a data. Dev nesmí používat produkční data nebo přístupy.
 - [ ] Připravit přístup CI/testů/webhooků přes Access bez interaktivního OTP

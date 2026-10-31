@@ -1,0 +1,13 @@
+{
+  "hostname": "db-dev.anico.online",
+  "project": "anico-dev-database",
+  "containerName": "anico-dev-mongodb",
+  "volume": "anico-dev-mongodb",
+  "dataNetwork": "anico-dev-data",
+  "egressNetwork": "anico-dev-app",
+  "rootDirectory": "/srv/anico/dev/database",
+  "image": "mongo:8.0@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142",
+  "localPort": 27018,
+  "wiredTigerCacheGB": 0.5,
+  "perThreadAllocator": true
+}
