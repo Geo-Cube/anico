@@ -1,0 +1,6 @@
+NODE_ENV=development
+PORT=__PORT__
+HOST=127.0.0.1
+MONGODB_URI=mongodb://127.0.0.1:27017/__DATABASE___local
+LOG_LEVEL=info
+MIGRATE_ON_START=false

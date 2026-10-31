@@ -20,6 +20,10 @@ Při výzvě dokonči GitHub přihlášení. Frontend: http://127.0.0.1:5173,
 backend: http://127.0.0.1:3000. **Ctrl+C** zavře i tunel.
 Pouhá kontrola připojení: `npm run dev:remote -- --check`.
 
+Migrace, seed a obnova vlastní DB: [databázový postup](DATABAZE.md).
+Pokud už tento dev proces běží, DB příkaz může použít jeho tunel přes
+`-- --use-running-tunnel`; reset vyžaduje nejprve ukončit aplikace.
+
 ## Co je tvoje a co společné
 
 | Databáze               | Použití                                                 |

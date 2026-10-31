@@ -65,6 +65,8 @@ export function composeForRelease(references, revision) {
         environment: {
           NODE_ENV: 'production',
           APP_ENV: 'dev',
+          MIGRATE_ON_START: 'true',
+          MONGODB_URI_FILE: '/run/secrets/dev-mongodb-uri',
           HOST: '0.0.0.0',
           PORT: '3000',
           LOG_LEVEL: '${LOG_LEVEL:-debug}',

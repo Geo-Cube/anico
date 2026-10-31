@@ -12,6 +12,7 @@ coverage/
 .env.*
 *.env
 !.env.example
+!turbo/generators/templates/service/.env.example.tpl
 .envrc.local
 .secrets/
 secrets/

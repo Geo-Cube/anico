@@ -47,3 +47,42 @@ test('errors do not expose MongoDB connection strings', () => {
     '[Cloudflare login opened in browser; private parameters hidden]',
   );
 });
+
+test('database commands allow only named tasks and explicit recovery flags', async () => {
+  const { remoteArguments } = await import('../remote-dev-config.mjs');
+  assert.equal(remoteArguments([]).command, undefined);
+  assert.equal(remoteArguments(['--check']).check, true);
+  assert.equal(
+    remoteArguments(['--db=migrate', '--use-running-tunnel']).reuse,
+    true,
+  );
+  assert.deepEqual(
+    remoteArguments(['--db', 'migrate', '--retry', 'migration-id']).extra,
+    ['--retry', 'migration-id'],
+  );
+  assert.deepEqual(
+    remoteArguments(['--db=reset', '--confirm=anico_breeding_example']).extra,
+    ['--confirm', 'anico_breeding_example'],
+  );
+  assert.deepEqual(
+    remoteArguments(['--db=unlock', '--owner', 'owner-id', '--confirm', 'db'])
+      .extra,
+    ['--confirm', 'db', '--owner', 'owner-id'],
+  );
+  for (const args of [
+    ['--db=drop'],
+    ['--db=migrate', '--check'],
+    ['--db'],
+    ['--check=true'],
+    ['--db=migrate', '--db=status'],
+    ['--use-running-tunnel'],
+    ['--db=reset'],
+    ['--db=reset', '--confirm', 'db', '--use-running-tunnel'],
+    ['--db=status', '--retry', 'id'],
+    ['--db=status', '--owner', 'id'],
+    ['--db=seed', '--confirm', 'db'],
+    ['--db=seed', '--shared'],
+    ['--db=unlock'],
+  ])
+    assert.throws(() => remoteArguments(args));
+});

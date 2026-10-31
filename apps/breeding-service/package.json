@@ -11,7 +11,13 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "db:status": "tsx --env-file-if-exists=.env src/database/cli.ts status",
+    "db:migrate": "tsx --env-file-if-exists=.env src/database/cli.ts migrate",
+    "db:seed": "tsx --env-file-if-exists=.env src/database/cli.ts seed",
+    "db:reset": "tsx --env-file-if-exists=.env src/database/cli.ts reset",
+    "db:unlock": "tsx --env-file-if-exists=.env src/database/cli.ts unlock",
+    "db:new": "tsx src/database/cli.ts new"
   },
   "dependencies": {
     "@anico/shared-schemas": "^0.1.0",

@@ -12,6 +12,10 @@ apps/breeding-service/**
 !apps/breeding-service/tsconfig.json
 !apps/breeding-service/src/
 !apps/breeding-service/src/**
+!apps/breeding-service/migrations/
+!apps/breeding-service/migrations/*.mjs
+!apps/breeding-service/seeds/
+!apps/breeding-service/seeds/*.mjs
 !apps/frontend/
 apps/frontend/**
 !apps/frontend/Dockerfile

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   remoteDevelopmentConfig,
   redactRemoteLog,
+  remoteArguments,
 } from './remote-dev-config.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -16,6 +17,7 @@ let stopping = false;
 let cleanupPromise;
 const initialParent = process.ppid;
 let parentWatch;
+let databaseTask = false;
 
 function stop(signal = 'SIGTERM') {
   for (const child of children)
@@ -33,7 +35,7 @@ function cleanup() {
   stopping = true;
   clearInterval(parentWatch);
   if (children.length)
-    console.log('Stopping local applications and database tunnel.');
+    console.log('Stopping processes started by this command.');
   cleanupPromise = (async () => {
     const waiting = Promise.all(
       children.map((child) =>
@@ -59,7 +61,10 @@ function cleanup() {
 }
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
   process.on(signal, () => {
-    void cleanup().then(() => process.exit(0));
+    const code = databaseTask
+      ? { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 }[signal]
+      : 0;
+    void cleanup().then(() => process.exit(code));
   });
 process.on('exit', () => stop());
 parentWatch = setInterval(() => {
@@ -89,9 +94,10 @@ function launch(binary, args, options = {}) {
 }
 
 try {
-  const check = process.argv.slice(2).includes('--check');
-  if (process.argv.slice(2).some((arg) => arg !== '--check'))
-    throw new Error('Supported option: --check');
+  const { check, command, extra, reuse } = remoteArguments(
+    process.argv.slice(2),
+  );
+  databaseTask = command !== undefined;
   const settings = JSON.parse(
     readFileSync(
       new URL('../infrastructure/dev-database.json', import.meta.url),
@@ -110,38 +116,47 @@ try {
     );
   }
   const config = remoteDevelopmentConfig(text, settings);
-  if (spawnSync('cloudflared', ['version'], { stdio: 'ignore' }).status !== 0)
+  if (
+    !reuse &&
+    spawnSync('cloudflared', ['version'], { stdio: 'ignore' }).status !== 0
+  )
     throw new Error(
       'Install the Cloudflare client first (macOS: brew install cloudflared)',
     );
-  for (const port of check
-    ? [settings.localPort]
-    : [settings.localPort, config.port, 5173])
+  for (const port of reuse
+    ? []
+    : check || command
+      ? [settings.localPort]
+      : [settings.localPort, config.port, 5173])
     await freePort(port);
-  const tunnel = launch(
-    'cloudflared',
-    [
-      'access',
-      'tcp',
-      '--hostname',
-      settings.hostname,
-      '--url',
-      `127.0.0.1:${settings.localPort}`,
-      '--log-level',
-      'warn',
-    ],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  for (const stream of [tunnel.stdout, tunnel.stderr])
+  const tunnel = reuse
+    ? undefined
+    : launch(
+        'cloudflared',
+        [
+          'access',
+          'tcp',
+          '--hostname',
+          settings.hostname,
+          '--url',
+          `127.0.0.1:${settings.localPort}`,
+          '--log-level',
+          'warn',
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+  for (const stream of tunnel ? [tunnel.stdout, tunnel.stderr] : [])
     createInterface({ input: stream }).on('line', (line) =>
       console.log(redactRemoteLog(line)),
     );
-  await once(tunnel, 'spawn');
+  if (tunnel) await once(tunnel, 'spawn');
   console.log(
-    'Opening the private development DB tunnel. Complete GitHub login in your browser when prompted.',
+    reuse
+      ? 'Using the running local tunnel; its lifetime remains with the original process.'
+      : 'Opening the private development DB tunnel. Complete GitHub login in your browser when prompted.',
   );
   await new Promise((resolve) => setTimeout(resolve, 750));
-  if (tunnel.exitCode !== null)
+  if (tunnel && tunnel.exitCode !== null)
     throw new Error('Cloudflare client stopped before connecting');
   const backendRequire = createRequire(
     new URL('../apps/breeding-service/package.json', import.meta.url),
@@ -165,9 +180,19 @@ try {
   if (stopping) throw new Error('Remote development stopped');
   console.log(`Connected to your workspace ${config.database}.`);
   if (!check) {
-    const npmArgs = process.env.npm_execpath
-      ? [process.env.npm_execpath, 'run', 'dev']
+    const task = command
+      ? [
+          'run',
+          `db:${command}`,
+          '-w',
+          '@anico/breeding-service',
+          '--',
+          ...extra,
+        ]
       : ['run', 'dev'];
+    const npmArgs = process.env.npm_execpath
+      ? [process.env.npm_execpath, ...task]
+      : task;
     const app = launch(
       process.env.npm_execpath ? process.execPath : 'npm',
       npmArgs,
@@ -175,11 +200,15 @@ try {
     );
     const result = await Promise.race([
       once(app, 'exit').then(([code]) => code ?? 1),
-      once(tunnel, 'exit').then(() => {
-        throw new Error(
-          'Database tunnel disconnected; stopping local applications',
-        );
-      }),
+      ...(tunnel
+        ? [
+            once(tunnel, 'exit').then(() => {
+              throw new Error(
+                'Database tunnel disconnected; stopping local applications',
+              );
+            }),
+          ]
+        : []),
     ]);
     process.exitCode = result;
   }

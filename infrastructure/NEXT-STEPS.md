@@ -9,7 +9,10 @@ Aktualizováno 31. 10. 2026. Detailní historii inicializace nahrazuje tento pra
 - [ ] Předat osobní DB konfigurace všem kolegům a ověřit jejich první spuštění.
 - [ ] Potvrdit týmový stack, hranice mikroservis a API kontrakty.
 - [ ] Propojit React s API a doplnit aplikační autentizaci/autorizaci.
-- [ ] Navrhnout seed a migrace; případné kopírování dat dev → osobní DB zatím není implementované.
+- [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service
+      v nové DB změně; běh v cloudu se aktivuje až po review/merge a nové image.
+- [ ] Rozšířit tento vzor a provisioning pro další mikroservisy.
+- [ ] Případné kopírování dat dev → osobní DB; nyní není implementované.
 
 ## Před produkcí
 

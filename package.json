@@ -32,13 +32,21 @@
     "containers:check": "bash scripts/check-containers.sh",
     "prepare": "husky",
     "changeset": "changeset",
-    "version-packages": "changeset version && npm install --package-lock-only"
+    "version-packages": "changeset version && npm install --package-lock-only",
+    "db:remote:status": "node scripts/dev-remote.mjs --db=status",
+    "db:remote:migrate": "node scripts/dev-remote.mjs --db=migrate",
+    "db:remote:seed": "node scripts/dev-remote.mjs --db=seed",
+    "db:remote:reset": "node scripts/dev-remote.mjs --db=reset",
+    "db:remote:unlock": "node scripts/dev-remote.mjs --db=unlock",
+    "service:new": "gen run service",
+    "test:generators": "npm run build -w @anico/shared-schemas && node --test scripts/tests/service-generator.test.cjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
+    "@turbo/gen": "^2.11.9",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.0",
     "prettier": "^3.6.2",

@@ -10,6 +10,9 @@
 Npm workspaces propojí balíčky, Turborepo řídí pořadí buildů.
 Všichni používáme jeden kořenový `package-lock.json`.
 
+Novou mikroservisu založí `npm run service:new -- --args animal`.
+Postup a hranice automatizace: [vytvoření služby](NOVA-SLUZBA.md).
+
 ## Backend: jedna funkce, jeden doménový modul
 
 ```text

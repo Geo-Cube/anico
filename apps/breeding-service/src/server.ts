@@ -3,6 +3,9 @@ import mongoose from 'mongoose';
 import { pino } from 'pino';
 import { z } from 'zod';
 import { createApp } from './app.js';
+import { migrateDatabase } from './database/engine.js';
+import { loadMigrations } from './database/registry.js';
+import { databaseTarget } from './database/policy.js';
 import { mongooseBreedingPlanRepository } from './modules/breeding/infrastructure/mongoose-breeding-plan-repository.js';
 
 const env = z
@@ -10,6 +13,7 @@ const env = z
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     HOST: z.enum(['127.0.0.1', '0.0.0.0', '::1', '::']).default('0.0.0.0'),
     MONGODB_URI: z.string().regex(/^mongodb(?:\+srv)?:\/\//),
+    MIGRATE_ON_START: z.enum(['true', 'false']).default('false'),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
@@ -28,6 +32,20 @@ try {
   await connection.openUri(env.MONGODB_URI, {
     serverSelectionTimeoutMS: 10_000,
   });
+  if (env.MIGRATE_ON_START === 'true') {
+    try {
+      databaseTarget(env.MONGODB_URI, process.env);
+      const applied = await migrateDatabase(connection, await loadMigrations());
+      logger.info(
+        { applied },
+        'Database migrations verified before HTTP startup',
+      );
+    } catch {
+      throw new Error(
+        'Database migrations failed; inspect db:status before retrying',
+      );
+    }
+  }
   let stopping = false;
   const app = createApp({
     repository: mongooseBreedingPlanRepository(connection),
