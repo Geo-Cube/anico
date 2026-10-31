@@ -1,5 +1,11 @@
 # Publikování images a prostředí
 
+Dev frontend a backend už běží v Coolify za GitHub Access na
+`https://dev.anico.online`. Navazující automatický deployment, runtime secrets
+a rollback popisuje [dev nasazování](DEV-NASAZENI.md). Strojové API a GitHub
+secrets jsou připravené; workflow musí projít review a merge do `dev`, než
+začne nasazovat automaticky.
+
 ## Co nyní zajišťuje automatizace
 
 Po sloučení tohoto nastavení do `dev` nebo `main` spustí push běžné CI. Teprve

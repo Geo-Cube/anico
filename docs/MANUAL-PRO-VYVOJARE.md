@@ -207,6 +207,11 @@ uklidí. Podrobnosti, zastavení a další kroky jsou v [Docker návodu](DOCKER.
 
 ## 8. Běžná práce s Gitem a závislostmi
 
+Nasazenou týmovou aplikaci najdeš na `https://dev.anico.online`, přístup je
+přes schválený GitHub účet. Automatické nasazování po merge a postup správce
+popisuje [dev nasazování](DEV-NASAZENI.md). Běžící dev aplikace má vlastní
+společnou DB; osobní lokální vývoj ji automaticky nemění.
+
 První commit, vytvoření větví a doporučený tok `feature/*` → `dev` → `main`
 popisuje [Git workflow](GIT-WORKFLOW.md).
 

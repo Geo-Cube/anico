@@ -15,7 +15,8 @@ mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
 
 - Aplikační monorepo nově zahrnuje React + TypeScript frontend přes Vite
   v `apps/frontend`. Návod pro tým je v [manuálu](../docs/MANUAL-PRO-VYVOJARE.md).
-  Frontend zatím nemá router, přihlášení ani napojení API; cloudové nasazení čeká.
+  Frontend zatím nemá router, přihlášení ani napojení API. Dev frontend i backend
+  už jsou nasazené; viz [dev nasazování](../docs/DEV-NASAZENI.md).
 
 - Docker, rotace logů, live restore a oddělené sítě/volumes dev a produkce.
 - Coolify a interní Traefik přes Cloudflare Tunnel.
@@ -24,10 +25,10 @@ mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
 - Hetzner firewall: SSH jen z administrátorské IP, ICMP, ostatní příchozí porty zavřené.
 - Obnovovací postup a místní recovery kopie, ověřený import Pulumi state
   a dešifrování secrets. Úplná obnova na náhradním VPS zatím neproběhla.
-- Aplikační kontejnery dev/prod a produkční databáze ještě nejsou nasazené.
+- Dev aplikační kontejnery jsou nasazené. Produkční aplikace a DB ještě nejsou nasazené.
 - Doplnění 31. 10. 2026: vývojová MongoDB s osobními workspace DB a vlastní
-  DB nasazené dev aplikace už je připravená, aplikační kontejnery a produkční DB
-  nadále čekají. Přístup přes samostatný GitHub Access TCP tunel
+  DB nasazené dev aplikace už je připravená; produkční DB nadále čeká.
+  Přístup přes samostatný GitHub Access TCP tunel
   `db-dev.anico.online`, bez veřejného DB portu; viz [návod](../docs/VZDALENY-VYVOJ.md).
 
 ## Rozhodnutí a realizace v navazující fázi
@@ -103,9 +104,13 @@ mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
       sítě a data. Dev nesmí používat produkční data nebo přístupy.
 - [ ] Připravit přístup CI/testů/webhooků přes Access bez interaktivního OTP
       podle skutečných potřeb; žádné sdílené heslo pro celý tým.
-- [ ] Publikovat dev až po nastavení jeho přístupů. Produkce na
+- [x] Publikovat dev po nastavení jeho přístupů; první frontend/backend release
+      `50a85b8` je healthy, routování `/api` a izolace byly ověřené. Anonymní
+      přístup vrací Cloudflare Access. Strojový vstup a CI secrets jsou připravené
+      a ověřené; automatické CI nasazování čeká na review/merge workflow.
+- [ ] Produkce na
       `anico.online` bude veřejná, s vlastní aplikační autentizací/autorizací.
-      Root/dev DNS dosud zůstaly původní A záznamy; přechod na Tunnel musí být řízený IaC.
+      Dev DNS už je spravovaný Tunnel CNAME; root DNS nadále zůstává původní.
 - [ ] Změřit spotřebu na 2 vCPU / 4 GB RAM / 40 GB disku; nastavit CPU/RAM/PID
       limity, vhodnou souběžnost buildů a bezpečné čištění starých images.
 - [ ] Doplnit sledování dostupnosti, volného disku, paměti, zdraví služeb
