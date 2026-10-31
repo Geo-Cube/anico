@@ -10,7 +10,7 @@ expected = {
     "coolify": ("coolify", {"coolify", settings["databaseNetwork"]}),
     "coolify-db": ("postgres", {settings["databaseNetwork"]}),
     "coolify-redis": ("redis", {settings["databaseNetwork"]}),
-    "coolify-proxy": ("proxy", {"coolify"}),
+    "coolify-proxy": ("proxy", {"coolify", "anico-dev-app"}),
 }
 result = []
 for name, (image_key, networks) in expected.items():
@@ -18,7 +18,13 @@ for name, (image_key, networks) in expected.items():
     assert container["State"]["Running"], f"{name} is not running"
     assert container["State"]["Health"]["Status"] == "healthy", f"{name} is not healthy"
     assert container["Config"]["Image"] == settings["images"][image_key], f"{name} image drift"
-    assert set(container["NetworkSettings"]["Networks"]) == networks, f"{name} network drift"
+    actual_networks = set(container["NetworkSettings"]["Networks"])
+    if name == 'coolify-proxy':
+        metadata = Path('/data/coolify/source/anico/dev-deployment-metadata.json')
+        allowed = networks | ({json.loads(metadata.read_text())['uuid']} if metadata.exists() else set())
+        assert networks <= actual_networks <= allowed, 'Proxy network drift'
+    else:
+        assert actual_networks == networks, f"{name} network drift"
     bindings = container["HostConfig"]["PortBindings"] or {}
     if name == "coolify":
         assert set(bindings) == {"8080/tcp", "6001/tcp", "6002/tcp"}

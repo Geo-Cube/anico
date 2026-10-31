@@ -1,0 +1,95 @@
+- name: Configure development applications in the pinned Coolify instance
+  hosts: anico
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Prepare private deployment inputs
+      ansible.builtin.command:
+        argv: [node, '{{ playbook_dir }}/../scripts/prepare-dev-deployment.mjs']
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+      check_mode: false
+      register: anico_dev_deploy_prepared
+    - name: Skip deployment configuration until explicitly enabled in IaC
+      ansible.builtin.meta: end_play
+      when: not (anico_dev_deploy_prepared.stdout | from_json).enabled
+    - name: Require normal execution for the model reconciliation
+      ansible.builtin.assert:
+        that: not ansible_check_mode
+        fail_msg: Use syntax checks and Pulumi preview before applying this model reconciliation.
+    - name: Inspect the management image
+      ansible.builtin.command:
+        argv: [docker, inspect, --format, '{{ "{{.Config.Image}}" }}', coolify]
+      register: anico_deploy_image
+      changed_when: false
+    - name: Require the supported management version
+      ansible.builtin.assert:
+        that: anico_deploy_image.stdout == (lookup('file', playbook_dir + '/../coolify.json') | from_json).images.coolify
+  tasks:
+    - name: Prepare private dev application secret directory
+      ansible.builtin.file:
+        path: /srv/anico/dev/applications/secrets
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Install the database URI only for the non-root backend
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/dev-deployment/mongodb-uri'
+        dest: /srv/anico/dev/applications/secrets/mongodb-uri
+        owner: '1000'
+        group: '1000'
+        mode: '0400'
+      no_log: true
+    - name: Install the development service configurator
+      ansible.builtin.copy:
+        src: ../scripts/configure-dev-deployment.php
+        dest: /data/coolify/source/anico/dev-deployment.php
+        owner: '9999'
+        group: '9999'
+        mode: '0640'
+    - name: Reconcile the development service and restricted CI credential
+      ansible.builtin.command:
+        argv: [docker, exec, -i, coolify, php, /anico/dev-deployment.php]
+        stdin: '{{ lookup("file", playbook_dir + "/../../.pulumi/dev-deployment/input.json") }}'
+      register: anico_dev_service
+      changed_when: (anico_dev_service.stdout | from_json).changed
+      no_log: true
+    - name: Retain public service metadata locally
+      ansible.builtin.copy:
+        content: '{{ {"uuid": (anico_dev_service.stdout | from_json).uuid} | to_nice_json }}'
+        dest: '{{ playbook_dir }}/../../.pulumi/dev-deployment/metadata.json'
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+    - name: Expose only this development service API through the internal proxy
+      ansible.builtin.template:
+        src: dev-deploy-api.dynamic.yaml.j2
+        dest: /data/coolify/proxy/dynamic/anico-dev-deploy.yaml
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Store public metadata for management boundary verification
+      ansible.builtin.copy:
+        content: '{{ {"uuid": (anico_dev_service.stdout | from_json).uuid} | to_nice_json }}'
+        dest: /data/coolify/source/anico/dev-deployment-metadata.json
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Start the managed development stack only when explicitly requested
+      ansible.builtin.command:
+        argv:
+          [docker, exec, -i, coolify, php, /anico/dev-deployment.php, --start]
+        stdin: '{{ lookup("file", playbook_dir + "/../../.pulumi/dev-deployment/input.json") }}'
+      no_log: true
+      changed_when: true
+      when: anico_deploy_start | default(false) | bool
+    - name: Verify actual running images, HTTP routing and dev isolation
+      ansible.builtin.script:
+        cmd: '../scripts/verify-dev-deployment.py {{ (anico_dev_service.stdout | from_json).uuid }}'
+        executable: python3
+      changed_when: false
+      when: anico_deploy_start | default(false) | bool

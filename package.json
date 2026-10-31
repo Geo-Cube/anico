@@ -19,6 +19,7 @@
     "dev:backend": "npm run build -w @anico/shared-schemas && npm run dev -w @anico/breeding-service",
     "dev:remote": "node scripts/dev-remote.mjs",
     "test:dev-remote": "node --test scripts/tests/dev-remote.test.mjs",
+    "test:deployment": "node --test scripts/tests/dev-deployment.test.mjs",
     "start": "npm run start --workspace=@anico/breeding-service",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

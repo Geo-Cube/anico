@@ -4,7 +4,7 @@
   "administratorEmails": [],
   "publish": {
     "production": false,
-    "dev": false,
+    "dev": true,
     "administration": true
   }
 }

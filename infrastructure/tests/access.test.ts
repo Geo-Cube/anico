@@ -77,9 +77,9 @@ test('publication switches change origin routing without putting Access on produ
   );
 });
 
-test('only administration is published with an explicit allowlist; dev and production remain staged', () => {
+test('dev and administration are published with private allowlists; production remains staged', () => {
   assert.deepEqual(settings.developerEmails, []);
-  assert.equal(settings.publish.dev, false);
+  assert.equal(settings.publish.dev, true);
   assert.equal(settings.publish.production, false);
   assert.equal(settings.publish.administration, true);
   // Actual members must come from encrypted Pulumi config, never this file.

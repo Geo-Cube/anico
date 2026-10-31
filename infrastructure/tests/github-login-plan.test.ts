@@ -43,6 +43,6 @@ test('GitHub login keeps email fallback, existing allowlists and private/public 
     resources
       .filter((r) => r.type.endsWith(':DnsRecord'))
       .map((r) => r.inputs.name),
-    ['admin.anico.online'],
+    ['admin.anico.online', 'dev.anico.online'],
   );
 });
