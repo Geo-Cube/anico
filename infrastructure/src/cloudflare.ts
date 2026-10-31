@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import * as cloudflare from '@pulumi/cloudflare';
 import * as pulumi from '@pulumi/pulumi';
+import { configureDevDeploymentAccess } from './dev-deployment-access.js';
 import {
   accessConfigSchema,
   accessMembersSchema,
@@ -26,6 +27,7 @@ export function configureCloudflare(
   ),
   githubLogin?: GitHubLogin,
   privateMembers?: pulumi.Input<AccessMembers>,
+  deploymentEnabled = false,
 ) {
   const settings = cloudflareConfigSchema.parse(rawSettings);
   const access = accessConfigSchema.parse(rawAccess);
@@ -176,6 +178,9 @@ export function configureCloudflare(
     { protect: true, ...(organization ? { dependsOn: [organization] } : {}) },
   );
 
+  const deployment = deploymentEnabled
+    ? configureDevDeploymentAccess(rawSettings, tunnel.id)
+    : undefined;
   const tunnelConfiguration = new cloudflare.ZeroTrustTunnelCloudflaredConfig(
     'anico-tunnel-routing',
     {
@@ -183,6 +188,22 @@ export function configureCloudflare(
       tunnelId: tunnel.id,
       config: {
         ingresses: [
+          ...(deployment
+            ? [
+                {
+                  hostname: 'deploy-dev.anico.online',
+                  service: 'http://coolify-proxy:80',
+                  originRequest: {
+                    httpHostHeader: 'deploy-dev.anico.online',
+                    access: {
+                      required: true,
+                      teamName: settings.teamName,
+                      audTags: [deployment.application.aud],
+                    },
+                  },
+                },
+              ]
+            : []),
           ...routes.map((route) => ({
             hostname: route.hostname,
             service: route.service,
@@ -245,5 +266,6 @@ export function configureCloudflare(
     administration,
     tunnelConfiguration,
     github,
+    deployment,
   };
 }

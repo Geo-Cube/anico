@@ -26,6 +26,6 @@ test('GitHub-only mode removes OTP without broadening allowlists or publishing d
     resources
       .filter((r) => r.type.endsWith(':DnsRecord'))
       .map((r) => r.inputs.name),
-    ['admin.anico.online'],
+    ['admin.anico.online', 'dev.anico.online'],
   );
 });

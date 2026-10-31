@@ -1,0 +1,23 @@
+http:
+  routers:
+    anico-dev-release:
+      rule: 'Host(`deploy-dev.anico.online`) && PathRegexp(`^/__release/[a-f0-9]{40}$`) && Method(`GET`)'
+      entryPoints: [http]
+      service: anico-dev-release
+      middlewares: [anico-dev-release-path]
+    anico-dev-deploy-api:
+      rule: 'Host(`deploy-dev.anico.online`) && Path(`/api/v1/services/{{ (anico_dev_service.stdout | from_json).uuid }}`) && (Method(`GET`) || Method(`PATCH`))'
+      entryPoints: [http]
+      service: anico-dev-deploy-api
+  services:
+    anico-dev-release:
+      loadBalancer:
+        servers: [{url: 'http://frontend-{{ (anico_dev_service.stdout | from_json).uuid }}:8080'}]
+    anico-dev-deploy-api:
+      loadBalancer:
+        servers: [{url: 'http://coolify:8080'}]
+  middlewares:
+    anico-dev-release-path:
+      replacePathRegex:
+        regex: '^/__release/([a-f0-9]{40})$'
+        replacement: '/anico-release-${1}.json'

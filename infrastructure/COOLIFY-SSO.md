@@ -1,97 +1,48 @@
-# GitHub přihlášení a role Coolify
+# Coolify: přihlášení a role
 
-Cloudflare Access i Coolify používají tutéž GitHub OAuth aplikaci AniCo Access.
-Coolify získává ověřený primární e-mail přímo z GitHubu. Již přihlášený GitHub
-účet znovu použije svou session; vlastní Coolify heslo pro běžný přístup není
-potřeba. Login stránka Coolify automaticky zahájí GitHub OAuth. Při chybě
-zobrazí zprávu a tlačítko pro další pokus, aby nevznikala přesměrovací smyčka.
-První autorizace může vyžadovat potvrzení aplikace a GitHub může podle své
-bezpečnostní politiky vyžádat opětovné ověření či 2FA.
+**Běžný přístup: https://admin.anico.online → GitHub.**
+Cloudflare ověří povolený e-mail, Coolify naváže vlastní GitHub OAuth.
+Existující GitHub session se znovu použije; první autorizace nebo GitHub 2FA
+může vyžádat další potvrzení. Coolify heslo pro běžný vstup nepotřebuješ.
 
-V GitHub OAuth aplikaci jsou přesně dvě návratové URL, obě bez wildcard:
+| Role  | Kdo                                                  | Oprávnění                           |
+| ----- | ---------------------------------------------------- | ----------------------------------- |
+| Owner | `Geo-Cube`                                           | Vlastník kořenového týmu            |
+| Admin | Schválení kolegové v šifrovaném `coolifyTeam.admins` | Správa instance, serveru a nasazení |
 
-- `https://spring-thunder-d9db.cloudflareaccess.com/cdn-cgi/access/callback`
-- `https://admin.anico.online/auth/github/callback`
+**Admin není omezená vývojářská role.** GitHub Write, code owner review a vstup
+do dev aplikace se nastavují samostatně. Neznámé identity se automaticky neregistrují.
+Přidání/odebrání člověka: [společný postup](ACCESS-MEMBERS.md).
 
-## Role a schválené účty
+## Pouze správce: co řídí login
 
-- `Geo-Cube`: původní účet id `0`, Owner kořenového týmu. Propojení identity
-  zachovává jeho účet, heslový hash, vlastnictví i existující zdroje.
-- `radekzik`, `elarkaso`, `tom-606`, `KatGall`, `thurukidor-ux`, `matejjanasek`, `MoncaBrancuska`: Admin
-  kořenového týmu, každý vlastní účet.
+- `githubClientId`, šifrovaný `githubClientSecret`: OAuth údaje.
+- `githubOnly`: jen GitHub v Cloudflare Access.
+- `coolifySsoEnabled`, `coolifySsoOnly`: OAuth, role a vypnutí veřejného heslového loginu.
+- Šifrovaný `coolifyTeam`: Owner a Admin identity; `accessMembers`: Cloudflare allowlisty.
 
-Admin kořenového týmu může spravovat instanci, server, terminál a nasazení
-dev/produkce. Nejde o omezenou vývojářskou roli. GitHub oprávnění k repozitáři
-a code review se nastavují odděleně. Přístup do dev aplikace se tímto nezapíná.
-
-Neznámé identity se automaticky neregistrují ani nepřipojují do kořenového
-týmu. Coolify ověřuje GitHub OAuth identitu a propojí existující účet pouze
-s ověřeným e-mailem. Přístup omezují konkrétní adresy v Cloudflare a předem
-vytvořené účty Coolify. Při prvním přihlášení musí GitHub primary e-mail
-odpovídat předem schválené adrese.
-
-## IaC a soukromá konfigurace
-
-- Pulumi spravuje GitHub IdP, Access politiky, Tunnel a DNS.
-- `githubOnly: true` nabízí v admin/dev Access aplikacích pouze GitHub.
-- `coolifySsoEnabled: true` zapíná správu GitHub OAuth a členství v Coolify.
-- `githubClientId` a šifrovaný `githubClientSecret` používají Cloudflare i
-  Coolify. Druhá callback URL v GitHubu je externí předpoklad, zachová se při
-  ztrátě VPS. Rotaci secretu aplikuj do Cloudflare pomocí Pulumi i do Coolify
-  pomocí Ansible.
-- `coolifyTeam` je šifrovaný JSON s `owner: {login, email, legacyEmail}`
-  a `admins: [{login, email}]`. Skutečné adresy nepatří do Gitu.
-- `accessMembers.administratorEmails` obsahuje odpovídající povolené identity.
-  Tento seznam sám neuděluje roli uvnitř Coolify.
-- `coolifySsoOnly: true` připojí spravovaný přihlašovací view a zablokuje
-  veřejné heslové přihlášení i obnovu hesla na interní proxy.
-- Ansible před nasazením načte šifrované údaje, vytvoří ignorovaný soubor
-  `.pulumi/coolify-sso.json` s právy `600` a aplikuje konfiguraci i role.
-  OAuth secret je v databázi Coolify šifrovaný jeho APP_KEY.
-
-Při obnově zachovej Pulumi config, state a passphrase. Instalační
-`.pulumi/coolify.env` kvůli novému přihlašovacímu e-mailu neměň; Ownerův
-GitHub e-mail se aplikuje přes `coolifyTeam`. Projekty a identitní vazby
-obnov ze zálohy Coolify DB spolu s APP_KEY.
+Po změně OAuth nebo přístupů použij [cloudový plán](README.md) a:
 
 ```bash
-npm run build -w @anico/infrastructure
-npm run pulumi -w @anico/infrastructure -- preview --stack shared --diff
-npm run pulumi -w @anico/infrastructure -- up --stack shared
 npm run deploy:coolify -w @anico/infrastructure
 ```
 
-Přidání Admina: uprav soukromé `coolifyTeam` a `accessMembers`, zkontroluj
-Pulumi plán, aplikuj jej a spusť Ansible. Po odebrání člověka odstraň také
-jeho roli/účet v Coolify a odvolej aktivní session. Samotná absence v seznamu
-`admins` zatím nemaže existující účty ani členství.
+OAuth App musí mít [obě návratové URL](GITHUB-ACCESS.md). Při rotaci secretu
+aktualizuj Cloudflare i Coolify. Instalační `.pulumi/coolify.env` kvůli změně
+přihlašovacího e-mailu nepřepisuj.
 
-## Ověření a nouzová obnova
+## Nouzový vstup správce
 
-Testy kontrolují privátní politiky, GitHub-only login a zachování hranic dev/produkce.
-Serverová kontrola ověřuje Owner/Admin role, shodu nastavení, blokaci heslových
-rout včetně koncového lomítka a dostupnost SSH obnovy. Čisté přihlášení přímým GitHub OAuth po přidání callback URL správce
-potvrdil v prohlížeči 29. 10. 2026. Přihlášení všech sedmi připravených členů týmu ještě
-čeká na jejich vlastní ověření; testy nemohou autorizovat GitHub aplikaci za uživatele.
-
-Nouzový přístup je možný jen přes SSH tunel na neveřejný port Coolify:
+Z Macu s povoleným SSH klíčem:
 
 ```bash
-ssh -N -L 18000:127.0.0.1:8000 anico-server
+ssh -N -L 127.0.0.1:18000:127.0.0.1:8000 anico-server
 ```
 
-Otevři `http://localhost:18000/login?recovery=1` a použij aktuální Owner
-e-mail (GitHub primary) a jeho stávající heslo. Veřejná proxy přijímání
-hesla blokuje; port `8000` zůstává vázaný na loopback. Heslo ani APP_KEY
-nezveřejňuj. Počáteční heslo nemusí odpovídat aktuálnímu, pokud už bylo změněné.
+Otevři `http://127.0.0.1:18000/login?recovery=1`. Použij aktuální Owner e-mail
+a heslo; původní instalační heslo platí jen pokud nebylo změněné. Ctrl+C zavře tunel.
+Heslo ani APP_KEY neposílej do chatu. Port 8000 je jen na loopbacku.
 
-Pro návrat k původnímu formuláři nastav `coolifySsoOnly false` a znovu spusť
-Ansible. Pro dočasný návrat OTP na Access nastav `githubOnly false` a aplikuj
-Pulumi. GitHub OAuth údaje nemaž; existující identitní vazby i účty zůstávají.
-
-Spravovaný Blade view je úprava připnuté verze Coolify. Při upgradu zkontroluj
-kompatibilitu komponent a přihlašovací routy, otestuj GitHub přihlášení i SSH obnovu.
-
-Zdroje: [Coolify GitHub OAuth](https://coolify.io/docs/core/security/authentication/oauth/github),
-[GitHub více callback URL](https://github.blog/changelog/2026-08-14-multiple-redirect-uris-and-token-refresh-for-oauth-apps/),
-[role Coolify](https://coolify.io/docs/core/team/roles-and-permissions).
+Pro řízený návrat formuláře nastav `coolifySsoOnly` na `false` a nasazuj Ansible;
+pro OTP zálohu Access použij `githubOnly: false` a Pulumi. OAuth údaje nemaž.
+Při upgradu Coolify ověř spravovaný login view, GitHub průchod i nouzový vstup.

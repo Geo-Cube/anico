@@ -5,7 +5,7 @@ services:
     container_name: coolify-proxy
     restart: unless-stopped
     extra_hosts: ['host.docker.internal:host-gateway']
-    networks: [coolify]
+    networks: [coolify, anico-dev-app]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /data/coolify/proxy:/traefik
@@ -35,6 +35,9 @@ services:
       driver: local
       options: {max-size: 10m, max-file: '3'}
 networks:
+  anico-dev-app:
+    external: true
+    name: anico-dev-app
   coolify:
     external: true
     name: {{ anico_foundation.managementNetwork }}

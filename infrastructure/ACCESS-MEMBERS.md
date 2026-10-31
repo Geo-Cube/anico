@@ -1,77 +1,55 @@
-# Soukromé e-maily pro Cloudflare Access
+# Správce: přidání nebo odebrání kolegy
 
-Skutečné adresy členů týmu patří do **šifrovaného Pulumi nastavení `accessMembers`**.
-Do Gitu ukládáme kód politik, názvy domén a publikační přepínače. Kolegy lze
-v dokumentaci evidovat GitHub loginem, bez jejich soukromé e-mailové adresy.
+**Potřebuješ GitHub login a ověřený e-mail daného účtu. E-mail nepatří do Gitu.**
+GitHub, Cloudflare, Coolify a MongoDB mají samostatná oprávnění.
 
-Přijaté kontakty, které ještě nemají schválený přístup, evidujeme odděleně
-v šifrovaném Pulumi secretu `teamDirectory` se stavem `pending`. Tento adresář
-žádná oprávnění neuděluje a IaC jej nepřevádí automaticky do allowlistů.
-Teprve po schválení přístupu doplníme příslušný seznam v `accessMembers`.
+## Přidání
 
-`infrastructure/access.json` ponechává `developerEmails` a `administratorEmails`
-prázdné. Tyto hodnoty jsou pouze bezpečné výchozí hodnoty; při skutečném nasazení
-je Pulumi nahrazuje povinným `requireSecretObject('accessMembers')`.
-Pokud soukromá konfigurace chybí, nasazení skončí chybou, místo přepsání přístupů.
+1. Pozvi login do `Geo-Cube/anico` s **Write**; kolega musí pozvánku přijmout.
+2. V šifrovaném Pulumi configu doplň příslušné záznamy:
 
-## Změna členů
+| Klíč                                | Co přidat                                        |
+| ----------------------------------- | ------------------------------------------------ |
+| `accessMembers.developerEmails`     | Přístup na dev web                               |
+| `accessMembers.administratorEmails` | Jen schválené správce Coolify                    |
+| `coolifyTeam.admins`                | `{login, email}`, jen pokud má být Coolify Admin |
+| `devDatabaseMembers`                | `{login, email}` pro osobní DB a DB tunel        |
 
-Z kořene repozitáře:
+Dohoda týmu: Owner je `Geo-Cube`, schválení kolegové jsou Admini. Admin
+může spravovat i server; není to omezená role jen pro dev. Code owner role
+se nepřidává automaticky s GitHub Write.
+
+3. Použij interaktivní příkazy z kořene; **nahrazují celý JSON**, zachovej ostatní členy a Ownera:
 
 ```bash
 npm run pulumi -w @anico/infrastructure -- config set accessMembers --secret --stack shared
+npm run pulumi -w @anico/infrastructure -- config set coolifyTeam --secret --stack shared
+npm run pulumi -w @anico/infrastructure -- config set devDatabaseMembers --secret --stack shared
+npm run init:dev-database -w @anico/infrastructure
 ```
 
-CLI si vyžádá hodnotu. Zadej celý JSON na jednom řádku v tomto tvaru;
-níže jsou pouze ukázkové adresy:
-
-```json
-{
-  "administratorEmails": ["owner@example.com"],
-  "developerEmails": ["developer@example.com"]
-}
-```
-
-Použij skutečné schválené e-maily, které GitHub předává u daných účtů.
-**Zachovej všechny potřebné stávající správce**, nejde o příkaz pro přidání jediné
-adresy, ale nahrazení celé konfigurace. Hodnotu nevkládej do argumentu příkazu,
-aby se nedostala do historie shellu. Nevkládej ji do verzovaných JSON/Markdown souborů.
-Do `administratorEmails` nepřidávej automaticky všechny vývojáře.
-
-Následně:
+4. Projdi [cloudový plán a apply](README.md), pak:
 
 ```bash
-npm run preview -w @anico/infrastructure -- --stack shared --diff
-npm run up -w @anico/infrastructure -- --stack shared
+npm run deploy:coolify -w @anico/infrastructure
+npm run deploy:dev-database -w @anico/infrastructure
 ```
 
-Politiky jsou také označené jako Pulumi secrets: běžné preview je skryje
-a export stavu je uchovává šifrovaně. Nepoužívej `--show-secrets` ve sdílených
-výstupech. Cloudflare samozřejmě potřebuje skutečné adresy pro vyhodnocení
-přístupu; správci Cloudflare účtu je tam mohou vidět.
+5. Soukromě předej `.pulumi/dev-database/clients/GITHUB_LOGIN.env` a nech kolegu
+   ověřit GitHub login na devu, případně v Coolify, a `npm run dev:remote -- --check`.
 
-## Kde jsou údaje uložené
+## Odebrání
 
-- `infrastructure/Pulumi.shared.yaml`: šifrovaný záznam `accessMembers.secure`,
-  celý soubor je ignorovaný Gitem.
-- `.pulumi/state`: soukromý Pulumi state; nové politiky jsou označené jako secrets.
-- `.pulumi/passphrase`: heslo pro dešifrování, rovněž mimo Git.
-- Cloudflare: aplikované politiky pro admin/dev.
+Odstraň přístupy v GitHubu, Access i DB seznamu, zopakuj init/plán/apply/deploy.
+**Absence v `coolifyTeam.admins` sama nemaže existující účet ani roli.**
+V Coolify zvlášť odeber členství/oprávnění a odvolej aktivní session.
+DB deploy odebere spravovaný účet, data ponechá. Pokud člověk znal další
+sdílené credentials, samostatně je rotuj; změna allowlistu není rotace hesla.
 
-Recovery kopie zahrnuje stack YAML a passphrase. Zachovej ji soukromě; samotná
-souborová práva nejsou šifrováním celého recovery archivu. Ansible na hostitele
-kopíruje jen veřejná metadata s prázdnými seznamy, skutečné členství na VPS nepotřebuje.
+## Soukromí
 
-## Již zveřejněné údaje
-
-E-mail může být také součástí autorství commitu, nezávisle na obsahu souborů.
-Každý kolega, který nechce zveřejňovat osobní adresu, má v GitHub Settings → Emails
-zapnout soukromí e-mailu a použít svou GitHub **noreply** adresu v nastavení Git
-v GitHub Desktop. Přesnou noreply adresu vezme ze svého GitHub nastavení;
-adresu nepřebírá od jiného člena týmu. Změna platí pro nové commity, ne zpětně.
-
-První commit obsahoval původní administrační e-mail v konfiguraci a dokumentaci.
-Odstranění ze současných souborů ho neodstraní z historie. Případné vyčištění
-historie vyžaduje samostatně domluvený postup pro obě větve, vzdálený repozitář
-a kopie kolegů; historie se touto migrací automaticky nepřepisuje.
-E-maily kolegů dosud v konfiguraci nebyly a nebudeme je do Gitu zapisovat.
+Skutečné adresy a hesla jsou v ignorovaném šifrovaném `Pulumi.shared.yaml`
+a privátním state. Nevypisuj `--show-secrets` do sdílených výstupů.
+Případný `teamDirectory` je jen kontakt; přístup neuděluje.
+Dříve zveřejněná administrační adresa nebyla odstraněná z historie:
+[pravidla pro secrets a autorství](../docs/SECRETS.md).

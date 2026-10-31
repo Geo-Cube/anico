@@ -1,128 +1,36 @@
-# Navazující práce po dohodě týmu na stacku
+# Co ještě zbývá
 
-Dohoda z 22. 10. 2026: současný infrastrukturní základ ponecháme běžet.
-Zbývající nasazení a provozní nastavení připravíme společně po odsouhlasení
-celého aplikačního stacku. Níže uvedené položky jsou odložené, nikoli hotové.
-Před prvním produkčním nasazením se k tomuto seznamu vrátíme.
+Aktualizováno 31. 10. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
 
-Doplnění 29. 10. 2026: propojení Reactu s API řeší vývojáři; infrastrukturní
-práce připravují registry images, prostředí a jejich runtime konfiguraci.
-Owner chce zálohy dokončit na konci přípravy. **Před prvními skutečnými
-produkčními daty je výslovně připomenout a vyřešit**, včetně obnovy a kopie
-mimo VPS/Mac. Aktuální postup je v [nasazování](../docs/NASAZOVANI.md).
+## Nejbližší kroky
 
-## Současný ověřený stav
+- [ ] Review a merge větve `feature/automatic-dev-deployment` do `dev`.
+- [ ] Ověřit první automatický deploy z tohoto merge; přímé API nasazení už prošlo.
+- [ ] Předat osobní DB konfigurace všem kolegům a ověřit jejich první spuštění.
+- [ ] Potvrdit týmový stack, hranice mikroservis a API kontrakty.
+- [ ] Propojit React s API a doplnit aplikační autentizaci/autorizaci.
+- [ ] Navrhnout seed a migrace; případné kopírování dat dev → osobní DB zatím není implementované.
 
-- Aplikační monorepo nově zahrnuje React + TypeScript frontend přes Vite
-  v `apps/frontend`. Návod pro tým je v [manuálu](../docs/MANUAL-PRO-VYVOJARE.md).
-  Frontend zatím nemá router, přihlášení ani napojení API; cloudové nasazení čeká.
+## Před produkcí
 
-- Docker, rotace logů, live restore a oddělené sítě/volumes dev a produkce.
-- Coolify a interní Traefik přes Cloudflare Tunnel.
-- `admin.anico.online` za Cloudflare Access s konkrétním správcem; běžný
-  přístup bez SSH tunelu potvrzený v prohlížeči.
-- Hetzner firewall: SSH jen z administrátorské IP, ICMP, ostatní příchozí porty zavřené.
-- Obnovovací postup a místní recovery kopie, ověřený import Pulumi state
-  a dešifrování secrets. Úplná obnova na náhradním VPS zatím neproběhla.
-- Aplikační kontejnery dev/prod a produkční databáze ještě nejsou nasazené.
-- Doplnění 31. 10. 2026: vývojová MongoDB s osobními workspace DB a vlastní
-  DB nasazené dev aplikace už je připravená, aplikační kontejnery a produkční DB
-  nadále čekají. Přístup přes samostatný GitHub Access TCP tunel
-  `db-dev.anico.online`, bez veřejného DB portu; viz [návod](../docs/VZDALENY-VYVOJ.md).
+- [ ] Samostatná produkční DB a aplikační účet, secrets, služby a veřejné routování.
+- [ ] Schvalované produkční nasazení ověřených images a postup rollbacku.
+- [ ] Změřit RAM/CPU/disk; nastavit limity, souběžnost a čištění starých images.
+- [ ] Monitoring dostupnosti, volného místa a chyb, včetně upozornění.
+- [ ] Dohodnout aktualizace OS/Dockeru/Coolify a ověřit původní instalační secrets.
+- [ ] **Dokončit zálohy DB, uploadů, Coolify DB a APP_KEY, serverových souborů a SSH klíčů.**
+- [ ] **Šifrovaná kopie Pulumi state, passphrase a lokálních secrets mimo Mac/VPS.**
+- [ ] **Vyzkoušet obnovu dat i konfigurace na čistém náhradním VPS.**
 
-## Rozhodnutí a realizace v navazující fázi
+Zálohy jsme záměrně odložili na konec přípravy. Dokončit je **před prvními
+skutečnými produkčními daty**, ne až po výpadku.
 
-- [x] Přidat Gitleaks do povinného CI jobu `check` pro PR a push na `main`/`dev`.
-      Připnutá verze, SHA-256 kontrola binárky, celá Git historie a redakce výpisů;
-      lokální příkaz `npm run secrets:check`. Viz [postup](../docs/SECRETS.md).
+## Už hotové
 
-- [x] Přesunout e-mailové allowlisty mimo verzované soubory do šifrovaného Pulumi
-      nastavení `accessMembers` (29. 10. 2026). Členy evidujeme GitHub loginem;
-      jejich adresy se spravují podle [soukromého postupu](ACCESS-MEMBERS.md).
+Monorepo React/Express, sdílené kontrakty a číselníky, Dockerfiles, CI a Gitleaks,
+GHCR images, code owner review bez bypassu, Coolify + GitHub Access, firewall,
+oddělené dev/prod sítě, opravený kernel, osobní DB účty a lokální DB tunel.
+Dev frontend/backend běží, strojový deploy přístup a GitHub secrets jsou ověřené.
+Lokální import Pulumi recovery kopie prošel; není to ověření úplné obnovy VPS.
 
-- [x] Rozhodnutí 29. 10. 2026: GitHub SSO do Coolify; `Geo-Cube` Owner,
-      ostatní schválení kolegové Admin. Všech sedm evidovaných členů týmu má vytvořené
-      Admin účty a jejich adresy jsou jen v šifrované konfiguraci.
-      Čistý Owner GitHub OAuth průchod potvrzený v prohlížeči.
-- [x] Doplnit identity `tom-606`, `KatGall`, `thurukidor-ux` do soukromého
-      `coolifyTeam` a admin allowlistu a vytvořit jim Admin účty přes IaC
-      (29. 10. 2026). GitHub účet `thurukidor-ux` odpovídá označení „thudor“.
-- [x] Přidat `matejjanasek` jako dalšího Admina přes šifrovanou konfiguraci,
-      Cloudflare allowlist a Ansible (29. 10. 2026).
-- [x] Přidat `MoncaBrancuska` jako Admina Coolify přes šifrovanou IaC
-      konfiguraci a poslat GitHub pozvánku s Write oprávněním (29. 10. 2026).
-      GitHub pozvánku musí přijmout a vlastní přihlášení do Coolify ještě ověřit.
-- [ ] Ověřit vlastní první přihlášení všech aktuálních členů týmu přes GitHub.
-      Tyto role nedávají automaticky code owner ani GitHub Write oprávnění.
-
-- [x] Doplnit `@Zlytata` jako druhého code ownera vedle `@Geo-Cube`
-      do lokálního CODEOWNERS (29. 10. 2026).
-- [x] Ověřit Write oprávnění účtu `Zlytata` a CODEOWNERS v obou větvích;
-      aktivovat ochranu `main`/`dev` bez výjimek (29. 10. 2026).
-      Ruleset ID `26148882`, živá pravidla ověřená přes GitHub API;
-      viz [pravidla review](../docs/PRAVIDLA-REVIEW.md).
-
-- [ ] Potvrdit stack v týmu, včetně databáze, případného brokeru, API kontraktů
-      a struktury kódu. Přejmenování na `abl`/`dao`/`controller` dosud není schválené.
-- [x] Přidat GitHub login metodu do existujících admin/dev Access aplikací přes
-      Pulumi, vedle OTP a se zachováním allowlistů (28. 10. 2026). API a veřejné testy prošly.
-- [x] Ověřit GitHub přihlášení správce v prohlížeči: průchod až na login stránku
-      Coolify potvrzený po doplnění jeho GitHub primary e-mailu.
-- [ ] Doplnit členy týmu, požadavky na zabezpečení jejich GitHub účtů a rozhodnout
-      o případné OTP záloze. Přihlášení Coolify nyní používá přímé GitHub OAuth.
-      Samostatné skupiny
-      vývojářů a správců; přístup k devu sám nedává správu Coolify ani produkce.
-- [x] Připravit osobní logické DB v neprodukční instanci s vlastními omezenými
-      účty, oddělenou DB dev aplikace a GitHub Access tunelem bez VPN. Lokální
-      příkaz `npm run dev:remote`, vlastní ignorovaná konfigurace každého člena,
-      původní lokální MongoDB zůstává alternativou (31. 10. 2026).
-- [ ] Doplnit jednotný seed a migrační mechanismus podle aplikačního modelu.
-- [x] Zavést vlastní účty Coolify a role Owner/Admin; všech sedm členů týmu má
-      připravený Admin účet. Viz [SSO postup](COOLIFY-SSO.md).
-- [x] Připravit Dockerfiles pro současný React frontend a Express backend,
-      lokální `compose.app.yaml`, readiness a graceful shutdown. CI sestavuje
-      a spouští sestavu na amd64 i arm64 včetně výpadku DB. Viz
-      [Docker návod](../docs/DOCKER.md). Serverové nasazení tím nevzniká.
-- [ ] Zavést CI pro sestavení a registry images, kontroly změn, dev deployment,
-      schvalované produkční nasazení a rollback na předchozí image.
-- [x] Připravit GHCR publishing obou multi-platform images po zeleném CI na
-      `dev`/`main`, tag podle SHA a artifact s digestem. První publikování
-      proběhne až po merge; owner následně přepne balíčky na Public.
-- [x] Ověřit první publikování a anonymní stažení obou GHCR images pro amd64
-      i arm64: ověřeno 31. 10. 2026 pro commit `ab89a6c`. Není potřeba
-      přidávat registry token na VPS. Automatické nasazení aplikací ještě chybí.
-- [x] Připravit idempotentní IaC projektu AniCo a prostředí `dev`/`prod` v Coolify,
-      oddělené shared variables a podporu šifrovaného `applicationVariables`.
-      Samotné aplikační kontejnery ani DB tím nevznikají.
-- [x] Opravit VPS kernel přes samostatný Ansible maintenance playbook a řízený
-      reboot: `7.0.0-42-generic`, upstream `7.0.14`; původní management služby
-      se obnovily a jsou healthy (31. 10. 2026). Dev MongoDB má explicitní
-      per-thread allocator kvůli zatím nedostupné maintenance image s opravenou
-      detekcí Ubuntu; produkční DB tímto nastavená není.
-- [ ] Nastavit projekty a obě prostředí v Coolify; oddělené DB účty, secrets,
-      sítě a data. Dev nesmí používat produkční data nebo přístupy.
-- [ ] Připravit přístup CI/testů/webhooků přes Access bez interaktivního OTP
-      podle skutečných potřeb; žádné sdílené heslo pro celý tým.
-- [ ] Publikovat dev až po nastavení jeho přístupů. Produkce na
-      `anico.online` bude veřejná, s vlastní aplikační autentizací/autorizací.
-      Root/dev DNS dosud zůstaly původní A záznamy; přechod na Tunnel musí být řízený IaC.
-- [ ] Změřit spotřebu na 2 vCPU / 4 GB RAM / 40 GB disku; nastavit CPU/RAM/PID
-      limity, vhodnou souběžnost buildů a bezpečné čištění starých images.
-- [ ] Doplnit sledování dostupnosti, volného disku, paměti, zdraví služeb
-      a upozornění na chyby.
-- [ ] Připravit zálohy aplikačních DB a uploadů i Coolify DB, APP_KEY
-      a potřebných serverových souborů; stanovit frekvenci, retenci a cíl mimo VPS.
-- [ ] Uložit šifrovanou kopii Pulumi state, passphrase a lokálních secrets mimo Mac.
-      Současná `.pulumi/recovery/` je pouze místní kopie, ne off-device záloha.
-- [ ] Ověřit úplnou obnovu na čistém náhradním VPS a obnovu databázových záloh;
-      zapsat výsledky, potřebné ruční kroky a dobu obnovy do `RECOVERY.md`.
-- [ ] Dohodnout aktualizace OS/Dockeru/Coolify, připnutí balíčkových verzí
-      a postup údržby/rebootu. Úvodní instalační secrets z dřívějšího technického
-      výpisu před nasazením vyřešit podle poznámky v `COOLIFY.md`.
-
-Zdrojový předpis musí být uložený v Gitu a vzdáleném repozitáři; secrets,
-state a databázové zálohy do Gitu nepatří. Gitignore nenahrazuje kontrolu
-obsahu změn. Automatické skenování secrets nyní doplňuje povinný CI job `check`.
-
-Související postupy: [obnova](RECOVERY.md), [firewall](FIREWALL.md),
-[Coolify](COOLIFY.md), [Cloudflare](CLOUDFLARE.md).
+[Dev nasazení](../docs/DEV-NASAZENI.md) · [obnova](RECOVERY.md) · [správa](README.md)

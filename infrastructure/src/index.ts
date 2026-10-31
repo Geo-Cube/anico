@@ -84,11 +84,18 @@ const edge = cloudflareSettings?.enabled
           }
         : undefined,
       config.requireSecretObject<AccessMembers>('accessMembers'),
+      config.getBoolean('devDeploymentApiEnabled') ?? false,
     )
   : undefined;
 export const tunnelId = edge?.tunnel.id ?? null;
 export const tunnelToken = edge?.token ?? null;
 export const githubIdentityProviderId = edge?.github?.id ?? null;
+export const devDeployClientId = edge?.deployment
+  ? pulumi.secret(edge.deployment.token.clientId)
+  : null;
+export const devDeployClientSecret = edge?.deployment
+  ? pulumi.secret(edge.deployment.token.clientSecret)
+  : null;
 
 const databaseEnabled = config.getBoolean('devDatabaseEnabled') ?? false;
 if (databaseEnabled && (!edge?.github || !githubEnabled))

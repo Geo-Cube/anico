@@ -48,6 +48,7 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run test:dev-remote
+      - run: npm run test:deployment
       - run: npm run build
       - run: npm run test:unit -w @anico/infrastructure
       - run: npm run test:coverage
@@ -67,3 +68,45 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/publish-images.yml
+  deploy-dev:
+    needs: [publish]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: dev
+    concurrency:
+      group: anico-dev-deployment
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: image-reference-frontend-${{ github.sha }}
+          path: image-references/frontend
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: image-reference-breeding-service-${{ github.sha }}
+          path: image-references/breeding-service
+      - name: Skip superseded dev commits
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev" --jq .object.sha)
+          if [ "$head" = "$GITHUB_SHA" ]; then echo 'deploy=true' >> "$GITHUB_OUTPUT"; fi
+      - name: Deploy verified image digests and require healthy services
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          COOLIFY_DEV_SERVICE_UUID: ${{ vars.COOLIFY_DEV_SERVICE_UUID }}
+          COOLIFY_DEV_TOKEN: ${{ secrets.COOLIFY_DEV_TOKEN }}
+          CF_DEV_DEPLOY_CLIENT_ID: ${{ secrets.CF_DEV_DEPLOY_CLIENT_ID }}
+          CF_DEV_DEPLOY_CLIENT_SECRET: ${{ secrets.CF_DEV_DEPLOY_CLIENT_SECRET }}
+        run: node scripts/dev-deployment.mjs image-references
