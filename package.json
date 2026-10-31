@@ -17,6 +17,8 @@
     "dev": "turbo run build --filter=@anico/shared-schemas && turbo watch dev",
     "dev:frontend": "npm run dev -w @anico/frontend",
     "dev:backend": "npm run build -w @anico/shared-schemas && npm run dev -w @anico/breeding-service",
+    "dev:remote": "node scripts/dev-remote.mjs",
+    "test:dev-remote": "node --test scripts/tests/dev-remote.test.mjs",
     "start": "npm run start --workspace=@anico/breeding-service",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

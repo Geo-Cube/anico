@@ -15,3 +15,6 @@
 
 - name: Configure managed application projects and environment variables
   ansible.builtin.import_playbook: application-environments.yml
+
+- name: Deploy private developer databases when explicitly enabled
+  ansible.builtin.import_playbook: dev-database.yml

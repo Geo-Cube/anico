@@ -1,0 +1,69 @@
+name: {{ anico_database.project }}
+services:
+  mongodb:
+    image: {{ anico_database.image }}
+    container_name: {{ anico_database.containerName }}
+    user: '999:999'
+    command: [mongod, --bind_ip_all, --wiredTigerCacheSizeGB, '{{ anico_database.wiredTigerCacheGB }}']
+    environment:
+      HOME: /tmp
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/root-username
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/root-password
+{% if anico_database.perThreadAllocator %}
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
+{% endif %}
+    volumes:
+      - database:/data/db
+      - ./mongodb-secrets:/run/secrets:ro
+      - ./scripts:/opt/anico:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,uid=999,gid=999
+      - /data/configdb:rw,noexec,nosuid,size=16m,uid=999,gid=999
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 60s
+    networks: [data]
+    labels:
+      com.anico.managed-by: ansible
+      com.anico.environment: dev
+      com.anico.role: developer-database
+    healthcheck:
+      test: [CMD, mongosh, --quiet, /opt/anico/mongo-health.js]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 4
+    logging:
+      driver: local
+      options: {max-size: 10m, max-file: '3'}
+  cloudflared:
+    image: {{ anico_tunnel.image }}
+    user: '65532:65532'
+    command: [tunnel, --metrics, '127.0.0.1:20241', --output, json, run, --token-file, /run/secrets/tunnel-token]
+    volumes: ['./tunnel-secrets:/run/secrets:ro']
+    networks: [data, egress]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 45s
+    labels:
+      com.anico.managed-by: ansible
+      com.anico.environment: dev
+      com.anico.role: developer-database-tunnel
+    healthcheck:
+      test: [CMD, cloudflared, tunnel, --metrics, '127.0.0.1:20241', ready]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 4
+    logging:
+      driver: local
+      options: {max-size: 10m, max-file: '3'}
+networks:
+  data: {external: true, name: {{ anico_database.dataNetwork }}}
+  egress: {external: true, name: {{ anico_database.egressNetwork }}}
+volumes:
+  database: {external: true, name: {{ anico_database.volume }}}

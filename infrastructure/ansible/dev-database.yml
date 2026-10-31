@@ -1,0 +1,199 @@
+- name: Deploy isolated authenticated development databases and their Access tunnel
+  hosts: anico
+  become: true
+  gather_facts: false
+  vars:
+    anico_database: '{{ lookup("ansible.builtin.file", playbook_dir + "/../dev-database.json") | from_json }}'
+    anico_tunnel: '{{ lookup("ansible.builtin.file", playbook_dir + "/../cloudflared.json") | from_json }}'
+    anico_database_compose:
+      [docker, compose, --project-name, '{{ anico_database.project }}']
+  pre_tasks:
+    - name: Prepare private credentials from encrypted Pulumi configuration
+      ansible.builtin.command:
+        argv:
+          [
+            node,
+            --import,
+            tsx,
+            '{{ playbook_dir }}/../scripts/prepare-dev-database.mjs',
+          ]
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      register: anico_database_prepared
+      changed_when: false
+      check_mode: false
+      no_log: true
+    - name: Read non-secret feature switch
+      ansible.builtin.set_fact:
+        anico_database_enabled: '{{ (anico_database_prepared.stdout | from_json).enabled }}'
+  tasks:
+    - name: Configure only the explicitly enabled development database
+      when: anico_database_enabled
+      block:
+        - name: Require a compatible running kernel
+          ansible.builtin.script:
+            cmd: ../scripts/kernel-status.py --require-safe
+            executable: python3
+          changed_when: false
+          check_mode: false
+        - name: Inspect the already managed volume
+          ansible.builtin.command:
+            argv: [docker, volume, inspect, '{{ anico_database.volume }}']
+          register: anico_database_volume
+          changed_when: false
+          check_mode: false
+        - name: Refuse to adopt any production or unmanaged storage
+          ansible.builtin.assert:
+            that:
+              - anico_database.volume == 'anico-dev-mongodb'
+              - (anico_database_volume.stdout | from_json)[0].Labels['com.anico.environment'] == 'dev'
+              - (anico_database_volume.stdout | from_json)[0].Labels['com.anico.managed-by'] == 'ansible'
+              - (anico_database_volume.stdout | from_json)[0].Mountpoint is match('^/var/lib/docker/volumes/anico-dev-mongodb/_data$')
+        - name: Inspect any existing database container without printing its environment
+          ansible.builtin.command:
+            argv:
+              [
+                docker,
+                inspect,
+                --format,
+                '{{ "{{json .Config.Labels}}" }}',
+                '{{ anico_database.containerName }}',
+              ]
+          register: anico_existing_database
+          changed_when: false
+          failed_when: anico_existing_database.rc not in [0, 1]
+          check_mode: false
+        - name: Refuse to replace an unrelated database container
+          ansible.builtin.assert:
+            that:
+              - (anico_existing_database.stdout | from_json).get('com.anico.managed-by') == 'ansible'
+              - (anico_existing_database.stdout | from_json).get('com.docker.compose.project') == anico_database.project
+          when: anico_existing_database.rc == 0
+        - name: Prepare the database directory
+          ansible.builtin.file:
+            path: '{{ anico_database.rootDirectory }}'
+            state: directory
+            owner: root
+            group: root
+            mode: '0750'
+        - name: Prepare the owned database volume directory
+          ansible.builtin.file:
+            path: '{{ (anico_database_volume.stdout | from_json)[0].Mountpoint }}'
+            state: directory
+            owner: '999'
+            group: '999'
+            mode: '0700'
+        - name: Prepare separate runtime secret directories
+          ansible.builtin.file:
+            path: '{{ anico_database.rootDirectory }}/{{ item.name }}'
+            state: directory
+            owner: root
+            group: '{{ item.group }}'
+            mode: '0750'
+          loop:
+            - { name: mongodb-secrets, group: '999' }
+            - { name: tunnel-secrets, group: '65532' }
+        - name: Install MongoDB secrets without exposing their values
+          ansible.builtin.copy:
+            src: '{{ playbook_dir }}/../../.pulumi/dev-database/mongodb/{{ item }}'
+            dest: '{{ anico_database.rootDirectory }}/mongodb-secrets/{{ item }}'
+            owner: root
+            group: '999'
+            mode: '0440'
+          loop: [root-username, root-password, users.json]
+          no_log: true
+          diff: false
+        - name: Install the dedicated tunnel token
+          ansible.builtin.copy:
+            src: '{{ playbook_dir }}/../../.pulumi/dev-database/tunnel/tunnel-token'
+            dest: '{{ anico_database.rootDirectory }}/tunnel-secrets/tunnel-token'
+            owner: root
+            group: '65532'
+            mode: '0440'
+          register: anico_database_token
+          no_log: true
+          diff: false
+        - name: Prepare the runtime script directory
+          ansible.builtin.file:
+            path: '{{ anico_database.rootDirectory }}/scripts'
+            state: directory
+            owner: root
+            group: '999'
+            mode: '0750'
+        - name: Install credential-safe MongoDB maintenance scripts
+          ansible.builtin.copy:
+            src: '../scripts/{{ item }}'
+            dest: '{{ anico_database.rootDirectory }}/scripts/{{ item }}'
+            owner: root
+            group: '999'
+            mode: '0440'
+          loop:
+            [mongo-health.js, mongo-provision-users.js, mongo-verify-users.js]
+        - name: Install the non-secret database Compose definition
+          ansible.builtin.template:
+            src: dev-database.compose.yaml.j2
+            dest: '{{ anico_database.rootDirectory }}/compose.yaml'
+            owner: root
+            group: root
+            mode: '0640'
+        - name: Store public database settings for verification
+          ansible.builtin.copy:
+            src: ../dev-database.json
+            dest: '{{ anico_database.rootDirectory }}/settings.json'
+            owner: root
+            group: root
+            mode: '0640'
+        - name: Validate Compose without revealing resolved values
+          ansible.builtin.command:
+            argv: '{{ anico_database_compose + ["config", "--quiet"] }}'
+            chdir: '{{ anico_database.rootDirectory }}'
+          changed_when: false
+          when: not ansible_check_mode
+        - name: Start the authenticated database
+          ansible.builtin.command:
+            argv: '{{ anico_database_compose + ["up", "--detach", "--wait", "--wait-timeout", "180", "mongodb"] }}'
+            chdir: '{{ anico_database.rootDirectory }}'
+          register: anico_database_up
+          changed_when: anico_database_up.stderr is search('Creat|Recreat|Start|Pulling')
+          when: not ansible_check_mode
+        - name: Reconcile only scoped app and developer accounts
+          ansible.builtin.command:
+            argv:
+              [
+                docker,
+                exec,
+                '{{ anico_database.containerName }}',
+                mongosh,
+                --quiet,
+                /opt/anico/mongo-provision-users.js,
+              ]
+          register: anico_database_users
+          changed_when: "'ANICO_CHANGED' in anico_database_users.stdout"
+          when: not ansible_check_mode
+        - name: Verify each account can write only its own database
+          ansible.builtin.command:
+            argv:
+              [
+                docker,
+                exec,
+                '{{ anico_database.containerName }}',
+                mongosh,
+                --quiet,
+                /opt/anico/mongo-verify-users.js,
+              ]
+          changed_when: false
+          when: not ansible_check_mode
+        - name: Start the dedicated connector and reload a rotated token
+          ansible.builtin.command:
+            argv: '{{ anico_database_compose + ["up", "--detach", "--wait", "--wait-timeout", "120"] + (["--force-recreate"] if anico_database_token.changed else []) + ["cloudflared"] }}'
+            chdir: '{{ anico_database.rootDirectory }}'
+          register: anico_database_connector_up
+          changed_when: anico_database_connector_up.stderr is search('Creat|Recreat|Start|Pulling')
+          when: not ansible_check_mode
+        - name: Verify private ports, runtime restrictions and environment boundaries
+          ansible.builtin.script:
+            cmd: '../scripts/verify-dev-database.py {{ anico_database.rootDirectory }}/settings.json'
+            executable: python3
+          changed_when: false
+          when: not ansible_check_mode

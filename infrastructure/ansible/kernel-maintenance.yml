@@ -1,0 +1,65 @@
+- name: Update the Ubuntu virtual kernel and optionally reboot safely
+  hosts: anico
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Require the supported existing VPS operating system
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_version == '26.04'
+          - ansible_facts.architecture in ['aarch64', 'x86_64']
+  tasks:
+    - name: Update only the stock virtual-machine kernel metapackage
+      ansible.builtin.apt:
+        name: linux-image-virtual
+        state: latest
+        update_cache: true
+        cache_valid_time: 3600
+        install_recommends: false
+        fail_on_autoremove: true
+
+    - name: Check whether Ubuntu requires a reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: anico_kernel_reboot_required
+
+    - name: Reboot only when explicitly requested by the operator
+      ansible.builtin.reboot:
+        msg: AniCo kernel maintenance for MongoDB compatibility
+        reboot_timeout: 300
+        connect_timeout: 10
+        post_reboot_delay: 10
+      when: anico_allow_reboot | default(false) | bool and anico_kernel_reboot_required.stat.exists and not ansible_check_mode
+
+    - name: Report kernel compatibility after maintenance
+      ansible.builtin.script:
+        cmd: '{{ "../scripts/kernel-status.py --require-safe" if anico_allow_reboot | default(false) | bool else "../scripts/kernel-status.py" }}'
+        executable: python3
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Verify the original management containers recovered
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            inspect,
+            --format,
+            '{{ "{{.State.Health.Status}}" }}',
+            '{{ item }}',
+          ]
+      register: anico_kernel_container_health
+      until: anico_kernel_container_health.stdout == 'healthy'
+      retries: 20
+      delay: 5
+      changed_when: false
+      loop:
+        [
+          coolify,
+          coolify-db,
+          coolify-redis,
+          coolify-proxy,
+          anico-tunnel-cloudflared-1,
+        ]
+      when: not ansible_check_mode
