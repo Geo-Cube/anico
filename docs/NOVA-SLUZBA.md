@@ -17,7 +17,8 @@ unit a integrační testy, coverage, migrace, seed a Dockerfile s bezpečným bu
 Automaticky spustí kořenové `npm install`: přidá workspace do jediného lockfile
 a nainstaluje deklarované produkční i vývojové závislosti. Pokud instalace selže,
 soubory zůstanou připravené; zopakuj `npm install`, ne celý generátor.
-Existující službu nepřepisuje.
+Existující službu nepřepisuje. Název služby také přidá do veřejného registru
+`infrastructure/dev-database-services.json`; registr commituj společně se službou.
 
 Vygenerované `.env.example` i ignorovaný `.env` obsahují pouze veřejné místní
 výchozí hodnoty. DB bude `anico_animal_local`. Port se vybere od 3001 podle
@@ -46,9 +47,10 @@ Migrační soubory jsou zatím prázdné a seed provede pouze ping.
 Pravidla retry, zámků a resetu jsou v [databázovém postupu](DATABAZE.md).
 
 **Před vzdáleným vývojem nebo nasazením potřebuje služba vlastní provisioning:**
-DB a omezené účty, podporu v remote launcheru, GHCR publish, Coolify službu,
+rozšíření rolí osobních účtů přes DB provisioning, GHCR publish, Coolify službu,
 API routing a proměnné prostředí. Generátor nic z toho nemění na živém serveru.
-Současné `dev:remote` a `db:remote:*` jsou stále pro breeding-service.
+Pro vzdálený vývoj pak použij `npm run dev:remote -- --service animal`.
+Účet a heslo zůstávají stejné; URI odvodí launcher. [Vzdálený vývoj](VZDALENY-VYVOJ.md).
 
 Šablony jsou v `turbo/generators/templates/service`, generátor v
 `turbo/generators/config.js`. Přímé volání oficiálního Turbo generátoru je

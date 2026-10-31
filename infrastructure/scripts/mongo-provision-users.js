@@ -26,7 +26,26 @@ try {
       }
       continue;
     }
-    const roles = [{ role: 'readWrite', db: account.database }];
+    if (
+      !Array.isArray(account.databases) ||
+      !account.databases.includes(account.database)
+    )
+      throw new Error('Missing scoped databases');
+    const suffix = account.username.replace(/^dev_/, '');
+    for (const name of account.databases) {
+      if (
+        account.login
+          ? !/^anico_[a-z0-9_]+$/.test(name) ||
+            !name.endsWith(`_${suffix}`) ||
+            name.length > 63
+          : name !== account.database
+      )
+        throw new Error('Invalid database permission scope');
+    }
+    const roles = account.databases.map((database) => ({
+      role: 'readWrite',
+      db: database,
+    }));
     let authenticates = false;
     try {
       const probe = new Mongo(`mongodb://127.0.0.1:27017/${account.database}`);
@@ -57,9 +76,13 @@ try {
       changes++;
     } else if (
       !authenticates ||
-      current.roles.length !== 1 ||
-      current.roles[0].role !== 'readWrite' ||
-      current.roles[0].db !== account.database
+      current.roles.length !== roles.length ||
+      !current.roles.every((actual) =>
+        roles.some(
+          (expected) =>
+            actual.role === expected.role && actual.db === expected.db,
+        ),
+      )
     ) {
       target.updateUser(account.username, { pwd: account.password, roles });
       changes++;

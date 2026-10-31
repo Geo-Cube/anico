@@ -3,7 +3,12 @@ import { test } from 'node:test';
 import {
   databaseCredentialsSchema,
   reconcileDatabaseCredentials,
+  databaseProvisioningAccounts,
+  discoverDatabaseServices,
 } from '../src/dev-database.js';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const members = [
   { login: 'Example-One', email: 'one@example.com' },
@@ -55,4 +60,92 @@ test('duplicates and moving a workspace to another database are rejected', () =>
   const first = reconcileDatabaseCredentials(members, undefined, passwords());
   first.developers[0]!.database = 'anico_breeding_production';
   assert.throws(() => databaseCredentialsSchema.parse(first));
+});
+
+test('one stable account receives only its own service databases; app permissions stay unchanged', () => {
+  const credentials = reconcileDatabaseCredentials(
+    members,
+    undefined,
+    passwords(),
+  );
+  const accounts = databaseProvisioningAccounts(credentials, [
+    'breeding-service',
+    'auth-service',
+  ]);
+  assert.deepEqual(accounts[0]?.databases, ['anico_breeding']);
+  assert.deepEqual(accounts[1]?.databases, [
+    'anico_auth_example_one',
+    'anico_breeding_example_one',
+  ]);
+  assert.deepEqual(accounts[2]?.databases, [
+    'anico_auth_example_two',
+    'anico_breeding_example_two',
+  ]);
+  assert.equal(accounts[1]?.database, credentials.developers[0]?.database);
+  assert.equal(accounts[1]?.password, credentials.developers[0]?.password);
+  assert.equal(accounts[1]?.username, credentials.developers[0]?.username);
+  assert.ok(!('email' in accounts[1]!));
+  assert.throws(() =>
+    databaseProvisioningAccounts(credentials, ['auth-service']),
+  );
+  assert.throws(() =>
+    databaseProvisioningAccounts(credentials, [
+      'breeding-service',
+      '../admin-service',
+    ]),
+  );
+  assert.throws(() =>
+    databaseProvisioningAccounts(credentials, [
+      'breeding-service',
+      'breeding-service',
+    ]),
+  );
+});
+
+test('provisioning discovers MongoDB service manifests, excluding frontend and temporary scaffolding', () => {
+  const root = mkdtempSync(join(tmpdir(), 'anico-service-discovery-'));
+  try {
+    for (const name of [
+      'breeding-service',
+      'auth-service',
+      'frontend',
+      '.anico-scaffold-test',
+    ]) {
+      const folder = join(root, 'apps', name);
+      mkdirSync(folder, { recursive: true });
+      if (name.startsWith('.')) continue;
+      writeFileSync(
+        join(folder, 'package.json'),
+        JSON.stringify({
+          name: `@anico/${name}`,
+          dependencies:
+            name === 'frontend' ? { react: '*' } : { mongoose: '*' },
+        }),
+      );
+    }
+    assert.deepEqual(discoverDatabaseServices(root), [
+      'auth-service',
+      'breeding-service',
+    ]);
+    mkdirSync(join(root, 'infrastructure'));
+    writeFileSync(
+      join(root, 'infrastructure/dev-database-services.json'),
+      JSON.stringify(['animal-service', 'auth-service', 'breeding-service']),
+    );
+    assert.deepEqual(discoverDatabaseServices(root), [
+      'animal-service',
+      'auth-service',
+      'breeding-service',
+    ]);
+    writeFileSync(
+      join(root, 'apps/auth-service/package.json'),
+      JSON.stringify({
+        name: '@anico/wrong-service',
+        dependencies: { mongoose: '*' },
+      }),
+    );
+    assert.throws(() => discoverDatabaseServices(root));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

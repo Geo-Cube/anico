@@ -2,6 +2,7 @@ const {
   createService,
   installDependencies,
   normalizeName,
+  registerDatabaseService,
 } = require('./service.cjs');
 
 module.exports = function generator(plop) {
@@ -25,12 +26,13 @@ module.exports = function generator(plop) {
     actions: [
       async (answers) => {
         const result = await createService(answers.name);
+        await registerDatabaseService(result.name, result.root);
         await installDependencies(result.root);
         return (
           `Created ${result.workspace}.\n` +
           `Local start: npm run dev -w ${result.workspace}\n` +
           `Configuration: apps/${result.name}/README.md\n` +
-          'Remote DB accounts and deployment must be provisioned separately.'
+          'DB service registered. Administrator must apply deploy:dev-database to grant remote access; deployment is configured separately.'
         );
       },
     ],
