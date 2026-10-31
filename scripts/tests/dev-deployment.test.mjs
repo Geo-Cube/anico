@@ -43,6 +43,11 @@ test('dev compose keeps secrets out of images/frontend and publishes no ports or
     /anico-prod|admin\.anico|mongodb:\/\//,
   );
   assert.equal(compose.services.backend.environment.MONGODB_URI, undefined);
+  assert.equal(compose.services.backend.environment.MIGRATE_ON_START, 'true');
+  assert.equal(
+    compose.services.backend.environment.MONGODB_URI_FILE,
+    '/run/secrets/dev-mongodb-uri',
+  );
   assert.equal(compose.services.frontend.secrets, undefined);
   assert.deepEqual(compose.services.backend.secrets, [
     { source: 'mongodb-uri', target: 'dev-mongodb-uri' },

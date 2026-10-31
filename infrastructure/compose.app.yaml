@@ -28,6 +28,7 @@ services:
     environment:
       MONGODB_URI: mongodb://mongodb:27017/anico_breeding
       LOG_LEVEL: info
+      MIGRATE_ON_START: 'true'
     ports:
       - '127.0.0.1:${ANICO_BACKEND_PORT:-3000}:3000'
     depends_on:

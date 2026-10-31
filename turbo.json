@@ -11,7 +11,14 @@
       "cache": false,
       "persistent": true,
       "interruptible": true,
-      "env": ["HOST", "PORT", "MONGODB_URI", "LOG_LEVEL", "NODE_ENV"]
+      "env": [
+        "HOST",
+        "PORT",
+        "MONGODB_URI",
+        "LOG_LEVEL",
+        "NODE_ENV",
+        "MIGRATE_ON_START"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build"],

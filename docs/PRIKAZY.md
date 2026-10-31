@@ -18,6 +18,21 @@
 Procesy ukonči **Ctrl+C**. `npm run dev` a `npm run dev:backend` používají
 běžný backendový `.env` a dostupnou DB; pro osobní vzdálenou DB používej `dev:remote`.
 
+Nová mikroservisa: `npm run service:new -- --args animal`.
+Vytvoří workspace a nainstaluje závislosti; [postup](NOVA-SLUZBA.md).
+
+## Databáze: osobní vzdálená breeding DB
+
+| Chci                      | Příkaz                                                   |
+| ------------------------- | -------------------------------------------------------- |
+| Stav migrací a zámku      | `npm run db:remote:status`                               |
+| Provést chybějící migrace | `npm run db:remote:migrate`                              |
+| Doplnit ukázková data     | `npm run db:remote:seed`                                 |
+| Vytvořit novou migraci    | `npm run db:new -w @anico/breeding-service -- add-field` |
+
+Při už běžícím devu přidej `-- --use-running-tunnel`.
+Reset a řešení přerušené migrace: [DB postup](DATABAZE.md).
+
 ## Kontroly
 
 | Chci                                                | Příkaz                                                |

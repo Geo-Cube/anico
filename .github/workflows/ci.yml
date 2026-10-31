@@ -49,6 +49,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:dev-remote
       - run: npm run test:deployment
+      - run: npm run test:generators
       - run: npm run build
       - run: npm run test:unit -w @anico/infrastructure
       - run: npm run test:coverage

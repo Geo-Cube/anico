@@ -33,6 +33,8 @@ COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=production-dependencies /app/apps/breeding-service ./apps/breeding-service
 COPY --from=production-dependencies /app/packages/shared-schemas ./packages/shared-schemas
 COPY --from=build /app/apps/breeding-service/dist ./apps/breeding-service/dist
+COPY apps/breeding-service/migrations ./apps/breeding-service/migrations
+COPY apps/breeding-service/seeds ./apps/breeding-service/seeds
 COPY --from=build /app/packages/shared-schemas/dist ./packages/shared-schemas/dist
 COPY --from=build /app/packages/shared-schemas/catalogs ./packages/shared-schemas/catalogs
 USER node

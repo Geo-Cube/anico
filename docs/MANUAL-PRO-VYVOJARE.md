@@ -85,6 +85,9 @@ Podrobnosti: [architektura](ARCHITEKTURA.md). Frontend zatím obsahuje úvodní
 stránku a **API ještě nevolá**. Na cloudu je backend pod `/api`, lokálně přímo
 na portu 3000; lokální frontendová proxy zatím není nastavená.
 
+Datový model své služby měníš v kódu; migrace, seed a osobní reset jsou
+v [databázovém postupu](DATABAZE.md). Nová pole a kolekce neschvaluje správce serveru.
+
 ## 4. Když něco nejde
 
 | Problém                             | Co udělat                                        |

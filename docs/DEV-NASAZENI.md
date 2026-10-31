@@ -13,6 +13,11 @@ Nasazení jsou postupná; čekající starší commit se přeskočí, pokud nen�
 VPS stahuje hotové images. PR ani `main` dev nenasazují.
 Při výměně může nastat krátký výpadek; automatický rollback dat/migrací není zavedený.
 
+Nová DB změna přidává do dev konfigurace `MIGRATE_ON_START=true`: image provede
+své migrace před spuštěním HTTP. Neúspěch zabrání startu nové verze; seed ani
+reset se při deploymentu neprovádějí. Migrační krok není transakční.
+Podrobnosti: [migrace a DB příkazy](DATABAZE.md).
+
 ## Nastavení nebo obnova
 
 Použij původní state, passphrase, tokeny a inventář. Z kořene:
@@ -86,6 +91,20 @@ npm run deploy:dev-release -w @anico/infrastructure -- COMMIT_SHA /ABSOLUTNI/CES
 
 Data se nevracejí. Artifacts mají retenci 30 dní; dlouhodobě potřebné reference
 uchovej samostatně. Další CI deployment opět nasadí hlavu `dev`.
+
+Migrační runner odmítne historii, kterou daný checkout nezná. Před návratem
+na starší image ověř kompatibilitu jeho migrací a dat; nepřepisuj ani nemaž
+evidenci společné DB. Často je bezpečnější oprava dopředu než návrat kódu.
+
+Sdílený ukázkový seed spusť výslovně v backendovém kontejneru v Coolify,
+z jeho výchozího pracovního adresáře `/app`:
+
+```bash
+node apps/breeding-service/dist/database/cli.js seed --shared
+```
+
+Příkaz načte `MONGODB_URI_FILE` ze secret mountu, URI nevypisuje. Reset
+společné dev nebo produkční DB zůstává zakázaný i s potvrzením názvu.
 
 ## Rotace a zálohy
 

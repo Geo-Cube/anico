@@ -41,6 +41,8 @@ RUN test ! -e .git && test ! -e .pulumi && test ! -e node_modules \
     && test ! -e apps/breeding-service/.env \
     && test ! -e apps/breeding-service/tests \
     && test ! -e apps/breeding-service/dist \
+    && test -e apps/breeding-service/migrations/20261031000100-backfill-breeding-timestamps.mjs \
+    && test -e apps/breeding-service/seeds/development.mjs \
     && test "$(find infrastructure -type f | wc -l)" -eq 1 \
     && test -z "$(find apps/breeding-service/src -name '.env*' -print)"
 DOCKERFILE
@@ -77,6 +79,17 @@ docker exec "$backend" node --input-type=module -e '
     }
   }
 '
+docker exec "$backend" node apps/breeding-service/dist/database/cli.js status \
+  | node --input-type=module -e '
+    let text = "";
+    for await (const chunk of process.stdin) text += chunk;
+    const status = JSON.parse(text);
+    if (!status.migrations.length || status.migrations.some(item => item.state !== "applied") || status.lock) process.exit(1);
+  '
+if docker exec "$backend" node apps/breeding-service/dist/database/cli.js reset --confirm anico_breeding >/dev/null 2>&1; then
+  echo 'Reset guard unexpectedly allowed a non-personal database.' >&2
+  exit 1
+fi
 
 curl --fail --silent --show-error "$backend_url/ready" >/dev/null
 plan_id="$(curl --fail --silent --show-error "$backend_url/breeding-plans" \
