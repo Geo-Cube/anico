@@ -6,7 +6,11 @@ Docker, SSH ani cloudové API tokeny k tomu nepotřebuješ.
 ## 1. Jednou na počítači
 
 Přijmi GitHub pozvánku a naklonuj `Geo-Cube/anico` v GitHub Desktop.
-V projektu otevři terminál. S nvm použij:
+V projektu otevři terminál a vyber postup podle systému.
+
+### macOS / Linux
+
+S nvm použij:
 
 ```bash
 nvm install
@@ -18,14 +22,34 @@ brew install cloudflared
 Bez nvm použij Node podle `.nvmrc`. Homebrew příkaz je pro macOS;
 na Linuxu/WSL nainstaluj `cloudflared` balíčkem pro svou distribuci.
 
+### Windows (PowerShell)
+
+Použij Node podle `.nvmrc`; pokud už `npm ci` fungovalo, Node znovu neinstaluj.
+Cloudflare klienta nainstaluj podle [oficiálního winget balíčku](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/Cloudflare/cloudflared):
+
+```powershell
+winget install --id Cloudflare.cloudflared --exact
+```
+
+Potom znovu otevři VS Code, aby převzal aktualizovanou PATH. Pro vzdálenou DB
+nepotřebuješ Bash bootstrap ani WSL. Pokud PowerShell blokuje `npm.ps1`,
+používej `npm.cmd` místo `npm`; není potřeba měnit execution policy.
+
+### Osobní konfigurace a spuštění
+
 Od správce si vyžádej **svůj** konfigurační soubor a ulož ho jako
 `apps/breeding-service/.env.remote.local`. Potom:
 
+Na macOS/Linuxu nastav `chmod 600 apps/breeding-service/.env.remote.local`.
+Ve Windows krok `chmod` vynech. Potom:
+
 ```bash
-chmod 600 apps/breeding-service/.env.remote.local
 npm ci
 npm run dev:remote
 ```
+
+V PowerShellu lze stejné příkazy spustit jako `npm.cmd ci` a `npm.cmd run dev:remote`.
+Původní `.env` z lokálního bootstrapu můžeš ponechat; tento režim používá osobní `.env.remote.local`.
 
 Dokonči GitHub přihlášení v prohlížeči. Otevři **http://127.0.0.1:5173**.
 Backend je na `http://127.0.0.1:3000`; `/ready` ověřuje připojení k DB.

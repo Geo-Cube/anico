@@ -8,6 +8,9 @@ Celý první start je v [manuálu vývojáře](MANUAL-PRO-VYVOJARE.md).
 Potřebuješ `cloudflared` a vlastní soubor od správce uložený jako
 `apps/breeding-service/.env.remote.local`. Potom z kořene:
 
+Windows PowerShell: instalaci přes winget a variantu `npm.cmd` najdeš
+v [prvním spuštění](MANUAL-PRO-VYVOJARE.md#windows-powershell). Bash bootstrap ani `chmod` tam nepotřebuješ.
+
 ```bash
 npm ci
 npm run dev:remote

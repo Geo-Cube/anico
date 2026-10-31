@@ -22,4 +22,5 @@ Cloudové tokeny, SSH a Pulumi pro běžný vývoj nepotřebuješ.
 [obnova](../infrastructure/RECOVERY.md), [zbývající práce](../infrastructure/NEXT-STEPS.md).
 
 Návody popisují současný stav. Historickou inicializaci prázdného repozitáře
-neopakuj. Příkazy jsou pro macOS/zsh; bez jiného označení se spouštějí z kořene.
+neopakuj. Vývojářský návod rozlišuje macOS/Linux a Windows PowerShell;
+správcovské shellové postupy jsou pro macOS/zsh. Bez jiného označení příkazy spouštěj z kořene.
