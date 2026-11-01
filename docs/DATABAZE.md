@@ -16,7 +16,7 @@ Z kořene projektu s osobní `.env.remote.local` a `cloudflared`:
 | Doplnit ukázková data                 | `npm run db:remote:seed`    |
 
 Příkaz otevře osobní tunel, případně vyžádá GitHub login, provede úlohu a zavře jej.
-**Pokud už běží `dev:remote`, přidej `-- --use-running-tunnel`**, například:
+**Pokud už běží DB tunel z `dev:backend` nebo `dev:fullstack`, přidej `-- --use-running-tunnel`**, například:
 
 ```bash
 npm run db:remote:migrate -- --use-running-tunnel
@@ -60,11 +60,12 @@ Checksum je shodný na Windows a Linuxu díky normalizaci konců řádků.
 
 ## Seed a osobní reset
 
-Seed přidá dva označené ukázkové odchovy. Opakování nevytváří kopie ani nepřepisuje
+Seed breeding-service přidá dva označené ukázkové odchovy. Seed nové generované
+služby je prázdná předloha, kterou si vývojář doplní. Opakování nevytváří kopie ani nepřepisuje
 ruční úpravy. Běžný deployment seed automaticky nespouští.
 
 Reset smaže aplikační kolekce **jen tvé osobní DB**, provede migrace a seed.
-Nejdřív ukonči vlastní backend a `dev:remote`. Z `db:remote:status` vezmi přesný
+Nejdřív ukonči vlastní backend/fullstack proces a jeho DB tunel. Z `db:remote:status` vezmi přesný
 název DB a nahraď ukázkový název níže:
 
 ```bash

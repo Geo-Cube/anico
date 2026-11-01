@@ -3,15 +3,16 @@
 React frontend a Express backend v jednom npm monorepu.
 
 **Začínáš v týmu? Otevři [návod pro vývojáře](docs/MANUAL-PRO-VYVOJARE.md).**
-Potřebuješ Node podle `.nvmrc`, npm 11.6.0, `cloudflared` a vlastní DB konfiguraci od správce.
+Potřebuješ Node podle `.nvmrc`, npm 11.6.0 a `cloudflared`. Osobní DB konfiguraci potřebuješ jen pro backend.
 
 ```bash
-npm ci
-npm run dev:remote
+npm run setup
+npm run dev:frontend
 ```
 
-Frontend: http://127.0.0.1:5173 · Backend: http://127.0.0.1:3000 · Ukončení: **Ctrl+C**.
-Lokální vývoj používá osobní databázi; týmový dev má jinou společnou DB.
+Frontend: http://127.0.0.1:5173 · API a data: týmový dev · Ukončení: **Ctrl+C**.
+Jen backend s osobní DB: `npm run dev:backend -- --service animal`.
+UI s vybraným lokálním backendem: `npm run dev:fullstack -- --service animal`.
 
 | Potřebuji                           | Kam jít                                         |
 | ----------------------------------- | ----------------------------------------------- |
@@ -25,8 +26,7 @@ Lokální vývoj používá osobní databázi; týmový dev má jinou společnou
 Týmová aplikace: [dev.anico.online](https://dev.anico.online). Správa: [admin.anico.online](https://admin.anico.online).
 Obojí používá schválené GitHub účty. Produkce zatím není nasazená.
 
-Automatické nasazování je připravené na větvi `feature/automatic-dev-deployment`;
-aktivuje se až po review a sloučení workflow do `dev`.
+Po úspěšných kontrolách CI větev `dev` publikuje images a aktualizuje týmové dev nasazení.
 
 Veškeré příkazy v návodech spouštěj **z kořene repozitáře**, pokud není uvedeno jinak.
 Úplný rozcestník: [dokumentace](docs/README.md).
