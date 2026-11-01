@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { pino } from 'pino';
 import { z } from 'zod';
 import { createApp } from './app.js';
+import { createModules } from './modules/index.js';
 import { migrateDatabase } from './database/engine.js';
 import { loadMigrations } from './database/registry.js';
 import { databaseTarget } from './database/policy.js';
@@ -21,7 +22,7 @@ const env = z
 const logger = pino({
   level: env.LOG_LEVEL,
   base: { service: '__SERVICE_NAME__' },
-  redact: ['req.headers.authorization', 'req.headers.cookie'],
+  redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["cf-access-token"]', 'req.headers["cf-access-jwt-assertion"]', 'req.headers["cf-access-client-secret"]'],
 });
 
 const connection = mongoose.createConnection();
@@ -47,8 +48,8 @@ try {
   let stopping = false;
   const app = createApp({
     logger,
+    modules: createModules(connection),
     isReady: () => !stopping && connection.readyState === 1,
-
   });
   const server = app.listen(env.PORT, env.HOST, () =>
     logger.info({ port: env.PORT }, 'Server listening'),

@@ -19,6 +19,76 @@ const prettier = runtimeRequire('prettier');
 const repositoryRoot = path.resolve(__dirname, '../..');
 const templates = path.join(__dirname, 'templates/service');
 
+function moduleName(input) {
+  if (
+    typeof input !== 'string' ||
+    !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(input) ||
+    input.length > 40 ||
+    ['health', 'database', 'index'].includes(input)
+  )
+    throw new Error(
+      'Use a business module name in kebab-case (not health, database or index).',
+    );
+  return input;
+}
+
+function moduleValues(input, service) {
+  const name = moduleName(input);
+  return {
+    __MODULE_NAME__: name,
+    __MODULE_PASCAL__: name
+      .split('-')
+      .map((part) => part[0].toUpperCase() + part.slice(1))
+      .join(''),
+    __SERVICE_NAME__: service,
+  };
+}
+
+async function renderFiles(templateDirectory, values, destination) {
+  const config = await prettier.resolveConfig(
+    path.join(repositoryRoot, 'package.json'),
+  );
+  const entries = [];
+  for await (const file of files(templateDirectory)) {
+    let relative = file.replace(/\.tpl$/, '');
+    let content = await readFile(path.join(templateDirectory, file), 'utf8');
+    for (const [token, value] of Object.entries(values)) {
+      relative = relative.replaceAll(token, value);
+      content = content.replaceAll(token, value);
+    }
+    if (
+      ['.ts', '.tsx', '.js', '.mjs', '.json', '.md', '.css'].includes(
+        path.extname(relative),
+      )
+    )
+      content = await prettier.format(content, {
+        ...config,
+        filepath: path.join(destination, relative),
+      });
+    entries.push({ relative, content });
+  }
+  return entries;
+}
+
+async function writeNewFiles(destination, entries) {
+  for (const { relative } of entries)
+    if (await exists(path.join(destination, relative)))
+      throw new Error(`${relative} already exists; nothing overwritten.`);
+  const written = [];
+  try {
+    for (const { relative, content } of entries) {
+      const file = path.join(destination, relative);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, content, { flag: 'wx' });
+      written.push(file);
+    }
+  } catch (error) {
+    for (const file of written) await rm(file, { force: true });
+    throw error;
+  }
+  return written;
+}
+
 function normalizeName(input) {
   if (
     typeof input !== 'string' ||
@@ -94,27 +164,18 @@ async function createService(input, root = repositoryRoot) {
     __SERVICE_NAME__: name,
     __DATABASE__: database,
     __PORT__: String(port),
+    ...moduleValues(name.replace(/-service$/, ''), name),
   };
   await mkdir(temporary);
   try {
-    for await (const file of files(templates)) {
-      const relative = file.replace(/\.tpl$/, '');
-      let content = await readFile(path.join(templates, file), 'utf8');
-      for (const [token, value] of Object.entries(values))
-        content = content.replaceAll(token, value);
-      const filepath = path.join(destination, relative);
-      const config = await prettier.resolveConfig(
-        path.join(root, 'package.json'),
-      );
-      if (
-        ['.ts', '.js', '.mjs', '.json', '.md'].includes(path.extname(relative))
-      ) {
-        content = await prettier.format(content, { ...config, filepath });
-      }
-      const target = path.join(temporary, relative);
-      await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, content, { flag: 'wx' });
-    }
+    await writeNewFiles(temporary, [
+      ...(await renderFiles(templates, values, destination)),
+      ...(await renderFiles(
+        path.join(__dirname, 'templates/module'),
+        values,
+        destination,
+      )),
+    ]);
     // Only public defaults are copied; no existing .env or credentials are read.
     await writeFile(
       path.join(temporary, '.env'),
@@ -131,6 +192,104 @@ async function createService(input, root = repositoryRoot) {
     throw error;
   }
   return { root, name, database, port, workspace: `@anico/${name}` };
+}
+
+async function createBackendModule(serviceInput, input, root = repositoryRoot) {
+  const { name } = normalizeName(serviceInput);
+  const values = moduleValues(input, name);
+  const destination = path.join(root, 'apps', name);
+  const manifest = JSON.parse(
+    await readFile(path.join(destination, 'package.json'), 'utf8'),
+  );
+  if (manifest.name !== `@anico/${name}` || !manifest.dependencies?.mongoose)
+    throw new Error('Choose an existing AniCo MongoDB backend workspace.');
+  if (
+    await exists(path.join(destination, 'src/modules', values.__MODULE_NAME__))
+  )
+    throw new Error('Module already exists; nothing overwritten.');
+  const existingModules = await readdir(path.join(destination, 'src/modules'), {
+    withFileTypes: true,
+  }).catch((error) => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
+  for (const existing of existingModules) {
+    const identifier = existing.name
+      .split('-')
+      .map((part) => part[0]?.toUpperCase() + part.slice(1))
+      .join('');
+    if (existing.isDirectory() && identifier === values.__MODULE_PASCAL__)
+      throw new Error(
+        `Module identifier collides with ${existing.name}; choose another name.`,
+      );
+  }
+  const index = path.join(destination, 'src/modules/index.ts');
+  const previous = (await exists(index)) ? await readFile(index, 'utf8') : '';
+  const wired =
+    previous.includes('// anico:module-imports') &&
+    previous.includes('// anico:module-routes');
+  const written = await writeNewFiles(
+    destination,
+    await renderFiles(
+      path.join(__dirname, 'templates/module'),
+      values,
+      destination,
+    ),
+  );
+  try {
+    if (wired) {
+      if ((await readFile(index, 'utf8')) !== previous)
+        throw new Error('Module registry changed during generation; retry.');
+      const module = values.__MODULE_NAME__;
+      const pascal = values.__MODULE_PASCAL__;
+      let next = previous
+        .replace(
+          '// anico:module-imports',
+          `import { ${pascal}Router } from './${module}/http/router.js';\nimport { mongoose${pascal}Repository } from './${module}/infrastructure/mongoose-repository.js';\n// anico:module-imports`,
+        )
+        .replace(
+          '// anico:module-routes',
+          `router.use('/${module}', ${pascal}Router(mongoose${pascal}Repository(connection)));\n  // anico:module-routes`,
+        );
+      const config = await prettier.resolveConfig(
+        path.join(repositoryRoot, 'package.json'),
+      );
+      next = await prettier.format(next, { ...config, filepath: index });
+      await writeFile(index, next);
+    }
+  } catch (error) {
+    for (const file of written) await rm(file, { force: true });
+    throw error;
+  }
+  return { name: values.__MODULE_NAME__, service: name, wired };
+}
+
+async function createFrontendFeature(input, root = repositoryRoot) {
+  const values = moduleValues(input, 'frontend');
+  const destination = path.join(root, 'apps/frontend');
+  const manifest = JSON.parse(
+    await readFile(path.join(destination, 'package.json'), 'utf8'),
+  );
+  if (manifest.name !== '@anico/frontend' || !manifest.dependencies?.react)
+    throw new Error(
+      'Frontend workspace is missing or is not a React application.',
+    );
+  if (
+    await exists(path.join(destination, 'src/features', values.__MODULE_NAME__))
+  )
+    throw new Error('Feature already exists; nothing overwritten.');
+  await writeNewFiles(
+    destination,
+    await renderFiles(
+      path.join(__dirname, 'templates/frontend-feature'),
+      values,
+      destination,
+    ),
+  );
+  return {
+    name: values.__MODULE_NAME__,
+    component: `${values.__MODULE_PASCAL__}Feature`,
+  };
 }
 
 function installDependencies(root) {
@@ -203,4 +362,6 @@ module.exports = {
   createService,
   installDependencies,
   registerDatabaseService,
+  createBackendModule,
+  createFrontendFeature,
 };

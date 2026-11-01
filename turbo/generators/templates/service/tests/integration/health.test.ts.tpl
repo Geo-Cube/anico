@@ -4,6 +4,7 @@ import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
+import { createModules } from '../../src/modules/index.js';
 import { createMigration, loadMigrations, loadSeed } from '../../src/database/registry.js';
 import { migrateDatabase, migrationStatus, resetDatabase, seedDatabase } from '../../src/database/engine.js';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -22,9 +23,11 @@ describe('HTTP and database integration', () => {
   it('uses a real MongoDB connection for readiness and exposes service identity', async () => {
     await connection.db!.command({ ping: 1 });
     let stopping = false;
-    const app = createApp({ logger: pino({ level: 'silent' }), isReady: () => !stopping && connection.readyState === 1 });
+    const app = createApp({ logger: pino({ level: 'silent' }), modules: createModules(connection), isReady: () => !stopping && connection.readyState === 1 });
     expect((await request(app).get('/health').expect(200)).body.service).toBe('__SERVICE_NAME__');
     await request(app).get('/ready').expect(200);
+    await request(app).post('/').send({ name: 'Composition root example' }).expect(201);
+    expect((await request(app).get('/').expect(200)).body).toHaveLength(1);
     await request(app).get('/missing').expect(404);
     await request(app).post('/missing').set('Content-Type', 'application/json').send('{').expect(400);
     await request(app).post('/missing').send({ value: 'x'.repeat(40000) }).expect(413);
