@@ -24,6 +24,9 @@ jobs:
         shell: bash
         run: bash scripts/check-containers.sh
   check:
+    env:
+      MONGOMS_DISABLE_POSTINSTALL: '1'
+      MONGOMS_VERSION: '7.0.24'
     needs: containers
     if: ${{ always() }}
     runs-on: ubuntu-latest
@@ -45,9 +48,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Prepare a single verified MongoDB binary before parallel tests
+        run: npm run test:prepare-db
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run test:dev-remote
+      - run: npm run test:dev-tools
       - run: npm run test:deployment
       - run: npm run test:generators
       - run: npm run build

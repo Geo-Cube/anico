@@ -45,7 +45,8 @@
     "setup": "node scripts/setup.mjs",
     "doctor": "node scripts/doctor.mjs",
     "test:dev-tools": "node --test scripts/tests/dev-tools.test.mjs scripts/tests/frontend-proxy.test.mjs scripts/tests/dev-api.test.mjs",
-    "dev:fullstack": "node scripts/dev-remote.mjs --frontend"
+    "dev:fullstack": "node scripts/dev-remote.mjs --frontend",
+    "test:prepare-db": "node scripts/prepare-test-db.mjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

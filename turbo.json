@@ -29,20 +29,40 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "cache": false
+      "cache": false,
+      "env": [
+        "MONGOMS_SYSTEM_BINARY",
+        "MONGOMS_VERSION",
+        "MONGOMS_RUNTIME_DOWNLOAD"
+      ]
     },
     "test:unit": {
       "dependsOn": ["^build"],
-      "outputs": []
+      "outputs": [],
+      "env": [
+        "MONGOMS_SYSTEM_BINARY",
+        "MONGOMS_VERSION",
+        "MONGOMS_RUNTIME_DOWNLOAD"
+      ]
     },
     "test:integration": {
       "dependsOn": ["^build"],
-      "cache": false
+      "cache": false,
+      "env": [
+        "MONGOMS_SYSTEM_BINARY",
+        "MONGOMS_VERSION",
+        "MONGOMS_RUNTIME_DOWNLOAD"
+      ]
     },
     "test:coverage": {
       "dependsOn": ["^build"],
       "cache": false,
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "env": [
+        "MONGOMS_SYSTEM_BINARY",
+        "MONGOMS_VERSION",
+        "MONGOMS_RUNTIME_DOWNLOAD"
+      ]
     }
   }
 }
