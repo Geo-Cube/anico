@@ -6,6 +6,8 @@ import type { DocumentRepository } from '../domain/document.js';
 import { uploadDocument, getDocument } from '../application/upload-document.js';
 import { documentUploadMiddleware } from '../infrastructure/upload-storage.js';
 
+import mongoose from 'mongoose';
+
 const UploadDocumentBodySchema = z.object({
   animalId: z.string().min(1, 'animalId je povinné pole'),
   documentType: z.enum(['PEDIGREE', 'VET_REPORT', 'BREEDING_LICENSE']),
@@ -39,7 +41,10 @@ export function documentRouter(repository: DocumentRepository) {
         return;
       }
 
-      const uploadedBy = (req as any).user?.id || '654321654321654321654321';
+      //const uploadedBy = (req as any).user?.id || '654321654321654321654321';
+
+      const uploadedBy =
+        (req as any).user?.id || new mongoose.Types.ObjectId().toString();
 
       try {
         const result = await executeUpload({
