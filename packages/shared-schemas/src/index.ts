@@ -13,9 +13,17 @@ export const ServiceHealthResponseSchema = z.strictObject({
   service: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-service$/),
 });
 
-export const HealthResponseSchema = ServiceHealthResponseSchema.extend({
-  service: z.literal('breeding-service'),
+export const ServiceNameSchema = z.enum([
+  'breeding-service',
+  'breeder-service',
+]);
+
+export const HealthResponseSchema = z.strictObject({
+  status: z.literal('ok'),
+  service: ServiceNameSchema,
 });
+
+export type ServiceName = z.infer<typeof ServiceNameSchema>;
 
 export type ServiceHealthResponse = z.infer<typeof ServiceHealthResponseSchema>;
 
