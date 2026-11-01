@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import 'multer';
+import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';

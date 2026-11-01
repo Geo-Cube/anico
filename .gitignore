@@ -59,3 +59,6 @@ infrastructure/ansible/inventory*.local.yaml
 *.swp
 *.swo
 *~
+
+uploads
+apps/breeding-service/uploads

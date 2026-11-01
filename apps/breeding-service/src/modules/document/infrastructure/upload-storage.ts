@@ -10,18 +10,10 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const storage = multer.diskStorage({
-  destination: (
-    _req: Request,
-    _file: Express.Multer.File,
-    cb: (error: Error | null, destination: string) => void,
-  ) => {
+  destination: (_req, _file, cb) => {
     cb(null, uploadDir);
   },
-  filename: (
-    _req: Request,
-    file: Express.Multer.File,
-    cb: (error: Error | null, filename: string) => void,
-  ) => {
+  filename: (_req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `doc-${uniqueSuffix}${ext}`);
