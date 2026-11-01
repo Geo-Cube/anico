@@ -1,7 +1,8 @@
-import multer from 'multer';
+import multer, { type FileFilterCallback } from 'multer';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import type { Request } from 'express';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -9,10 +10,18 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
+  destination: (
+    _req: Request,
+    _file: Express.Multer.File,
+    cb: (error: Error | null, destination: string) => void,
+  ) => {
     cb(null, uploadDir);
   },
-  filename: (_req, file, cb) => {
+  filename: (
+    _req: Request,
+    file: Express.Multer.File,
+    cb: (error: Error | null, filename: string) => void,
+  ) => {
     const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `doc-${uniqueSuffix}${ext}`);
@@ -20,9 +29,9 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (
-  _req: Express.Request,
+  _req: Request,
   file: Express.Multer.File,
-  cb: multer.FileFilterCallback,
+  cb: FileFilterCallback,
 ) => {
   const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
   if (allowed.includes(file.mimetype)) {
