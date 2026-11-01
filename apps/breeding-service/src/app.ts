@@ -1,5 +1,5 @@
 import type { HealthResponse } from '@anico/shared-schemas';
-import express, { type ErrorRequestHandler } from 'express';
+import express, { type ErrorRequestHandler, type Router } from 'express';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
 import type { BreedingPlanRepository } from './modules/breeding/domain/breeding-plan.js';
@@ -10,6 +10,7 @@ export function createApp(dependencies: {
   logger: Logger;
   health: HealthResponse;
   isReady: () => boolean;
+  modules?: Router;
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -24,6 +25,7 @@ export function createApp(dependencies: {
     res.json(dependencies.health);
   });
   app.use('/breeding-plans', breedingRouter(dependencies.repository));
+  if (dependencies.modules) app.use(dependencies.modules);
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
   const handleError: ErrorRequestHandler = (

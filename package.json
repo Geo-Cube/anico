@@ -39,7 +39,9 @@
     "db:remote:reset": "node scripts/dev-remote.mjs --db=reset",
     "db:remote:unlock": "node scripts/dev-remote.mjs --db=unlock",
     "service:new": "gen run service",
-    "test:generators": "npm run build -w @anico/shared-schemas && node --test scripts/tests/service-generator.test.cjs"
+    "test:generators": "npm run build -w @anico/shared-schemas && node --test scripts/tests/service-generator.test.cjs",
+    "module:new": "gen run module",
+    "feature:new": "gen run feature"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

@@ -17,6 +17,8 @@ const {
   createService,
   normalizeName,
   registerDatabaseService,
+  createBackendModule,
+  createFrontendFeature,
 } = require('../../turbo/generators/service.cjs');
 
 test('validates service names without allowing paths, shell input or reserved names', () => {
@@ -115,7 +117,7 @@ test('renders independent workspaces, allocates ports and never copies credentia
       const source = await readFile(join(folder, file), 'utf8');
       assert.doesNotMatch(
         source,
-        /__SERVICE_NAME__|__DATABASE__|__PORT__|PRIVATE_SENTINEL/,
+        /__SERVICE_NAME__|__DATABASE__|__PORT__|__MODULE_NAME__|__MODULE_PASCAL__|PRIVATE_SENTINEL/,
       );
     }
     assert.deepEqual((await readdir(join(root, 'apps'))).sort(), [
@@ -123,6 +125,52 @@ test('renders independent workspaces, allocates ports and never copies credentia
       'breeding-service',
       'pet-care-service',
     ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('business modules are named, isolated and wired without overwriting existing code', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'anico-module-generator-'));
+  try {
+    await mkdir(join(root, 'apps'));
+    await createService('pet-care', root);
+    const index = join(root, 'apps/pet-care-service/src/modules/index.ts');
+    const before = await readFile(index, 'utf8');
+    assert.match(before, /PetCareRouter/);
+    assert.match(
+      await readFile(
+        join(root, 'apps/pet-care-service/src/health/health.ts'),
+        'utf8',
+      ),
+      /pet-care-service/,
+    );
+    await assert.rejects(
+      access(join(root, 'apps/pet-care-service/src/modules/health')),
+    );
+    const module = await createBackendModule('pet-care', 'feeding', root);
+    assert.equal(module.wired, true);
+    const after = await readFile(index, 'utf8');
+    assert.match(after, /PetCareRouter/);
+    assert.match(after, /router.use\('\/feeding', FeedingRouter/);
+    await assert.rejects(
+      createBackendModule('pet-care', 'feeding', root),
+      /already exists/,
+    );
+    await assert.rejects(createBackendModule('pet-care', '../escape', root));
+    await assert.rejects(createBackendModule('pet-care', 'health', root));
+    await createBackendModule('pet-care', 'plan1', root);
+    await assert.rejects(
+      createBackendModule('pet-care', 'plan-1', root),
+      /collides/,
+    );
+    await writeFile(index, '// user-maintained registry\n');
+    const manual = await createBackendModule('pet-care', 'visits', root);
+    assert.equal(manual.wired, false);
+    assert.equal(
+      await readFile(index, 'utf8'),
+      '// user-maintained registry\n',
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -187,6 +235,7 @@ test(
         'junction',
       );
       const result = await createService('template-check', root);
+      await createBackendModule(result.name, 'feeding', root);
       const cwd = join(root, 'apps', result.name);
       const backendModules = join(
         repository,
@@ -206,7 +255,16 @@ test(
         '..',
         'vitest.mjs',
       );
-      run(vitest, ['run', '--coverage'], cwd);
+      const { MongoBinary } = resolveFromBackend('mongodb-memory-server');
+      const binary = await MongoBinary.getPath();
+      const saved = process.env.MONGOMS_SYSTEM_BINARY;
+      process.env.MONGOMS_SYSTEM_BINARY = binary;
+      try {
+        run(vitest, ['run', '--coverage'], cwd);
+      } finally {
+        if (saved === undefined) delete process.env.MONGOMS_SYSTEM_BINARY;
+        else process.env.MONGOMS_SYSTEM_BINARY = saved;
+      }
       const cli = spawnSync(
         process.execPath,
         ['dist/database/cli.js', 'status', '--shared'],
@@ -214,6 +272,107 @@ test(
       );
       assert.equal(cli.status, 1);
       assert.match(cli.stderr, /INVALID_ARGUMENTS/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  'React feature compiles, renders and preserves the existing application',
+  { timeout: 30000 },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), 'anico-react-feature-'));
+    const repository = join(__dirname, '../..');
+    const frontendRequire = createRequire(
+      join(repository, 'apps/frontend/package.json'),
+    );
+    try {
+      const frontend = join(root, 'apps/frontend');
+      await mkdir(join(frontend, 'src'), { recursive: true });
+      await writeFile(
+        join(frontend, 'package.json'),
+        JSON.stringify({
+          name: '@anico/frontend',
+          type: 'module',
+          dependencies: { react: '*' },
+        }),
+      );
+      await writeFile(
+        join(frontend, 'src/App.tsx'),
+        'export function App() { return <h1>Existing application</h1>; }\n',
+      );
+      await symlink(
+        join(repository, 'node_modules'),
+        join(root, 'node_modules'),
+        'junction',
+      );
+      try {
+        await access(join(repository, 'apps/frontend/node_modules'));
+        await symlink(
+          join(repository, 'apps/frontend/node_modules'),
+          join(frontend, 'node_modules'),
+          'junction',
+        );
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      const result = await createFrontendFeature('animal-list', root);
+      assert.equal(result.component, 'AnimalListFeature');
+      assert.equal(
+        await readFile(join(frontend, 'src/App.tsx'), 'utf8'),
+        'export function App() { return <h1>Existing application</h1>; }\n',
+      );
+      await assert.rejects(
+        createFrontendFeature('animal-list', root),
+        /already exists/,
+      );
+      await copyFile(
+        join(repository, 'tsconfig.base.json'),
+        join(root, 'tsconfig.base.json'),
+      );
+      await copyFile(
+        join(repository, 'apps/frontend/tsconfig.json'),
+        join(frontend, 'tsconfig.json'),
+      );
+      const tsc = spawnSync(
+        process.execPath,
+        [frontendRequire.resolve('typescript/bin/tsc'), '-p', 'tsconfig.json'],
+        { cwd: frontend, encoding: 'utf8' },
+      );
+      assert.equal(tsc.status, 0, tsc.stdout + tsc.stderr);
+      const esbuild = createRequire(require.resolve('@turbo/gen/package.json'))(
+        'esbuild',
+      );
+      const output = join(frontend, 'feature.mjs');
+      await esbuild.build({
+        entryPoints: [join(frontend, 'src/features/animal-list/index.ts')],
+        outfile: output,
+        bundle: true,
+        platform: 'node',
+        format: 'esm',
+        packages: 'external',
+        jsx: 'automatic',
+        logLevel: 'silent',
+      });
+      const { AnimalListFeature } = await import(
+        require('node:url').pathToFileURL(output).href
+      );
+      const { createElement } = frontendRequire('react');
+      const { renderToStaticMarkup } = frontendRequire('react-dom/server');
+      const html = renderToStaticMarkup(
+        createElement(AnimalListFeature, {
+          title: 'Animals',
+          children: 'Custom content',
+        }),
+      );
+      assert.match(html, /Animals/);
+      assert.match(html, /Custom content/);
+      assert.doesNotMatch(html, /Obsah funkce/);
+      assert.match(
+        renderToStaticMarkup(createElement(AnimalListFeature)),
+        /Obsah funkce animal-list/,
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

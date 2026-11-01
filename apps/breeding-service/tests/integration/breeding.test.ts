@@ -16,6 +16,8 @@ import {
   vi,
 } from 'vitest';
 import { createApp } from '../../src/app.js';
+import { Router } from 'express';
+import { createModules } from '../../src/modules/index.js';
 import { mongooseBreedingPlanRepository } from '../../src/modules/breeding/infrastructure/mongoose-breeding-plan-repository.js';
 
 describe('breeding API + MongoDB', () => {
@@ -118,6 +120,29 @@ describe('breeding API + MongoDB', () => {
 
   it('returns 404 for unknown routes', async () => {
     await request(app).get('/missing').expect(404);
+  });
+
+  it('mounts generated module routers without replacing the existing breeding API', async () => {
+    const modules = createModules(connection!);
+    modules.use(
+      '/extra',
+      Router().get('/', (_req, res) => res.json({ module: 'extra' })),
+    );
+    const extended = createApp({
+      repository,
+      modules,
+      logger: pino({ level: 'silent' }),
+      health: { status: 'ok', service: 'breeding-service' },
+      isReady,
+    });
+    expect((await request(extended).get('/extra').expect(200)).body).toEqual({
+      module: 'extra',
+    });
+    await request(extended)
+      .post('/breeding-plans')
+      .send({ name: 'Existing route' })
+      .expect(201);
+    await request(extended).get('/health').expect(200);
   });
 
   it('reports readiness when its dependencies are available', async () => {
