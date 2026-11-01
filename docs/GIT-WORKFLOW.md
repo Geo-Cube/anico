@@ -24,8 +24,8 @@ Neřeš odmítnutý push pomocí force push ani vypnutím kontrol.
 | `main`      | Schválené stabilní verze; produkční nasazení zatím není připravené |
 
 Tok: `feature/*` → PR do `dev` → ověření → společný PR z `dev` do `main`.
-Automatické dev nasazování čeká na sloučení připraveného workflow;
-[aktuální stav](NASAZOVANI.md). Změny vzniklé přímo v `main` přenes PR zpět do `dev`.
+Po úspěšném CI a publikování images se změny z `dev` automaticky nasadí;
+[podrobnosti a hranice automatizace](NASAZOVANI.md). Změny vzniklé přímo v `main` přenes PR zpět do `dev`.
 
 ## Stejný postup v terminálu
 

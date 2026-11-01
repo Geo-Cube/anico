@@ -2,18 +2,20 @@
 
 **Vývojáři nemusí spouštět nic v tomto návodu.** Jejich postup je
 [PR do dev](GIT-WORKFLOW.md) a kontrola `https://dev.anico.online`.
-Automatika čeká pouze na review/merge nasazovacího workflow; infrastruktura,
-CI secrets a skutečné nasazení přes API jsou ověřené.
+Workflow už obsahuje automatický deploy po úspěšných kontrolách a publikování
+images z větve `dev`. Když některý předchozí krok selže, nová verze se nenasadí.
 
 ## Jak nasazení funguje
 
 Zelené CI → oba GHCR artifacts ze stejného commitu → ověření repository/revize/digestu
 → Coolify API → zdravý backend a frontend s odpovídajícím release manifestem.
 Nasazení jsou postupná; čekající starší commit se přeskočí, pokud není hlavou `dev`.
+Aktuálně workflow publikuje a nasazuje frontend a breeding-service; další
+workspace je potřeba do publish/deploy konfigurace a API routování doplnit výslovně.
 VPS stahuje hotové images. PR ani `main` dev nenasazují.
 Při výměně může nastat krátký výpadek; automatický rollback dat/migrací není zavedený.
 
-Nová DB změna přidává do dev konfigurace `MIGRATE_ON_START=true`: image provede
+Dev konfigurace používá `MIGRATE_ON_START=true`: image provede
 své migrace před spuštěním HTTP. Neúspěch zabrání startu nové verze; seed ani
 reset se při deploymentu neprovádějí. Migrační krok není transakční.
 Podrobnosti: [migrace a DB příkazy](DATABAZE.md).

@@ -1,57 +1,70 @@
 # __SERVICE_NAME__
 
-Express + TypeScript + Mongoose, Zod, Pino, Vitest a Supertest.
-Generátor vytvořil vlastní workspace `@anico/__SERVICE_NAME__` a ignorovaný `.env`
-s místní DB `__DATABASE___local` na portu MongoDB 27017; žádná vzdálená hesla.
-
-Z **kořene repozitáře**:
+Z kořene repozitáře:
 
 ```bash
-npx turbo run build --filter=@anico/__SERVICE_NAME__...
-npm run dev -w @anico/__SERVICE_NAME__
+npm run doctor -- --service __SERVICE_NAME__ --frontend
+npm run dev:fullstack -- --service __SERVICE_NAME__
 npm run test:coverage -w @anico/__SERVICE_NAME__
-npm run db:status -w @anico/__SERVICE_NAME__
-npm run db:new -w @anico/__SERVICE_NAME__ -- add-field
-npm run db:migrate -w @anico/__SERVICE_NAME__
 ```
 
-HTTP: `http://127.0.0.1:__PORT__/health`, readiness: `/ready`.
-Pro dev server musí běžet místní MongoDB nebo být doplněné vlastní připojení.
-Testy používají dočasnou MongoDB a místní databázi nepotřebují.
+Vzdálený vývoj vyžaduje `cloudflared`, tvůj stávající osobní `.env.remote.local`
+a provisioning DB oprávnění správcem. Generátor přidal službu do registru,
+ale nemění server ani hesla. [Přístupy a více služeb](../../docs/VZDALENY-VYVOJ.md).
 
-## Kam přidat vlastní funkce
+Samotný frontend proti týmovému API: `npm run dev:frontend`. Jen tento backend s osobní DB:
+`npm run dev:backend -- --service __SERVICE_NAME__`. Pro backend s místní DB
+`npm run dev -w @anico/__SERVICE_NAME__`. Místní výchozí `.env` používá
+`__DATABASE___local` na portu MongoDB 27017. `npm run setup` vytvoří pouze
+chybějící `.env` z veřejných příkladů, existující soubory nepřepisuje.
 
-Přidej `src/modules/NAZEV_DOMENY/` s `domain`, `application`, `infrastructure`
-a `http`. Doména a use cases nezávisí na Expressu ani Mongoose. Adaptéry spojuje
-`server.ts`; `app.ts` pouze sestavuje HTTP aplikaci bez otevření portu.
-Startovací modul `health` ukazuje toto rozdělení bez fiktivní obchodní logiky.
-Sdílené API kontrakty přidej do `@anico/shared-schemas` pro frontend i backend.
+## Vlastní modul a health check
 
-## DB a nasazení
+```text
+src/
+  health/                   # /health, /ready
+  modules/
+    __MODULE_NAME__/
+      domain/               # pravidla, typy, repository port
+      application/          # use cases
+      infrastructure/       # Mongoose adaptér
+      http/                 # Express + sdílená Zod validace
+    index.ts                # propojení modulů a adaptérů
+  app.ts                    # HTTP aplikace bez listen
+  server.ts                 # konfigurace, DB spojení, start a shutdown
+```
 
-Migrace začínají prázdné; `db:new` vytvoří soubor, který musíš implementovat.
-Seed je záměrně prázdný ping; doplň vlastní opakovatelné ukázkové záznamy.
-Pravidla zámků, retry a neměnných migrací: [databázový postup](../../docs/DATABAZE.md).
-Vzdáleně spusť z kořene `npm run dev:remote -- --service __SERVICE_NAME__`,
-nebo ze složky této služby `npm run dev:remote`. DB příkazy mají také wrappery
-`db:remote:status`, `db:remote:migrate`, `db:remote:seed`, `db:remote:reset`.
+První modul `__MODULE_NAME__` je funkční **předloha** s poli `id` a `name`:
+`GET /` vrací nejvýše 100 záznamů, `POST /` uloží validovaný záznam.
+Kolekce je `__MODULE_NAME___records`. Ukázková pole nahraď svou skutečnou doménou.
+Sdílené kontrakty `NamedRecordSchema` / `CreateNamedRecordSchema` jsou rovněž
+předloha; vlastní API kontrakty patří do `@anico/shared-schemas`.
 
-Osobní `.env.remote.local` stačí jeden v kořeni repozitáře; původní umístění
-v breeding-service funguje také. Launcher zachová účet a jeho `authSource`
-a vybere `__DATABASE___LOGIN`. Správce musí pro novou službu nejprve znovu
-aplikovat `deploy:dev-database`, který rozšíří role stávajících osobních účtů.
-Neměň vlastní heslo ani ručně nepřepisuj databázi v původním URI.
-Reset je povolen jen pro potvrzenou osobní DB této služby, nikoli společný dev.
-[Podrobný postup](../../docs/VZDALENY-VYVOJ.md).
+Ve společném lokálním běhu je frontend na http://127.0.0.1:5173,
+API na `/api/__MODULE_NAME__`, health na `/api/__MODULE_NAME__/health`.
+Přímý backend poslouchá na http://127.0.0.1:__PORT__.
+Lokální Vite proxy čte veřejné porty z `.env.example` jednotlivých služeb.
+
+Další modul a frontendová funkce:
 
 ```bash
+npm run module:new -- --args __SERVICE_NAME__ feeding
+npm run feature:new -- --args __MODULE_NAME__-list
+```
+
+Nový modul se připojí na `/feeding`, tedy lokálně `/api/__MODULE_NAME__/feeding`.
+Generátor používá značky v `src/modules/index.ts`. Pokud si registry přepíšeš
+ručně a značky odstraníš, pouze vygeneruje soubory a upozorní na ruční připojení.
+Frontendovou komponentu si vlož do požadované stránky; `App.tsx` se nepřepisuje.
+
+## DB a image
+
+```bash
+npm run db:new -w @anico/__SERVICE_NAME__ -- add-field
+npm run db:remote:migrate -- --service __SERVICE_NAME__
 docker build -f apps/__SERVICE_NAME__/Dockerfile -t anico/__SERVICE_NAME__:local .
 ```
 
-Kontejner poslouchá na portu 3000. Při nasazení nastav `HOST=0.0.0.0`,
-`MONGODB_URI`, `APP_ENV` a případně `MIGRATE_ON_START=true`. Bez nastavení
-`HOST` služba zůstává na loopbacku. Dockerfile používá vlastní allowlist
-`Dockerfile.dockerignore` a nebalí lokální `.env` ani zdrojové soubory do runtime.
-
-Generátor nic nenasazuje. GHCR publish, Coolify, API routing, proměnné a účty DB
-musí správce explicitně přidat do infrastruktury; současný deployment se nemění.
+Migrace i seed začínají bez obchodních dat. [DB postup](../../docs/DATABAZE.md).
+Kontejner používá port 3000; proměnné, GHCR publish, Coolify a veřejné API routy
+se konfigurují samostatně. Lokální Vite proxy nenastavuje routování na VPS.

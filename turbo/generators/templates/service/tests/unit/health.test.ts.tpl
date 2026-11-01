@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getHealth, getReadiness } from '../../src/modules/health/application/get-health.js';
+import { getHealth, getReadiness } from '../../src/health/health.js';
 import { databaseTarget, requireReset } from '../../src/database/policy.js';
 
 describe('__SERVICE_NAME__', () => {

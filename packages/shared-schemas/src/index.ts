@@ -22,3 +22,14 @@ export type ServiceHealthResponse = z.infer<typeof ServiceHealthResponseSchema>;
 export type CreateBreedingPlanInput = z.infer<typeof CreateBreedingPlanSchema>;
 export type BreedingPlanResponse = z.infer<typeof BreedingPlanSchema>;
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
+
+// Starter contract for generated modules. Add domain-specific contracts when
+// replacing the example record with the service's real business model.
+export const CreateNamedRecordSchema = z.strictObject({
+  name: z.string().trim().min(1).max(120),
+});
+export const NamedRecordSchema = CreateNamedRecordSchema.extend({
+  id: z.string().regex(/^[a-f\d]{24}$/i),
+});
+export type CreateNamedRecordInput = z.infer<typeof CreateNamedRecordSchema>;
+export type NamedRecord = z.infer<typeof NamedRecordSchema>;
