@@ -1,17 +1,18 @@
 # Co ještě zbývá
 
-Aktualizováno 31. 10. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
+Aktualizováno 1. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
 
 ## Nejbližší kroky
 
-- [ ] Review a merge větve `feature/automatic-dev-deployment` do `dev`.
-- [ ] Ověřit první automatický deploy z tohoto merge; přímé API nasazení už prošlo.
+- [x] Propojit CI → GHCR → Coolify pro automatické dev nasazení.
+- [ ] Po sloučení aktuálních úprav ověřit zelené CI a odpovídající release na devu.
 - [ ] Předat osobní DB konfigurace všem kolegům a ověřit jejich první spuštění.
 - [ ] Potvrdit týmový stack, hranice mikroservis a API kontrakty.
 - [ ] Propojit React s API a doplnit aplikační autentizaci/autorizaci.
-- [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service
-      v nové DB změně; běh v cloudu se aktivuje až po review/merge a nové image.
-- [ ] Rozšířit tento vzor a provisioning pro další mikroservisy.
+- [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
+- [ ] Review a merge aktuálních generátorů, diagnostiky a tří vývojových režimů.
+- [ ] Každou další službu samostatně zahrnout do publish, Coolify a API routování;
+      šablona a DB registr samy nasazení nevytvářejí.
 - [ ] Případné kopírování dat dev → osobní DB; nyní není implementované.
 
 ## Před produkcí

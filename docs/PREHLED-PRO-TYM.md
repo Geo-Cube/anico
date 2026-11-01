@@ -1,7 +1,8 @@
 # AniCo: vysvětlení pro tým
 
 **Vyvíjíme lokálně, společný výsledek ověřujeme na devu.**
-Každý vývojář má osobní DB; nasazená dev aplikace má společnou DB.
+Backendoví vývojáři používají osobní DB podle služby. Frontend může volat
+společné dev API, nebo jednu lokální službu; nasazený dev má společná data.
 Produkce bude samostatná a veřejná, zatím není nasazená.
 
 ## Co dělá který nástroj
@@ -44,11 +45,13 @@ GitHub přihlášení k devu nenahrazuje budoucí přihlášení zákazníků An
 
 ## Jak jde změna od vývojáře na server
 
-1. Stáhnu `dev`, založím feature větev a spustím `npm run dev:remote`.
+1. Stáhnu `dev`, založím feature větev a vyberu režim: `dev:frontend`,
+   `dev:backend -- --service animal`, nebo `dev:fullstack -- --service animal`
+   (vše přes `npm run` z kořene).
 2. Upravím kód, ověřím jej a otevřu PR do `dev`.
 3. CI a code owner review rozhodnou, zda lze změnu sloučit.
-4. Po merge vzniknou images v GHCR. Připravený deploy job je předá Coolify
-   podle konkrétních digestů; aktivuje se po sloučení nasazovacího workflow.
+4. Po úspěšných kontrolách merge do `dev` vzniknou images v GHCR. Deploy job
+   je předá Coolify podle konkrétních digestů a ověří zdraví obou komponent.
 
 Na VPS se aplikace nekompilují. Nová mikroservisa potřebuje vlastní odpovědnost,
 API kontrakt, image a konfiguraci nasazení; není to jen další složka.

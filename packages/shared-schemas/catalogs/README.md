@@ -15,7 +15,8 @@ ids.has('australsky-ovcak');
 ```
 
 Pro koně použij `horse-breeds.json`. V TypeScriptu zapni `resolveJsonModule`.
-Používající workspace musí mít závislost na `@anico/shared-schemas`; backend ji má.
+Používající workspace musí mít závislost na `@anico/shared-schemas`;
+frontend, breeding-service i nová generovaná služba ji mají.
 Stejný Set lze použít v Zodu přes `z.string().refine((id) => ids.has(id))`.
 
 JSONy nekopíruj do aplikací. Nejprve vyber druh zvířete, potom odpovídající plemeno.

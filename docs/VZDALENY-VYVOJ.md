@@ -13,13 +13,13 @@ Windows PowerShell: instalaci přes winget a variantu `npm.cmd` najdeš
 v [prvním spuštění](MANUAL-PRO-VYVOJARE.md#windows-powershell). Bash bootstrap ani `chmod` tam nepotřebuješ.
 
 ```bash
-npm ci
-npm run dev:remote
+npm run setup
+npm run dev:backend -- --service breeding
 ```
 
-Při výzvě dokonči GitHub přihlášení. Frontend: http://127.0.0.1:5173,
-backend: http://127.0.0.1:3000. **Ctrl+C** zavře i tunel.
-Pouhá kontrola připojení: `npm run dev:remote -- --check`.
+Při výzvě dokonči GitHub přihlášení. Breeding backend: http://127.0.0.1:3000. **Ctrl+C** zavře i tunel.
+Pouhá kontrola vybrané služby: `npm run dev:backend -- --service breeding --check`.
+Příklady předpokládají, že máš danou službu v checkoutu a správce ti přidělil její DB oprávnění.
 
 Migrace, seed a obnova vlastní DB: [databázový postup](DATABAZE.md).
 Pokud už tento dev proces běží, DB příkaz může použít jeho tunel přes
@@ -30,14 +30,20 @@ Pokud už tento dev proces běží, DB příkaz může použít jeho tunel přes
 Z kořene:
 
 ```bash
-npm run dev:remote -- --service auth
+npm run dev:backend -- --service auth
+# Backend a UI jedním příkazem:
+npm run dev:fullstack -- --service auth
 npm run db:remote:status -- --service auth
 npm run db:remote:migrate -- --service auth
 ```
 
 `auth` i `auth-service` znamená workspace `@anico/auth-service`. Spustí se jen
-vybraná služba; frontend spustíš zvlášť přes `npm run dev:frontend`.
-Bez `--service` se spustí breeding a frontend jako dosud, nikoli všechny služby.
+vybraná služba. `dev:fullstack` navíc spustí UI a proxy pro tuto lokální službu.
+Frontend může běžet také zvlášť přes `npm run dev:frontend`.
+Bez `--service` se běžný backend/fullstack nespustí. Samostatný frontend
+používá společné dev API a společná data; nepřipojí se automaticky k tvému backendu.
+Fullstack přepne pouze `/api/auth` na lokální auth a osobní DB. Ostatní API zůstanou
+na společném devu. Novou službu je potřeba zvlášť nasadit, než ji bude mít i společný dev.
 Z adresáře nové služby lze použít přímo `npm run dev:remote` díky jejímu wrapperu.
 
 Launcher vybere vlastní DB `anico_auth_LOGIN` a port z `.env.example` dané služby.
@@ -49,7 +55,7 @@ aplikovat IaC provisioning účtů; samotné vygenerování složky nemění ser
 Při souběžné práci použij jeden otevřený tunel. Další služba či DB příkaz jej použije takto:
 
 ```bash
-npm run dev:remote -- --service auth --use-running-tunnel
+npm run dev:backend -- --service auth --use-running-tunnel
 npm run db:remote:status -- --service auth --use-running-tunnel
 ```
 
@@ -74,7 +80,7 @@ Běžný backendový `.env` se nepřepisuje; režim používá jeden osobní `.e
 
 ## Tomův příklad: animal-service
 
-Z kořene `npm run dev:remote -- --service animal` vybere `anico_animal_tom_606`.
+Z kořene `npm run dev:backend -- --service animal` vybere `anico_animal_tom_606`.
 Tom použije svůj dosavadní osobní soubor. Parametr `authSource` má hodnotu
 `anico_breeding_tom_606`, protože označuje místo ověření účtu, nikoli pracovní DB služby.
 Před prvním použitím správce aplikuje provisioning pro registrovanou animal-service.
@@ -85,9 +91,9 @@ rootový příkaz s `--service animal` funguje s aktualizovaným launcherem.
 
 - Chybí konfigurace: vyžádej svůj soubor, nekopíruj soubor kolegy.
 - Odmítnutý GitHub: ověř správný účet a schválený ověřený e-mail.
-- Výpadek sítě nebo vypršení přihlášení: Ctrl+C a nové `dev:remote`.
+- Výpadek sítě nebo vypršení přihlášení: Ctrl+C a opětovné spuštění zvoleného backend/fullstack režimu.
 - Obsazený port: ukonči předchozí běh; problém neřeš připojením přes cizí proces.
 
-Soubor má být mimo Git a mít práva `600`; heslo nedávej do `VITE_*` ani do chatu.
+Soubor má být mimo Git; na macOS/Linuxu nastav práva `600`. Heslo nedávej do `VITE_*` ani do chatu.
 **Správce:** [DB účty a IaC](../infrastructure/DEV-DATABASE.md),
 [přidání kolegy](../infrastructure/ACCESS-MEMBERS.md).

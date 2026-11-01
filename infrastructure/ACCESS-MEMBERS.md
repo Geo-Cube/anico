@@ -36,7 +36,9 @@ npm run deploy:dev-database -w @anico/infrastructure
 ```
 
 5. Soukromě předej `.pulumi/dev-database/clients/GITHUB_LOGIN.env` a nech kolegu
-   ověřit GitHub login na devu, případně v Coolify, a `npm run dev:remote -- --check`.
+   ověřit GitHub login na devu, případně v Coolify, a `npm run dev:backend -- --service JEHO_SLUZBA --check`.
+   Nahraď `JEHO_SLUZBA` existujícím workspace, pro který má kolega osobní DB roli;
+   člen pracující pouze na frontendu osobní DB konfiguraci nepotřebuje.
 
 ## Odebrání
 

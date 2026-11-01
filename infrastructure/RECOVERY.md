@@ -34,7 +34,7 @@ npm run recovery:verify -w @anico/infrastructure -- /ABSOLUTNI/CESTA/KE/SNAPSHOT
 Snapshot obsahuje export, pět soukromých souborů z tabulky a checksum manifest.
 Kontrola importuje kopii do dočasného backendu, ověří identity/dešifrování a uklidí jej.
 Aktivní state nemění. **Snapshot má plaintext tokeny i passphrase, není šifrovaný archiv.**
-Zůstává na stejném Macu, takže jej nenahrazuje. Externí kopii ukládej šifrovaně.
+Zůstává na stejném Macu, takže nechrání před jeho ztrátou. Externí kopii ukládej šifrovaně.
 Zdrojový kód, privátní SSH klíče a serverová data snapshot nekopíruje.
 
 ## A. Ztratil se VPS, Mac a state zůstaly
