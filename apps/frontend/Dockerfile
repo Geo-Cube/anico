@@ -11,9 +11,15 @@ RUN --mount=type=cache,target=/root/.npm \
     npm ci --ignore-scripts --no-audit --no-fund --include-workspace-root \
     --workspace=@anico/frontend
 COPY apps/frontend/tsconfig.json apps/frontend/tsconfig.node.json apps/frontend/vite.config.ts apps/frontend/index.html ./apps/frontend/
+COPY apps/frontend/vite-proxy.mjs apps/frontend/vite-proxy.d.mts ./apps/frontend/
+COPY apps/frontend/dev-access.mjs apps/frontend/dev-access.d.mts ./apps/frontend/
+COPY apps/frontend/dev-api-proxy.mjs apps/frontend/dev-api-proxy.d.mts ./apps/frontend/
 COPY apps/frontend/src ./apps/frontend/src
+COPY packages/shared-schemas/tsconfig.json ./packages/shared-schemas/
+COPY packages/shared-schemas/src ./packages/shared-schemas/src
 COPY packages/shared-schemas/catalogs ./packages/shared-schemas/catalogs
-RUN npm run build --workspace=@anico/frontend
+RUN npm run build --workspace=@anico/shared-schemas \
+    && npm run build --workspace=@anico/frontend
 
 FROM nginx:stable-alpine@sha256:0e52bd054126cdc040b1276c0af347aeb02a41b9cfe305d6094767ac30e97949 AS runtime
 COPY apps/frontend/nginx.conf /etc/nginx/nginx.conf

@@ -1,16 +1,19 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import net from 'node:net';
 import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import {
+  loadRemoteWorkspace,
+  loadPersonalEnvironment,
+  assertAvailablePort,
+} from './dev-workspace.mjs';
+import {
   remoteDevelopmentConfig,
   redactRemoteLog,
   remoteArguments,
-  remoteServiceMetadata,
 } from './remote-dev-config.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -75,15 +78,6 @@ parentWatch = setInterval(() => {
 }, 500);
 parentWatch.unref();
 
-async function freePort(port) {
-  await new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once('error', () =>
-      reject(new Error(`Local port ${port} is occupied; stop its owner first`)),
-    );
-    server.listen(port, '127.0.0.1', () => server.close(resolve));
-  });
-}
 function launch(binary, args, options = {}) {
   const child = spawn(binary, args, {
     cwd: root,
@@ -102,49 +96,23 @@ try {
     extra,
     reuse,
     service: selectedService,
+    frontend,
   } = remoteArguments(process.argv.slice(2));
+  if (!selectedService && !check && !command)
+    throw new Error(
+      'Choose a service: npm run dev:backend -- --service animal, or npm run dev:fullstack -- --service animal',
+    );
   databaseTask = command !== undefined;
   const name = selectedService ?? 'breeding-service';
   const serviceDirectory = join(root, 'apps', name);
-  let service;
-  try {
-    service = remoteServiceMetadata(
-      name,
-      JSON.parse(readFileSync(join(serviceDirectory, 'package.json'), 'utf8')),
-      readFileSync(join(serviceDirectory, '.env.example'), 'utf8'),
-    );
-  } catch {
-    throw new Error(
-      `Workspace apps/${name} is missing or is not a configured AniCo MongoDB service`,
-    );
-  }
+  const service = loadRemoteWorkspace(root, name);
   const settings = JSON.parse(
     readFileSync(
       new URL('../infrastructure/dev-database.json', import.meta.url),
       'utf8',
     ),
   );
-  let text;
-  for (const file of new Set([
-    join(root, '.env.remote.local'),
-    join(serviceDirectory, '.env.remote.local'),
-    join(root, 'apps/breeding-service/.env.remote.local'),
-  ])) {
-    try {
-      text = readFileSync(file, 'utf8');
-      break;
-    } catch (error) {
-      if (error.code !== 'ENOENT')
-        throw new Error(
-          'Cannot read personal remote configuration; check file permissions',
-        );
-    }
-  }
-  if (text === undefined) {
-    throw new Error(
-      'Ask the administrator for your personal .env.remote.local and save it at the repository root (the existing breeding-service location is also supported)',
-    );
-  }
+  const text = loadPersonalEnvironment(root, serviceDirectory);
   const config = remoteDevelopmentConfig(text, settings, service);
   if (
     !reuse &&
@@ -153,12 +121,11 @@ try {
     throw new Error(
       'Install the Cloudflare client first (macOS: brew install cloudflared)',
     );
-  for (const port of reuse
-    ? []
-    : check || command
-      ? [settings.localPort]
-      : [settings.localPort, config.port, ...(selectedService ? [] : [5173])])
-    await freePort(port);
+  for (const port of [
+    ...(!reuse ? [settings.localPort] : []),
+    ...(!check && !command ? [config.port, ...(frontend ? [5173] : [])] : []),
+  ])
+    await assertAvailablePort(port);
   const tunnel = reuse
     ? undefined
     : launch(
@@ -222,7 +189,7 @@ try {
           'dev',
           '--',
           `--filter=${service.workspace}`,
-          ...(selectedService ? [] : ['--filter=@anico/frontend']),
+          ...(frontend ? ['--filter=@anico/frontend'] : []),
         ];
     const npmArgs = process.env.npm_execpath
       ? [process.env.npm_execpath, ...task]
@@ -230,7 +197,15 @@ try {
     const app = launch(
       process.env.npm_execpath ? process.execPath : 'npm',
       npmArgs,
-      { stdio: 'inherit', env: { ...process.env, ...config.env } },
+      {
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          ...config.env,
+          ANICO_DEV_SERVICE: service.name,
+          ANICO_API_MODE: 'hybrid',
+        },
+      },
     );
     const result = await Promise.race([
       once(app, 'exit').then(([code]) => code ?? 1),

@@ -23,7 +23,13 @@ apps/frontend/**
 !apps/frontend/index.html
 !apps/frontend/tsconfig.json
 !apps/frontend/tsconfig.node.json
+!apps/frontend/dev-access.mjs
+!apps/frontend/dev-access.d.mts
+!apps/frontend/dev-api-proxy.mjs
+!apps/frontend/dev-api-proxy.d.mts
 !apps/frontend/vite.config.ts
+!apps/frontend/vite-proxy.mjs
+!apps/frontend/vite-proxy.d.mts
 !apps/frontend/nginx.conf
 !apps/frontend/src/
 !apps/frontend/src/**
