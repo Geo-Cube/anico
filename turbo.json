@@ -18,7 +18,9 @@
         "LOG_LEVEL",
         "NODE_ENV",
         "APP_ENV",
-        "MIGRATE_ON_START"
+        "ANICO_DEV_SERVICE",
+        "MIGRATE_ON_START",
+        "ANICO_API_MODE"
       ]
     },
     "typecheck": {

@@ -15,8 +15,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run build --filter=@anico/shared-schemas && turbo watch dev",
-    "dev:frontend": "npm run dev -w @anico/frontend",
-    "dev:backend": "npm run build -w @anico/shared-schemas && npm run dev -w @anico/breeding-service",
+    "dev:frontend": "turbo run build --filter=@anico/shared-schemas && turbo watch dev --filter=@anico/frontend",
+    "dev:backend": "node scripts/dev-remote.mjs",
     "dev:remote": "node scripts/dev-remote.mjs",
     "test:dev-remote": "node --test scripts/tests/dev-remote.test.mjs",
     "test:deployment": "node --test scripts/tests/dev-deployment.test.mjs",
@@ -41,7 +41,11 @@
     "service:new": "gen run service",
     "test:generators": "npm run build -w @anico/shared-schemas && node --test scripts/tests/service-generator.test.cjs",
     "module:new": "gen run module",
-    "feature:new": "gen run feature"
+    "feature:new": "gen run feature",
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "test:dev-tools": "node --test scripts/tests/dev-tools.test.mjs scripts/tests/frontend-proxy.test.mjs scripts/tests/dev-api.test.mjs",
+    "dev:fullstack": "node scripts/dev-remote.mjs --frontend"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

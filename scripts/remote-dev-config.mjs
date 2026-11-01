@@ -16,7 +16,7 @@ export function remoteServiceMetadata(name, manifest, example) {
     !manifest.dependencies?.mongoose
   )
     throw new Error(
-      'Selected workspace must be an AniCo MongoDB backend service',
+      `apps/${name}/package.json must have name @anico/${name}, scripts.dev and dependencies.mongoose`,
     );
   const port = Number(parseEnv(example).PORT);
   if (!Number.isInteger(port) || port < 1024 || port > 65535)
@@ -125,11 +125,12 @@ export function remoteArguments(args) {
         '--owner',
         '--use-running-tunnel',
         '--service',
+        '--frontend',
       ].includes(key) ||
       values.has(key)
     )
       throw new Error('Unsupported or duplicate remote development option');
-    if (['--check', '--use-running-tunnel'].includes(key)) {
+    if (['--check', '--use-running-tunnel', '--frontend'].includes(key)) {
       if (inline !== undefined)
         throw new Error('Boolean flags do not accept values');
       values.set(key, true);
@@ -153,9 +154,11 @@ export function remoteArguments(args) {
       values.size >
         (check ? 1 : 0) +
           (values.has('--service') ? 1 : 0) +
+          (values.has('--frontend') ? 1 : 0) +
           (values.has('--service') && values.has('--use-running-tunnel')
             ? 1
             : 0)) ||
+    (values.has('--frontend') && (check || command)) ||
     (values.has('--retry') && command !== 'migrate') ||
     (values.has('--confirm') && !['reset', 'unlock'].includes(command)) ||
     (values.has('--owner') && command !== 'unlock') ||
@@ -178,5 +181,6 @@ export function remoteArguments(args) {
     service: values.has('--service')
       ? remoteServiceName(values.get('--service'))
       : undefined,
+    frontend: values.has('--frontend'),
   };
 }
