@@ -27,7 +27,7 @@ UI s vybraným lokálním backendem: `npm run dev:fullstack -- --service animal`
 
 Týmová aplikace: [dev.anico.online](https://dev.anico.online). Správa: [admin.anico.online](https://admin.anico.online).
 Obojí používá schválené GitHub účty. Produkce zatím není nasazená.
-Na devu je navíc ověřené aplikační Google přihlášení. Předávání této relace do
+Na devu je navíc ověřené aplikační Google i Microsoft přihlášení. Předávání této relace do
 lokálního vývoje zatím není hotové; GitHub Access sám chráněné API neodemkne.
 
 Po úspěšných kontrolách CI větev `dev` publikuje images a aktualizuje týmové dev nasazení.

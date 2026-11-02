@@ -1,13 +1,14 @@
 # Identita a přihlášení AniCo
 
-**Stav k 2. 11. 2026:** Google přihlášení a odhlášení na `dev.anico.online`
+**Stav k 2. 11. 2026:** Google i Microsoft přihlášení a odhlášení na `dev.anico.online`
 jsou nasazené a uživatelsky ověřené. CI i serverové kontroly ověřily shodné
 images, neveřejné porty, oddělené DB přístupy, odmítnutí anonymních požadavků
-a podvržené identity. Google údaje a reference release pro obnovu jsou uložené
+a podvržené identity. Credentials obou poskytovatelů a reference release pro obnovu jsou uložené
 v šifrovaném IaC configu; runtime secrets má jen auth-service.
-Microsoft aplikace je zaregistrovaná, credentials jsou uložené lokálně šifrovaně;
-zapojení do runtime je připravené v PR #20. Microsoft zatím na devu není zapnutý
-ani ověřený skutečným přihlášením. Apple není nakonfigurovaný.
+Microsoft je nasazený po PR #20; skutečný login/logout potvrdil uživatel.
+První vlastník je jmenovaný na Google identitě s auditním záznamem.
+Propojení poskytovatelů do jednoho účtu je připravené v této změně, ale zatím není nasazené.
+Apple a produkce jsou podle aktuální domluvy odložené.
 Lokální předávání cloudové aplikační relace zůstává další prací.
 Současný GitHub Access chrání vývojáře; nepřihlašuje zákazníka do AniCo.
 [Přehled hotových a chybějících částí](STAV-PROJEKTU.md).
@@ -44,6 +45,8 @@ type Identity = {
 
 Jeden provider účet se identifikuje ověřeným `issuer + subject`. Opakované
 přihlášení nevytváří nový účet. Účty různých poskytovatelů se neslučují podle e-mailu.
+Po výslovném propojení ověřených identit dostanou Google i Microsoft stejný
+`userId`, profil a role původního AniCo účtu.
 Každý nový skutečný účet dostane `breeder`. Schválení chovatele je samostatný
 business stav a neuděluje roli `admin`.
 
@@ -83,17 +86,18 @@ Fixture nevytváří token, cookie ani přihlašovací endpoint.
 Prefix `/api/auth` zajišťuje lokální Vite nebo nasazené cloudové routování;
 backend poslouchá následující cesty bez prefixu:
 
-| Metoda a cesta                                  | Účel                                                |
-| ----------------------------------------------- | --------------------------------------------------- |
-| `GET /providers`                                | Skutečně nakonfigurovaní poskytovatelé              |
-| `GET /login/google` (nebo `microsoft`, `apple`) | Zahájení OIDC                                       |
-| `GET /login/:provider/callback`                 | Callback Google/Microsoft                           |
-| `POST /login/apple/callback`                    | Apple `form_post` callback                          |
-| `GET /session`                                  | Identita, CSRF token a expirace; bez relace 401     |
-| `POST /logout`                                  | Zneplatnění aktuální relace; vyžaduje Origin a CSRF |
-| `PUT /users/:userId/admin`                      | `{ "admin": true/false }`, pouze owner a CSRF       |
-| `GET /.well-known/jwks.json`                    | Veřejný klíč pro ověření identity                   |
-| `GET /internal/verify`                          | Soukromý ForwardAuth endpoint, nikdy veřejná route  |
+| Metoda a cesta                                  | Účel                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------ |
+| `GET /providers`                                | Skutečně nakonfigurovaní poskytovatelé                             |
+| `GET /login/google` (nebo `microsoft`, `apple`) | Zahájení OIDC                                                      |
+| `GET /login/:provider/callback`                 | Callback Google/Microsoft                                          |
+| `POST /login/apple/callback`                    | Apple `form_post` callback                                         |
+| `GET /session`                                  | Identita, CSRF token a expirace; bez relace 401                    |
+| `POST /connections/:provider`                   | Zahájení propojení Google/Microsoft; čerstvá relace, Origin a CSRF |
+| `POST /logout`                                  | Zneplatnění aktuální relace; vyžaduje Origin a CSRF                |
+| `PUT /users/:userId/admin`                      | `{ "admin": true/false }`, pouze owner a CSRF                      |
+| `GET /.well-known/jwks.json`                    | Veřejný klíč pro ověření identity                                  |
+| `GET /internal/verify`                          | Soukromý ForwardAuth endpoint, nikdy veřejná route                 |
 
 Relace trvá standardně 8 hodin bez automatického prodlužování. Cookie je
 HttpOnly, na HTTPS Secure s prefixem `__Host-`, host-only a SameSite=Lax.
@@ -106,6 +110,10 @@ Zápisové požadavky posílají `X-CSRF-Token` z `/session` a správný `Origin
 Po callbacku může FE znovu načíst `/api/auth/session`; callback token do URL nevkládá.
 
 ## Role a první vlastník
+
+Na společném devu je první Google vlastník již jmenovaný a ověřený; jeho e-mail
+do dokumentace neukládáme. Níže je opakovatelný postup pro nové prostředí,
+nikoli příkaz k vytvoření druhého vlastníka.
 
 Po prvním skutečném přihlášení zjisti vlastní `userId` z `/session`.
 Správce z Macu s osobní DB konfigurací a běžícím vlastním DB tunelem provede:
@@ -234,5 +242,34 @@ správcem. Seed owner je zakázaná fixture a přístup k administraci nezíská
 5. Na devu ověř Google i Microsoft přihlášení a odhlášení. Microsoft není
    považovaný za ověřený, dokud neproběhne skutečný návrat z jeho přihlášení.
 
-Stejný e-mail u Googlu a Microsoftu nyní znamená dva oddělené AniCo účty.
-Automatické spojování účtů ani nové administrátorské oprávnění tím nevzniká.
+Bez explicitního propojení se Google a Microsoft registrují samostatně, i při
+shodném e-mailu. Samotné přidání poskytovatele nikomu nepřidává oprávnění.
+
+## Jeden účet přes Google i Microsoft
+
+**Propojení je připravené v kódu; před použitím musí projít CI, review a nasazením.**
+
+1. Odhlas se a přihlas se přes původního poskytovatele (u prvního vlastníka Google).
+2. Do pěti minut klikni v přihlašovacím panelu na **Propojit Microsoft**.
+3. Vyber a ověř druhý Microsoft účet. Nejdřív jej neregistruj běžným Microsoft loginem do AniCo.
+4. Po návratu panel ukáže oba poskytovatele. Odhlas se a zkus oba loginy;
+   `/api/auth/session` musí vracet stejné `identity.userId` a role.
+
+Shoda e-mailu není důkaz vlastnictví. Propojení vyžaduje čerstvou relaci původního
+účtu, přesný Origin, CSRF token a nový OIDC tok s PKCE, state, nonce a ověřeným
+podpisem. Callback je vázaný na původní relaci i prohlížeč; po odhlášení, přepnutí
+účtu nebo vypršení platnosti se odmítne. Při úspěchu se relace otočí.
+
+MongoDB ukládá ověřené identity v jednom uživatelském dokumentu; unikátní index
+brání připojení stejného issuer/subject k jinému uživateli. Zůstane původní `userId`,
+profil, role, owner slot i registrace; propojení má vlastní audit. Jeden účet má
+nejvýše jednu identitu každého poskytovatele. Odpojování účtů zatím není implementované.
+
+Identita již zaregistrovaná k jinému AniCo účtu se odmítne s `409 IDENTITY_ALREADY_LINKED`.
+Stávající účty ani jejich business data automaticky neslučujeme a nepřebíráme jejich role.
+
+Nová migrace `20261102223857-link-provider-identities` převede stávající primární
+identity a vytvoří unikátní index. Lokálně ji proveď přes
+`npm run db:remote:migrate -- --service auth`; na devu se spustí před startem.
+Starší auth image bez této migrace po změně DB odmítne neznámou migrační historii;
+případnou opravu proto nasazuj dopředu, nikoli prostým návratem starého auth image.

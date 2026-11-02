@@ -36,7 +36,7 @@ flowchart LR
   A --> T[Cloudflare Tunnel]
   T --> P[Traefik]
   P -->|/| F[React v Nginx]
-  P -->|/api/auth| S[Auth-service: Google a relace]
+  P -->|/api/auth| S[Auth-service: Google/Microsoft a relace]
   P -->|ověření relace pro aplikační API| S
   P -->|/api a podepsaná identita JWT| B[Express backend]
   S --> AD[Auth DB]
@@ -46,8 +46,8 @@ flowchart LR
 Docker na VPS nezveřejňuje aplikační ani DB porty přímo do internetu.
 Administrace je na `admin.anico.online`, aplikace na `dev.anico.online`.
 GitHub přihlášení k devu je přístup týmu. Samotný uživatel AniCo se na devu
-přihlašuje přes Google; backend ověřuje podepsanou identitu. Microsoft je
-připravený v PR #20, zatím není aktivovaný ani uživatelsky ověřený.
+přihlašuje přes Google nebo Microsoft; backend ověřuje podepsanou identitu. Oba poskytovatelé jsou
+nasazení a přihlášení i odhlášení je potvrzené v prohlížeči.
 
 ## Jak jde změna od vývojáře na server
 
@@ -65,10 +65,10 @@ API kontrakt, image a konfiguraci nasazení; není to jen další složka.
 
 ## Co ještě není hotové
 
-Google login/logout na devu funguje. Zbývá nasazení a skutečný test Microsoftu,
-Apple, předávání aplikační relace do lokálního vývoje, napojení business UI na API,
+Google i Microsoft login/logout na devu funguje. Zbývá nasazení a ověření
+propojení účtů do stejného `userId`, předávání relace do lokálního vývoje, napojení business UI na API,
 autorizace jednotlivých domén a doručování registrace další službě.
-Message broker není nasazený. Produkční nasazení, provozní limity,
+Message broker není nasazený. Apple a produkci jsme odložili. Provozní limity,
 monitoring a zálohy s testem obnovy ještě zbývají.
 IaC obnoví nastavení, **nikoli ztracená data bez záloh**.
 

@@ -1,11 +1,11 @@
 # Kde aplikace běží a jak se tam dostane
 
-| Prostředí      | Adresa                                 | Přístup                               | Stav                         |
-| -------------- | -------------------------------------- | ------------------------------------- | ---------------------------- |
-| Lokální vývoj  | `127.0.0.1:5173`; backend podle služby | Tvůj počítač                          | Tři vývojové režimy          |
-| Týmový dev     | `https://dev.anico.online`             | GitHub Access; aplikační login Google | Frontend + dva backendy běží |
-| Správa Coolify | `https://admin.anico.online`           | Schválený GitHub účet a Coolify role  | Běží                         |
-| Produkce       | `https://anico.online`                 | Má být veřejná                        | Zatím nenasazená             |
+| Prostředí      | Adresa                                 | Přístup                                         | Stav                         |
+| -------------- | -------------------------------------- | ----------------------------------------------- | ---------------------------- |
+| Lokální vývoj  | `127.0.0.1:5173`; backend podle služby | Tvůj počítač                                    | Tři vývojové režimy          |
+| Týmový dev     | `https://dev.anico.online`             | GitHub Access; aplikační login Google/Microsoft | Frontend + dva backendy běží |
+| Správa Coolify | `https://admin.anico.online`           | Schválený GitHub účet a Coolify role            | Běží                         |
+| Produkce       | `https://anico.online`                 | Má být veřejná                                  | Zatím nenasazená             |
 
 **Workflow automatického dev nasazení je součástí CI.** Spouští se po pushi do
 `dev`, jen pokud projdou povinné kontroly a publikování images. Červené CI
@@ -35,8 +35,8 @@ GitHub Access řeší týmový vstup, nikoli oprávnění uživatele k chráněn
 Images jsou veřejné `ghcr.io/geo-cube/anico-frontend` a
 `ghcr.io/geo-cube/anico-breeding-service` a `ghcr.io/geo-cube/anico-auth-service`. Nasazujeme digesty z CI artifactů
 `image-reference-SLUZBA-COMMIT`, všechny ze stejného commitu. Secrets se do images nedávají.
-Nasazená sestava obsahuje frontend, breeding a auth backend. Google login/logout
-je ověřený; Microsoft runtime je připravený v PR #20 a čeká na nasazení a skutečný test.
+Nasazená sestava obsahuje frontend, breeding a auth backend. Google i Microsoft login/logout
+jsou ověřené. Propojení obou přihlášení do jednoho účtu zatím čeká na nasazení.
 Postupy jsou v [auth návodu](AUTENTIZACE.md), přehled v [aktuálním stavu](STAV-PROJEKTU.md). Novou
 mikroservisu generátor automaticky nepřidá do publish ani nasazení; správce musí
 doplnit image, runtime proměnné, DB účet a API routu. Historické breeding API je
