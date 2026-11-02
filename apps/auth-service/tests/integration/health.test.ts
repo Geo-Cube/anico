@@ -61,7 +61,9 @@ describe('HTTP and database integration', () => {
   });
   it('migrates once, seeds and resets only its personal test database', async () => {
     const migrations = await loadMigrations();
-    expect(await migrateDatabase(connection, migrations)).toHaveLength(1);
+    expect(await migrateDatabase(connection, migrations)).toEqual(
+      migrations.map((migration) => migration.id),
+    );
     const target = {
       database: 'anico_auth_test',
       personal: true,

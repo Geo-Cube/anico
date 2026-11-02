@@ -61,11 +61,11 @@ připojí UI a ostatní API ponechá na společném devu. Příkazy sestaví sd�
 závislosti a sledují jejich změny.
 Číselníky plemen: [použití a stabilní ID](../packages/shared-schemas/catalogs/README.md).
 
-Frontend má připravené přihlášení Google a práci s relací; business obrazovky
+Frontend má nasazené přihlášení Google/Microsoft a práci s relací; business obrazovky
 zůstávají simulací. Auth backend, kontrakt identity a gateway jsou nasazené na devu;
-Google přihlášení a odhlášení jsou uživatelsky ověřené. Microsoft runtime je
-připravený v PR #20, čeká na schválení, nasazení a skutečný login test. Apple
-a lokální předávání cloudové relace zatím zbývají. [Postup a aktuální stav](AUTENTIZACE.md).
+Google i Microsoft login/logout jsou uživatelsky ověřené. Propojení obou
+poskytovatelů do jednoho účtu je připravené, ale čeká na review a nasazení.
+Lokální předávání cloudové relace zbývá; Apple a produkce jsou odložené. [Postup a aktuální stav](AUTENTIZACE.md).
 Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí login uživatelů AniCo.
 
 ## Co testovat

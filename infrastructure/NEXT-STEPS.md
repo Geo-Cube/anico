@@ -13,12 +13,12 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
       ověřit skutečné přihlášení i odhlášení. [Kontrakt](../docs/AUTENTIZACE.md).
 - [x] Zaregistrovat Microsoft aplikaci a uložit credentials lokálně šifrovaně;
       ověřit discovery/PKCE a připravit provisioning v PR #20.
-- [ ] Review a zelené CI PR #20, aplikace runtime secrets a nasazení;
+- [x] Review a zelené CI PR #20, aplikace runtime secrets a nasazení;
       poté skutečně ověřit Microsoft i Google login/logout a aktualizovat recovery release.
-- [ ] Zaregistrovat a nasadit Apple přihlášení.
+- [ ] Nasadit a ověřit propojení Google/Microsoft do jednoho AniCo účtu.
 - [ ] Doplnit bezpečné předávání cloudové identity lokálnímu FE/backendu.
 - [ ] Propojit business obrazovky Reactu s API; doplnit autorizaci podle doménových pravidel.
-- [ ] Jmenovat nebo ověřit prvního skutečného vlastníka na společném devu.
+- [x] Jmenovat a ověřit prvního skutečného Google vlastníka na společném devu; audit potvrzený.
 - [ ] Dohodnout příjemce `user.registered` a implementovat doručování registrace další službě.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
 - [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).
@@ -28,7 +28,14 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
       šablona a DB registr samy nasazení nevytvářejí.
 - [ ] Případné kopírování dat dev → osobní DB; nyní není implementované.
 
-## Před produkcí
+## Odložené: Apple a produkce
+
+Dle aktuální domluvy nyní Apple ani produkci nepřipravujeme. Následující
+kroky zůstávají evidované pro pozdější rozhodnutí.
+
+- [ ] Zaregistrovat a nasadit Apple přihlášení.
+
+### Před produkcí
 
 - [ ] Samostatná produkční DB a aplikační účet, secrets, služby a veřejné routování.
 - [ ] Schvalované produkční nasazení ověřených images a postup rollbacku.

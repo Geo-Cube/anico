@@ -47,6 +47,15 @@ export function authRouter(options: {
     );
     res.redirect(302, login.url);
   });
+  router.post('/connections/:provider', async (req, res) => {
+    const provider = providerSchema.parse(req.params.provider);
+    const token = cookies(req)[sessionName];
+    const current = await service.authenticate(token);
+    service.csrf(current.session, req.headers.origin, req.get('x-csrf-token'));
+    const login = await service.beginLink(provider, token!);
+    res.setHeader('Set-Cookie', cookie(loginName, login.browser, 600));
+    res.json({ url: login.url });
+  });
   async function callback(req: Request, res: import('express').Response) {
     const provider = providerSchema.parse(req.params.provider);
     const fields =
@@ -75,6 +84,7 @@ export function authRouter(options: {
         state,
         browser,
         response,
+        cookies(req)[sessionName],
       );
       const old = cookies(req)[sessionName];
       if (old) await service.logout(old);
@@ -97,6 +107,7 @@ export function authRouter(options: {
       identity: result.user,
       csrfToken: result.session.csrfToken,
       expiresAt: result.session.expiresAt.toISOString(),
+      linkedProviders: await service.linkedProviders(result.user.userId),
     });
   });
   router.post('/logout', async (req, res) => {

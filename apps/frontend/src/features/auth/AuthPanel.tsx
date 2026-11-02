@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 import { IdentitySchema, type Identity } from '@anico/shared-schemas';
-type Session = { identity: Identity; csrfToken: string; expiresAt: string };
+type Session = {
+  identity: Identity;
+  csrfToken: string;
+  expiresAt: string;
+  linkedProviders: string[];
+};
+const providerNames: Record<string, string> = {
+  google: 'Google',
+  microsoft: 'Microsoft',
+  apple: 'Apple',
+};
 export function AuthPanel({
   onIdentity,
 }: {
@@ -46,12 +56,17 @@ export function AuthPanel({
           if (!current.ok) throw new Error('Session unavailable');
           const body = await current.json();
           const identity = IdentitySchema.parse(body.identity);
+          const linkedProviders = body.linkedProviders ?? [];
           if (
             typeof body.csrfToken !== 'string' ||
-            typeof body.expiresAt !== 'string'
+            typeof body.expiresAt !== 'string' ||
+            !Array.isArray(linkedProviders) ||
+            !linkedProviders.every((provider) =>
+              ['google', 'microsoft', 'apple'].includes(provider),
+            )
           )
             throw new Error('Invalid session');
-          setSession({ ...body, identity });
+          setSession({ ...body, identity, linkedProviders });
           onIdentity(identity);
         }
       } catch {
@@ -100,6 +115,40 @@ export function AuthPanel({
       setBusy(false);
     }
   }
+  async function connect(provider: string) {
+    if (!session) return;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/auth/connections/${provider}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        headers: { 'X-CSRF-Token': session.csrfToken },
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setError(
+          body.error === 'RECENT_LOGIN_REQUIRED'
+            ? 'Pro propojení se nejdřív odhlas a znovu přihlas ke svému stávajícímu AniCo účtu.'
+            : 'Propojení se nepodařilo. Obnov stránku a zkus to znovu.',
+        );
+        return;
+      }
+      const url = new URL(body.url);
+      const expectedHost =
+        provider === 'google'
+          ? 'accounts.google.com'
+          : 'login.microsoftonline.com';
+      if (url.protocol !== 'https:' || url.hostname !== expectedHost)
+        throw new Error('Invalid redirect');
+      window.location.assign(url.href);
+    } catch {
+      setError('Propojení není dostupné. Zkus to prosím za chvíli.');
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <section aria-label="Přihlášení">
       {busy && <p role="status">Načítám přihlášení…</p>}
@@ -114,6 +163,29 @@ export function AuthPanel({
               session.identity.email ||
               'uživatel'}
           </p>
+          <p>
+            Propojená přihlášení:{' '}
+            {session.linkedProviders
+              .map((provider) => providerNames[provider])
+              .join(', ') || 'načítání není dostupné'}
+          </p>
+          {providers
+            .filter(
+              (provider) =>
+                provider !== 'apple' &&
+                !session.linkedProviders.includes(provider),
+            )
+            .map((provider) => (
+              <p key={provider}>
+                <button
+                  className="wf-btn"
+                  disabled={busy}
+                  onClick={() => void connect(provider)}
+                >
+                  Propojit {providerNames[provider]}
+                </button>
+              </p>
+            ))}
           <button
             className="wf-btn"
             disabled={busy}
@@ -130,16 +202,7 @@ export function AuthPanel({
               className="wf-btn wf-btn-primary"
               href={`/api/auth/login/${provider}`}
             >
-              Přihlásit přes{' '}
-              {
-                (
-                  {
-                    google: 'Google',
-                    microsoft: 'Microsoft',
-                    apple: 'Apple',
-                  } as Record<string, string>
-                )[provider]
-              }
+              Přihlásit přes {providerNames[provider]}
             </a>
           </p>
         ))

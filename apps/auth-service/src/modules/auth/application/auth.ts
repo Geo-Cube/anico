@@ -5,6 +5,7 @@ import {
   type AuthRepository,
   type Provider,
   type ProviderClient,
+  type LoginAttempt,
 } from '../domain/auth.js';
 export const hash = (value: string) =>
   createHash('sha256').update(value).digest('hex');
@@ -32,32 +33,75 @@ export function createAuthService(options: {
 }) {
   const { repository, providers } = options;
   const now = options.now ?? (() => new Date());
+  async function authenticate(token: string | undefined) {
+    if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token))
+      throw new AuthError(401, 'AUTHENTICATION_REQUIRED');
+    const session = await repository.session(hash(token), now());
+    if (!session) throw new AuthError(401, 'SESSION_EXPIRED');
+    const user = await repository.user(session.userId);
+    if (!user || user.status !== 'active' || user.fixture)
+      throw new AuthError(401, 'ACCOUNT_DISABLED');
+    return { user: publicIdentity(user), session };
+  }
+  function requireRecentLogin(session: { authenticatedAt?: Date }) {
+    const age = session.authenticatedAt
+      ? now().getTime() - session.authenticatedAt.getTime()
+      : Infinity;
+    if (age < 0 || age > 300000)
+      throw new AuthError(401, 'RECENT_LOGIN_REQUIRED');
+  }
+  async function begin(provider: Provider, link?: LoginAttempt['link']) {
+    const client = providers[provider];
+    if (!client) throw new AuthError(503, 'PROVIDER_NOT_CONFIGURED');
+    const state = random(),
+      nonce = random(),
+      verifier = random(),
+      browser = random();
+    const callback = `${options.publicOrigin}/api/auth/login/${provider}/callback`;
+    const url = await client.authorize({
+      state,
+      nonce,
+      verifier,
+      callback,
+      ...(link ? { prompt: 'select_account' as const } : {}),
+    });
+    await repository.saveAttempt(hash(state), {
+      provider,
+      state,
+      nonce,
+      verifier,
+      browserHash: hash(browser),
+      expiresAt: new Date(now().getTime() + 600000),
+      ...(link ? { link } : {}),
+    });
+    return { url, browser };
+  }
   return {
     providers: Object.keys(providers),
-    async begin(provider: Provider) {
-      const client = providers[provider];
-      if (!client) throw new AuthError(503, 'PROVIDER_NOT_CONFIGURED');
-      const state = random(),
-        nonce = random(),
-        verifier = random(),
-        browser = random();
-      const callback = `${options.publicOrigin}/api/auth/login/${provider}/callback`;
-      const url = await client.authorize({ state, nonce, verifier, callback });
-      await repository.saveAttempt(hash(state), {
-        provider,
-        state,
-        nonce,
-        verifier,
-        browserHash: hash(browser),
-        expiresAt: new Date(now().getTime() + 600000),
+    begin,
+    linkedProviders: (userId: string) => repository.linkedProviders(userId),
+    async beginLink(provider: Provider, token: string) {
+      if (provider === 'apple')
+        throw new AuthError(503, 'LINK_PROVIDER_UNSUPPORTED');
+      const result = await authenticate(token);
+      requireRecentLogin(result.session);
+      if (
+        (await repository.linkedProviders(result.user.userId)).includes(
+          provider,
+        )
+      )
+        throw new AuthError(409, 'PROVIDER_ALREADY_CONNECTED');
+      return begin(provider, {
+        userId: result.user.userId,
+        sessionHash: hash(token),
       });
-      return { url, browser };
     },
     async complete(
       provider: Provider,
       state: string,
       browser: string,
       response: URL | Request,
+      currentToken?: string,
     ) {
       const client = providers[provider];
       if (!client) throw new AuthError(503, 'PROVIDER_NOT_CONFIGURED');
@@ -68,6 +112,17 @@ export function createAuthService(options: {
       );
       if (!attempt || attempt.provider !== provider)
         throw new AuthError(401, 'INVALID_LOGIN_ATTEMPT');
+      if (attempt.link) {
+        if (
+          !currentToken ||
+          !equalSecret(hash(currentToken), attempt.link.sessionHash)
+        )
+          throw new AuthError(401, 'LINK_SESSION_MISMATCH');
+        const current = await authenticate(currentToken);
+        if (current.user.userId !== attempt.link.userId)
+          throw new AuthError(401, 'LINK_SESSION_MISMATCH');
+        requireRecentLogin(current.session);
+      }
       const identity = await client.exchange({
         ...attempt,
         callback: `${options.publicOrigin}/api/auth/login/${provider}/callback`,
@@ -75,7 +130,14 @@ export function createAuthService(options: {
       });
       if (identity.provider !== provider)
         throw new AuthError(401, 'INVALID_PROVIDER');
-      const user = await repository.register(identity);
+      // Never merge accounts by email or move an identity owned by another user.
+      if (attempt.link) {
+        const current = await authenticate(currentToken);
+        requireRecentLogin(current.session);
+      }
+      const user = attempt.link
+        ? await repository.linkIdentity(attempt.link.userId, identity)
+        : await repository.register(identity);
       if (user.status !== 'active' || user.fixture)
         throw new AuthError(403, 'ACCOUNT_DISABLED');
       const token = random();
@@ -83,20 +145,12 @@ export function createAuthService(options: {
         userId: user.userId,
         csrfToken: random(),
         expiresAt: new Date(now().getTime() + options.sessionSeconds * 1000),
+        authenticatedAt: now(),
       };
       await repository.createSession(hash(token), session);
       return { token, session, user: publicIdentity(user) };
     },
-    async authenticate(token: string | undefined) {
-      if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token))
-        throw new AuthError(401, 'AUTHENTICATION_REQUIRED');
-      const session = await repository.session(hash(token), now());
-      if (!session) throw new AuthError(401, 'SESSION_EXPIRED');
-      const user = await repository.user(session.userId);
-      if (!user || user.status !== 'active' || user.fixture)
-        throw new AuthError(401, 'ACCOUNT_DISABLED');
-      return { user: publicIdentity(user), session };
-    },
+    authenticate,
     csrf(
       session: { csrfToken: string },
       origin: string | undefined,

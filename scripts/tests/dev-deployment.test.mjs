@@ -132,6 +132,14 @@ test('failed API responses do not expose response bodies or credentials', async 
 
 test('auth release guards API access and mounts provider secrets only into auth', () => {
   const compose = composeForRelease(references, revision);
+  assert.match(
+    compose.services.auth.labels['traefik.http.routers.anico-dev-auth.rule'],
+    /connections/,
+  );
+  assert.doesNotMatch(
+    compose.services.auth.labels['traefik.http.routers.anico-dev-auth.rule'],
+    /internal\/verify/,
+  );
   assert.equal(
     compose.services.auth.environment.AUTH_PUBLIC_ORIGIN,
     'https://dev.anico.online',
