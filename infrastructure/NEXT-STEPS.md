@@ -8,9 +8,13 @@ Aktualizováno 1. 11. 2026. Detailní historii inicializace nahrazuje tento prac
 - [ ] Po sloučení aktuálních úprav ověřit zelené CI a odpovídající release na devu.
 - [ ] Předat osobní DB konfigurace všem kolegům a ověřit jejich první spuštění.
 - [ ] Potvrdit týmový stack, hranice mikroservis a API kontrakty.
+- [ ] Zaregistrovat Google/Microsoft/Apple pro auth-service, doplnit secrets,
+      společnou auth DB, ForwardAuth a předávání identity lokálním backendům.
+      Osobní auth DB a seed jsou připravené; [kontrakt](../docs/AUTENTIZACE.md).
 - [ ] Propojit React s API a doplnit aplikační autentizaci/autorizaci.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
-- [ ] Review a merge aktuálních generátorů, diagnostiky a tří vývojových režimů.
+- [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).
+- [ ] Review auth-service a sdíleného kontraktu identity; následně zapojení do backendů.
 - [ ] Každou další službu samostatně zahrnout do publish, Coolify a API routování;
       šablona a DB registr samy nasazení nevytvářejí.
 - [ ] Případné kopírování dat dev → osobní DB; nyní není implementované.

@@ -3,14 +3,14 @@
 Otevři **https://admin.anico.online** a přihlas se přes GitHub.
 V projektu **AniCo** je toto očekávané rozložení:
 
-| Kde                   | Co má být                          | Stav                           |
-| --------------------- | ---------------------------------- | ------------------------------ |
-| `dev`                 | Služba `anico-dev-applications`    | `running:healthy`              |
-| Uvnitř služby         | Komponenty `frontend` a `backend`  | Obě `running:healthy`          |
-| `prod`                | Zatím žádné aplikace               | Prázdné prostředí je v pořádku |
-| Servers → `localhost` | Stejný VPS, na kterém běží Coolify | Není potřeba druhý server      |
+| Kde                   | Co má být                                | Stav                           |
+| --------------------- | ---------------------------------------- | ------------------------------ |
+| `dev`                 | Služba `anico-dev-applications`          | `running:healthy`              |
+| Uvnitř služby         | Komponenty `frontend`, `backend`, `auth` | Všechny `running:healthy`      |
+| `prod`                | Zatím žádné aplikace                     | Prázdné prostředí je v pořádku |
+| Servers → `localhost` | Stejný VPS, na kterém běží Coolify       | Není potřeba druhý server      |
 
-**`Service` zde znamená Compose sestavu se dvěma kontejnery.** Nula samostatných
+**`Service` zde znamená Compose sestavu se třemi kontejnery po auth rollout.** Nula samostatných
 `Applications` u prostředí není chyba: komponenty jsou uvnitř této služby.
 MongoDB je spravovaná přímo Ansiblem, proto se v seznamu databází této služby
 neukazuje. `coolify-db` a `coolify-redis` slouží samotné administraci, nikoli AniCo.

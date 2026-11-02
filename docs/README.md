@@ -15,6 +15,7 @@ Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
 | Založit větev a PR v GitHub Desktop        | [Git workflow](GIT-WORKFLOW.md)           |
 | Pochopit review a blokovaný merge          | [Pravidla review](PRAVIDLA-REVIEW.md)     |
 | Umístit nový kód nebo použít schémata      | [Architektura](ARCHITEKTURA.md)           |
+| Přihlášení a kontrakt identity             | [Autentizace](AUTENTIZACE.md)             |
 | Pochopit stack a infrastrukturu            | [Přehled pro tým](PREHLED-PRO-TYM.md)     |
 | Zjistit, co se nasazuje                    | [Nasazování](NASAZOVANI.md)               |
 | Spravovat dev deployment a rollback        | [Dev nasazení](DEV-NASAZENI.md)           |

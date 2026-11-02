@@ -1,11 +1,13 @@
 # Kde má být nový kód
 
-| Složka                    | Odpovědnost                                       |
-| ------------------------- | ------------------------------------------------- |
-| `apps/frontend`           | React UI, TypeScript, Vite                        |
-| `apps/breeding-service`   | Express mikroservisa, Mongoose, Pino              |
-| `packages/shared-schemas` | Zod schémata a odvozené typy pro API              |
-| `infrastructure`          | Cloud, server a nasazování; není aplikační doména |
+| Složka                    | Odpovědnost                                        |
+| ------------------------- | -------------------------------------------------- |
+| `apps/frontend`           | React UI, TypeScript, Vite                         |
+| `apps/auth-service`       | OIDC přihlášení, účty, relace a role               |
+| `packages/auth`           | Ověření aplikační identity v backendových službách |
+| `apps/breeding-service`   | Express mikroservisa, Mongoose, Pino               |
+| `packages/shared-schemas` | Zod schémata a odvozené typy pro API               |
+| `infrastructure`          | Cloud, server a nasazování; není aplikační doména  |
 
 Npm workspaces propojí balíčky, Turborepo řídí pořadí buildů.
 Všichni používáme jeden kořenový `package-lock.json`.
@@ -56,7 +58,10 @@ připojí UI a ostatní API ponechá na společném devu. Příkazy sestaví sd�
 závislosti a sledují jejich změny.
 Číselníky plemen: [použití a stabilní ID](../packages/shared-schemas/catalogs/README.md).
 
-Frontend zatím nemá router, aplikační přihlášení ani API klienta.
+Frontend má připravené přihlášení Google a práci s relací; business obrazovky
+zůstávají simulací. Auth backend, kontrakt identity a gateway jsou připravené
+pro rollout; živý Google callback čeká na ověření po nasazení. Microsoft, Apple
+a lokální předávání cloudové relace zatím zbývají. [Postup a aktuální stav](AUTENTIZACE.md).
 Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí login uživatelů AniCo.
 
 ## Co testovat
