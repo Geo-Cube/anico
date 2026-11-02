@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { inMemoryBreeders } from '../support/in-memory.js';
 
 import {
   canSubmitVerificationRequest,
@@ -22,9 +23,7 @@ describe('canSubmitVerificationRequest', () => {
 
     expect(result).toBe(true);
   });
-});
 
-describe('canSubmitVerificationRequest', () => {
   it('disallows submitting when a request exists', () => {
     const breeder: Breeder = {
       breederId: 'user-123',
@@ -51,5 +50,32 @@ describe('canSubmitVerificationRequest', () => {
     const result = canSubmitVerificationRequest(breeder);
 
     expect(result).toBe(false);
+  });
+
+  it('submits a verification request', async () => {
+    const repository = inMemoryBreeders();
+
+    await repository.provision({
+      breederId: 'user-123',
+      firstName: 'Jan',
+      lastName: 'Novák',
+      emailAddress: 'jan@example.com',
+    });
+
+    const result = await repository.submitVerification('user-123', {
+      firstName: 'Jan',
+      lastName: 'Novák',
+      emailAddress: 'jan@example.com',
+      breedingStationName: 'Stanice U Nováků',
+      breedingStationNumber: '123456',
+      breedingStationCertificate: {
+        fileName: 'certifikat.pdf',
+        fileReference: 'file-123',
+      },
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.verificationRequest).not.toBeNull();
+    expect(result?.verificationRequest?.status).toBe('PENDING');
   });
 });

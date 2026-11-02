@@ -27,4 +27,32 @@ describe('inMemoryBreeders', () => {
     expect(second.lastName).toBe('Novák');
     expect(second.emailAddress).toBe('jan@example.com');
   });
+
+  it('finds breeder by verification request ID', async () => {
+    const repository = inMemoryBreeders();
+
+    const breeder = await repository.provision({
+      breederId: 'user-123',
+      firstName: 'Jan',
+      lastName: 'Novák',
+      emailAddress: 'jan@example.com',
+    });
+
+    breeder.verificationRequest = {
+      requestId: 'request-123',
+      status: 'PENDING',
+      submittedAt: new Date(),
+      breedingStationCertificate: {
+        fileName: 'certifikat.pdf',
+        fileReference: 'file-123',
+      },
+      reviewedBy: null,
+      reviewedAt: null,
+      rejectionReason: null,
+    };
+
+    const found = await repository.findByVerificationRequestId('request-123');
+
+    expect(found?.breederId).toBe('user-123');
+  });
 });

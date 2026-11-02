@@ -25,4 +25,12 @@ describe('inMemoryBreeders', () => {
 
     expect(result).toBeNull();
   });
+
+  it('returns null when verification request does not exist', async () => {
+    const repository = inMemoryBreeders();
+
+    const result = await repository.findByVerificationRequestId('request-999');
+
+    expect(result).toBeNull();
+  });
 });
