@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inMemoryBreeders } from '../support/in-memory';
+import { inMemoryBreeders } from '../support/in-memory.js';
 
 describe('inMemoryBreeders', () => {
   it('finds an existing breeder by ID', async () => {
