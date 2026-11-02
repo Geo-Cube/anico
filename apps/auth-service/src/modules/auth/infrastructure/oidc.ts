@@ -80,6 +80,7 @@ export function oidcProvider(
         state: input.state,
         nonce: input.nonce,
       };
+      if (input.prompt) params.prompt = input.prompt;
       if (provider === 'apple') params.response_mode = 'form_post';
       else {
         params.code_challenge = await oidc.calculatePKCECodeChallenge(

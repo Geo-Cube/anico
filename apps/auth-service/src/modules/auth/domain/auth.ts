@@ -16,6 +16,7 @@ export interface Session {
   userId: string;
   csrfToken: string;
   expiresAt: Date;
+  authenticatedAt?: Date;
 }
 export interface LoginAttempt {
   provider: Provider;
@@ -24,10 +25,13 @@ export interface LoginAttempt {
   verifier: string;
   browserHash: string;
   expiresAt: Date;
+  link?: { userId: string; sessionHash: string };
 }
 export interface AuthRepository {
   register(identity: ExternalIdentity): Promise<User>;
   user(userId: string): Promise<User | null>;
+  linkedProviders(userId: string): Promise<Provider[]>;
+  linkIdentity(userId: string, identity: ExternalIdentity): Promise<User>;
   createSession(hash: string, session: Session): Promise<void>;
   session(hash: string, now: Date): Promise<Session | null>;
   revoke(hash: string): Promise<void>;
@@ -49,6 +53,7 @@ export interface ProviderClient {
     nonce: string;
     verifier: string;
     callback: string;
+    prompt?: 'select_account';
   }): Promise<string>;
   exchange(input: {
     state: string;

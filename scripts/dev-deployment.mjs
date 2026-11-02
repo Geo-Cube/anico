@@ -153,7 +153,7 @@ export function composeForRelease(references, revision, options = {}) {
       labels: {
         ...labels('auth', 3000),
         'traefik.http.routers.anico-dev-auth.rule':
-          'Host(`dev.anico.online`) && (Path(`/api/auth/providers`) || Path(`/api/auth/session`) || Path(`/api/auth/logout`) || Path(`/api/auth/.well-known/jwks.json`) || PathRegexp(`^/api/auth/login/(google|microsoft|apple)(/callback)?$`) || PathRegexp(`^/api/auth/users/[a-f0-9-]{36}/admin$`))',
+          'Host(`dev.anico.online`) && (Path(`/api/auth/providers`) || Path(`/api/auth/session`) || Path(`/api/auth/logout`) || Path(`/api/auth/.well-known/jwks.json`) || PathRegexp(`^/api/auth/login/(google|microsoft|apple)(/callback)?$`) || PathRegexp(`^/api/auth/connections/(google|microsoft)$`) || PathRegexp(`^/api/auth/users/[a-f0-9-]{36}/admin$`))',
         'traefik.http.routers.anico-dev-auth.priority': '200',
         'traefik.http.routers.anico-dev-auth.middlewares': 'anico-auth-prefix',
         'traefik.http.middlewares.anico-auth-prefix.stripprefix.prefixes':

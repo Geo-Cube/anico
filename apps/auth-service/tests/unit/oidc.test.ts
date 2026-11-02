@@ -102,6 +102,12 @@ describe('OIDC protocol adapters', () => {
         const url = new URL(await client.authorize(input));
         expect(url.searchParams.get('state')).toBe(state);
         expect(url.searchParams.get('nonce')).toBe(nonce);
+        if (provider !== 'apple') {
+          const linking = new URL(
+            await client.authorize({ ...input, prompt: 'select_account' }),
+          );
+          expect(linking.searchParams.get('prompt')).toBe('select_account');
+        }
         expect(url.searchParams.get('code_challenge_method')).toBe(
           provider === 'apple' ? null : 'S256',
         );
