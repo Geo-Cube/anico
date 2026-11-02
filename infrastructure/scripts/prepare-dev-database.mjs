@@ -39,6 +39,16 @@ try {
       credentials,
       discoverDatabaseServices(),
     );
+    const auth = secret('devAuthCredentials', true);
+    if (auth) {
+      if (
+        auth.database?.username !== 'anico_auth_dev_app' ||
+        auth.database.database !== 'anico_auth' ||
+        !/^[a-f0-9]{64}$/.test(auth.database.password)
+      )
+        throw new Error('Invalid auth account');
+      users.push({ ...auth.database, active: true, databases: ['anico_auth'] });
+    }
     privateFile(
       new URL('mongodb/users.json', directory),
       JSON.stringify(users),

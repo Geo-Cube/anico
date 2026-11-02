@@ -1,0 +1,48 @@
+# Test-only extension to compose.app.yaml. No real users, providers or secrets.
+services:
+  auth:
+    image: anico/auth-service:local
+    build:
+      context: ..
+      dockerfile: apps/auth-service/Dockerfile
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/anico_auth_local
+      APP_ENV: local
+      AUTH_PUBLIC_ORIGIN: https://auth-smoke.example.test
+      AUTH_ISSUER: https://auth-smoke.example.test/api/auth
+      AUTH_AUDIENCE: anico-api-smoke
+      AUTH_SIGNING_KEY_FILE: /run/auth-test/signing-key.pem
+      AUTH_GATEWAY_KEY_FILE: /run/auth-test/gateway-key
+      MIGRATE_ON_START: 'true'
+    command: [node, /opt/anico/auth-smoke.mjs]
+    volumes:
+      - ../scripts/auth-container-smoke.mjs:/opt/anico/auth-smoke.mjs:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /run/auth-test:rw,noexec,nosuid,size=1m,uid=1000,gid=1000,mode=0700
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+
+  auth-proxy:
+    image: traefik:v3.7@sha256:22a759fb803abb5c3a7ba5d5a55a201c5fb0fc8993d5c72c47a89075e64f1953
+    user: '65532:65532'
+    command:
+      [
+        --entrypoints.web.address=:8080,
+        --providers.file.filename=/etc/traefik/dynamic.yaml,
+        --log.level=ERROR,
+      ]
+    volumes:
+      - ${ANICO_AUTH_SMOKE_CONFIG:?test config required}:/etc/traefik/dynamic.yaml:ro
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=8m']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      auth:
+        condition: service_healthy

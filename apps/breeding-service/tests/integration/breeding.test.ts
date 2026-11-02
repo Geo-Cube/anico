@@ -17,6 +17,8 @@ import {
 } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { Router } from 'express';
+import { requireAuth } from '@anico/auth';
+import { testIdentity } from '@anico/auth/testing';
 import { createModules } from '../../src/modules/index.js';
 import { mongooseBreedingPlanRepository } from '../../src/modules/breeding/infrastructure/mongoose-breeding-plan-repository.js';
 
@@ -143,6 +145,31 @@ describe('breeding API + MongoDB', () => {
       .send({ name: 'Existing route' })
       .expect(201);
     await request(extended).get('/health').expect(200);
+  });
+
+  it('keeps health public and rejects unauthenticated business requests before parsing input', async () => {
+    const secured = createApp({
+      repository,
+      logger: pino({ level: 'silent' }),
+      health: { status: 'ok', service: 'breeding-service' },
+      isReady,
+      authenticate: requireAuth(async () => testIdentity()),
+    });
+    await request(secured).get('/health').expect(200);
+    await request(secured)
+      .get('/breeding-plans')
+      .set('x-user-id', 'forged')
+      .expect(401);
+    await request(secured)
+      .post('/breeding-plans')
+      .set('Content-Type', 'application/json')
+      .send('{')
+      .expect(401);
+    await request(secured)
+      .post('/breeding-plans')
+      .set('x-anico-identity', 'test-only-fixture')
+      .send({ name: 'Authenticated create' })
+      .expect(201);
   });
 
   it('reports readiness when its dependencies are available', async () => {

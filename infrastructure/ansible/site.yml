@@ -21,3 +21,6 @@
 
 - name: Configure development applications when explicitly enabled
   ansible.builtin.import_playbook: dev-deployment.yml
+
+- name: Install auth runtime when configured
+  ansible.builtin.import_playbook: dev-auth.yml

@@ -65,7 +65,10 @@ Zdrojový kód, privátní SSH klíče a serverová data snapshot nekopíruje.
 6. Data obnov z odpovídajících záloh **před spuštěním aplikací**. Coolify DB potřebuje
    původní APP_KEY a serverové SSH soubory; bootstrap není import záloh.
    Bez záloh vznikne nová konfigurace a prázdné DB, nikoli stav před výpadkem.
-7. Podle [dev nasazení](../docs/DEV-NASAZENI.md) nastav požadovaný release a obnov
+7. Pro auth rollout potřebuje šifrovaný `devAuthCredentials` také ověřený
+   trojkomponentový `bootstrapRelease`; [registrace referencí](../docs/AUTENTIZACE.md#správce-první-google-rollout).
+   Bootstrap bez něj odmítne nechráněný historický release.
+   Podle [dev nasazení](../docs/DEV-NASAZENI.md) nastav požadovaný release a obnov
    GitHub CI konfiguraci; ID nové Coolify služby se může změnit.
 8. Ověř firewall, administraci, dev login i data; vytvoř nový recovery snapshot.
    Čtecí příkazy jsou v [návodu správce](README.md).

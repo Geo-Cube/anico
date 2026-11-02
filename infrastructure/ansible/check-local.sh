@@ -15,6 +15,7 @@ ansible-playbook -i inventory.example.yml application-environments.yml --syntax-
 ansible-playbook -i inventory.example.yml kernel-maintenance.yml --syntax-check
 ansible-playbook -i inventory.example.yml dev-database.yml --syntax-check
 ansible-playbook -i inventory.example.yml dev-deployment.yml --syntax-check
+ansible-playbook -i inventory.example.yml dev-auth.yml --syntax-check
 ansible-playbook -i inventory.example.yml site.yml --syntax-check
 python3 ../scripts/validate_environments.py ../environments.json
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ../tests -p '*_test.py'

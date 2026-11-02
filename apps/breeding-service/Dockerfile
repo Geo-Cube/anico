@@ -6,25 +6,29 @@ COPY package.json package-lock.json ./
 COPY apps/breeding-service/package.json ./apps/breeding-service/
 COPY apps/frontend/package.json ./apps/frontend/
 COPY packages/shared-schemas/package.json ./packages/shared-schemas/
+COPY packages/auth/package.json ./packages/auth/
 COPY infrastructure/package.json ./infrastructure/
 
 FROM manifests AS build
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --ignore-scripts --no-audit --no-fund --include-workspace-root \
-    --workspace=@anico/shared-schemas --workspace=@anico/breeding-service
+    --workspace=@anico/shared-schemas --workspace=@anico/auth --workspace=@anico/breeding-service
 COPY tsconfig.base.json ./
 COPY packages/shared-schemas/tsconfig.json ./packages/shared-schemas/
 COPY packages/shared-schemas/src ./packages/shared-schemas/src
 COPY packages/shared-schemas/catalogs ./packages/shared-schemas/catalogs
+COPY packages/auth/tsconfig.json ./packages/auth/
+COPY packages/auth/src ./packages/auth/src
 COPY apps/breeding-service/tsconfig.json ./apps/breeding-service/
 COPY apps/breeding-service/src ./apps/breeding-service/src
 RUN npm run build --workspace=@anico/shared-schemas \
+    && npm run build --workspace=@anico/auth \
     && npm run build --workspace=@anico/breeding-service
 
 FROM manifests AS production-dependencies
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
-    --workspace=@anico/shared-schemas --workspace=@anico/breeding-service
+    --workspace=@anico/shared-schemas --workspace=@anico/auth --workspace=@anico/breeding-service
 
 FROM node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS runtime
 ENV NODE_ENV=production PORT=3000
@@ -32,6 +36,8 @@ WORKDIR /app
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=production-dependencies /app/apps/breeding-service ./apps/breeding-service
 COPY --from=production-dependencies /app/packages/shared-schemas ./packages/shared-schemas
+COPY --from=production-dependencies /app/packages/auth ./packages/auth
+COPY --from=build /app/packages/auth/dist ./packages/auth/dist
 COPY --from=build /app/apps/breeding-service/dist ./apps/breeding-service/dist
 COPY apps/breeding-service/migrations ./apps/breeding-service/migrations
 COPY apps/breeding-service/seeds ./apps/breeding-service/seeds

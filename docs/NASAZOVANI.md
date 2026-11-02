@@ -31,9 +31,10 @@ Jméno služby a její lokální port určuje workspace; breeding má port 3000.
 | Pulumi + Ansible     | Obnovitelný předpis cloudu a serveru                |
 
 Images jsou veřejné `ghcr.io/geo-cube/anico-frontend` a
-`ghcr.io/geo-cube/anico-breeding-service`. Nasazujeme digesty z CI artifactů
-`image-reference-SLUZBA-COMMIT`, obě ze stejného commitu. Secrets se do images nedávají.
-Aktuální cloudová sestava obsahuje pouze frontend a breeding backend. Novou
+`ghcr.io/geo-cube/anico-breeding-service` a `ghcr.io/geo-cube/anico-auth-service`. Nasazujeme digesty z CI artifactů
+`image-reference-SLUZBA-COMMIT`, všechny ze stejného commitu. Secrets se do images nedávají.
+Připravená sestava obsahuje frontend, breeding a auth backend. První auth rollout
+a ověření Google loginu jsou popsány v [auth návodu](AUTENTIZACE.md). Novou
 mikroservisu generátor automaticky nepřidá do publish ani nasazení; správce musí
 doplnit image, runtime proměnné, DB účet a API routu. Historické breeding API je
 pod `/api/health`, `/api/ready`, `/api/breeding-plans`; nové prefixy

@@ -34,6 +34,7 @@ infrastructure/**
 **/.env.*
 **/*.env
 **/*.pem
+**/*.p8
 **/*.key
 **/*.p12
 **/*.pfx
