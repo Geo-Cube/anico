@@ -38,9 +38,9 @@ používej `npm.cmd` místo `npm`; není potřeba měnit execution policy.
 ### Osobní konfigurace a spuštění
 
 Od správce si vyžádej **svůj** konfigurační soubor a ulož ho jako
-`apps/breeding-service/.env.remote.local`. Potom:
+`apps/<moje-service>/.env.remote.local`. Potom:
 
-Na macOS/Linuxu nastav `chmod 600 apps/breeding-service/.env.remote.local`.
+Na macOS/Linuxu nastav `chmod 600 apps/<moje-service>/.env.remote.local`.
 Ve Windows krok `chmod` vynech. Potom:
 
 ```bash
@@ -78,7 +78,7 @@ Při prvním běhu potřebují internet ke stažení MongoDB binárky.
 | Co měním              | Složka                                       |
 | --------------------- | -------------------------------------------- |
 | React UI              | `apps/frontend/src`                          |
-| Backendovou funkci    | `apps/breeding-service/src/modules/breeding` |
+| Backendovou funkci    | `apps/<moje-service>/src/modules/<funkce>`   |
 | Sdílené Zod kontrakty | `packages/shared-schemas`                    |
 
 Podrobnosti: [architektura](ARCHITEKTURA.md). Frontend zatím obsahuje úvodní
