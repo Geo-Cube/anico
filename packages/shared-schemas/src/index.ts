@@ -16,6 +16,7 @@ export const ServiceHealthResponseSchema = z.strictObject({
 export const ServiceNameSchema = z.enum([
   'breeding-service',
   'breeder-service',
+  'animal-service',
 ]);
 
 export const HealthResponseSchema = z.strictObject({
@@ -41,3 +42,10 @@ export const NamedRecordSchema = CreateNamedRecordSchema.extend({
 });
 export type CreateNamedRecordInput = z.infer<typeof CreateNamedRecordSchema>;
 export type NamedRecord = z.infer<typeof NamedRecordSchema>;
+
+//soubor - sdilena vnorena struktura
+export const StoredFileSchema = z.strictObject({
+  fileName: z.string().regex(/^[a-f\d]{24}$/i),
+  fileReference: z.string().url(),
+});
+export type StoredFile = z.infer<typeof StoredFileSchema>;
