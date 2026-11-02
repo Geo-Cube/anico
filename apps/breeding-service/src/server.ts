@@ -1,5 +1,7 @@
 import { HealthResponseSchema } from '@anico/shared-schemas';
 import mongoose from 'mongoose';
+import { createIdentityVerifier, requireAuth } from '@anico/auth';
+import { createRemoteJWKSet } from 'jose';
 import { pino } from 'pino';
 import { z } from 'zod';
 import { createApp } from './app.js';
@@ -27,6 +29,7 @@ const logger = pino({
   redact: [
     'req.headers.authorization',
     'req.headers.cookie',
+    'req.headers["x-anico-identity"]',
     'req.headers["cf-access-token"]',
     'req.headers["cf-access-jwt-assertion"]',
     'req.headers["cf-access-client-secret"]',
@@ -53,9 +56,26 @@ try {
       );
     }
   }
+  let authenticate;
+  if (process.env.AUTH_JWKS_URL) {
+    if (!process.env.AUTH_ISSUER || !process.env.AUTH_AUDIENCE)
+      throw new Error('Missing identity configuration');
+    authenticate = requireAuth(
+      createIdentityVerifier({
+        key: createRemoteJWKSet(new URL(process.env.AUTH_JWKS_URL)),
+        issuer: process.env.AUTH_ISSUER,
+        audience: process.env.AUTH_AUDIENCE,
+      }),
+    );
+  } else if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.APP_ENV !== 'local'
+  )
+    throw new Error('Production API requires configured auth');
   let stopping = false;
   const app = createApp({
     modules: createModules(connection),
+    ...(authenticate ? { authenticate } : {}),
     repository: mongooseBreedingPlanRepository(connection),
     logger,
     isReady: () => !stopping && connection.readyState === 1,
