@@ -1,20 +1,22 @@
 # Co ještě zbývá
 
-Aktualizováno 1. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
+Aktualizováno 2. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
 
 ## Nejbližší kroky
 
 - [x] Propojit CI → GHCR → Coolify pro automatické dev nasazení.
-- [ ] Po sloučení aktuálních úprav ověřit zelené CI a odpovídající release na devu.
+- [x] Po sloučení auth a dokumentace ověřit zelené CI a odpovídající release na devu.
 - [ ] Předat osobní DB konfigurace všem kolegům a ověřit jejich první spuštění.
 - [ ] Potvrdit týmový stack, hranice mikroservis a API kontrakty.
-- [ ] Zaregistrovat Google/Microsoft/Apple pro auth-service, doplnit secrets,
-      společnou auth DB, ForwardAuth a předávání identity lokálním backendům.
-      Osobní auth DB a seed jsou připravené; [kontrakt](../docs/AUTENTIZACE.md).
+- [x] Nasadit Google přihlášení, společnou auth DB, runtime secrets a ForwardAuth;
+      ověřit skutečné přihlášení i odhlášení. [Kontrakt](../docs/AUTENTIZACE.md).
+- [ ] Zaregistrovat a zapojit Microsoft a Apple; předávání cloudové identity
+      lokálním backendům zůstává samostatným krokem.
 - [ ] Propojit React s API a doplnit aplikační autentizaci/autorizaci.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
 - [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).
-- [ ] Review auth-service a sdíleného kontraktu identity; následně zapojení do backendů.
+- [x] Review auth-service a sdíleného kontraktu identity (PR #17), oprava gateway (PR #19).
+- [ ] Zapojit ověřování identity do každé další doménové služby.
 - [ ] Každou další službu samostatně zahrnout do publish, Coolify a API routování;
       šablona a DB registr samy nasazení nevytvářejí.
 - [ ] Případné kopírování dat dev → osobní DB; nyní není implementované.

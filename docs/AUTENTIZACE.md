@@ -1,9 +1,10 @@
 # Identita a přihlášení AniCo
 
-**Stav:** auth-service je implementovaná a otestovaná s testovacími OIDC servery.
-Google klient je zaregistrovaný a jeho údaje jsou uložené v šifrovaném IaC configu.
-Společná auth DB, runtime secrets, gateway, FE a CI jsou připravené pro nasazení.
-Živý Google callback ověříme až po zeleném CI, review a prvním nasazení.
+**Stav k 2. 11. 2026:** Google přihlášení a odhlášení na `dev.anico.online`
+jsou nasazené a uživatelsky ověřené. CI i serverové kontroly ověřily shodné
+images, neveřejné porty, oddělené DB přístupy, odmítnutí anonymních požadavků
+a podvržené identity. Google údaje a reference release pro obnovu jsou uložené
+v šifrovaném IaC configu; runtime secrets má jen auth-service.
 Microsoft a Apple nejsou nakonfigurované; lokální předávání cloudové aplikační relace zůstává další prací.
 Současný GitHub Access chrání vývojáře; nepřihlašuje zákazníka do AniCo.
 
@@ -75,7 +76,7 @@ Fixture nevytváří token, cookie ani přihlašovací endpoint.
 
 ## Relace a endpointy
 
-Prefix `/api/auth` zajišťuje lokální Vite nebo budoucí cloudové routování;
+Prefix `/api/auth` zajišťuje lokální Vite nebo nasazené cloudové routování;
 backend poslouchá následující cesty bez prefixu:
 
 | Metoda a cesta                                  | Účel                                                |
@@ -178,8 +179,9 @@ npm run deploy:dev-database -w @anico/infrastructure
 npm run deploy:dev-auth -w @anico/infrastructure
 ```
 
-Init načte jen Google Client ID/secret z ignorovaného `apps/auth-service/.env`
-a uloží je do šifrovaného `devAuthCredentials`. Existující DB heslo, gateway key
+Init načte Google a případné Microsoft Client ID/secret z ignorovaného `apps/auth-service/.env`
+a uloží je do šifrovaného `devAuthCredentials`. Neúplné credentials odmítne;
+poskytovatele při vynechání lokálních hodnot neodebere. Existující DB heslo, gateway key
 a podpisový klíč zachová. Google hodnoty se nedávají do sdílených Coolify proměnných.
 Runtime mounty dostává pouze auth-service; frontend ani breeding je nemají.
 Samotná příprava secrets stávající release nepřepíná.
@@ -207,3 +209,22 @@ zachová novější trojici nasazenou CI.
 Nakonec otevři dev v prohlížeči: GitHub Access → Přihlásit přes Google → návrat
 do aplikace. Nový účet je breeder; první skutečný owner se jmenuje výslovně
 správcem. Seed owner je zakázaná fixture a přístup k administraci nezíská.
+
+## Správce: přidání Microsoft přihlášení
+
+1. V Microsoft Entra zaregistruj aplikaci pro školní/pracovní i osobní účty.
+   Platforma je **Web**, callback přesně
+   `https://dev.anico.online/api/auth/login/microsoft/callback`.
+2. Do ignorovaného `apps/auth-service/.env` přidej `MICROSOFT_CLIENT_ID`
+   (ID aplikace, ne objektu) a `MICROSOFT_CLIENT_SECRET` (hodnota, ne ID secretu).
+   Zaznamenej si expiraci secretu a před ní jej obnov; Google credentials ponech.
+3. Spusť `npm run init:dev-auth -w @anico/infrastructure`. Aktualizuje pouze
+   šifrovaný config; databázové heslo, podpisový klíč a existující relace zachová.
+4. Po zeleném CI a code-owner review spusť `npm run deploy:dev-auth -w @anico/infrastructure`
+   a nech nasadit schválený dev release. Auth načítá secret soubor při startu;
+   samotné přepsání souboru již běžící proces nepřepne.
+5. Na devu ověř Google i Microsoft přihlášení a odhlášení. Microsoft není
+   považovaný za ověřený, dokud neproběhne skutečný návrat z jeho přihlášení.
+
+Stejný e-mail u Googlu a Microsoftu nyní znamená dva oddělené AniCo účty.
+Automatické spojování účtů ani nové administrátorské oprávnění tím nevzniká.

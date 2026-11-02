@@ -62,8 +62,8 @@ závislosti a sledují jejich změny.
 Číselníky plemen: [použití a stabilní ID](../packages/shared-schemas/catalogs/README.md).
 
 Frontend má připravené přihlášení Google a práci s relací; business obrazovky
-zůstávají simulací. Auth backend, kontrakt identity a gateway jsou připravené
-pro rollout; živý Google callback čeká na ověření po nasazení. Microsoft, Apple
+zůstávají simulací. Auth backend, kontrakt identity a gateway jsou nasazené na devu;
+Google přihlášení a odhlášení jsou uživatelsky ověřené. Microsoft, Apple
 a lokální předávání cloudové relace zatím zbývají. [Postup a aktuální stav](AUTENTIZACE.md).
 Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí login uživatelů AniCo.
 
