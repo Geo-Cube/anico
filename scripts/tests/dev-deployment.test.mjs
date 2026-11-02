@@ -7,15 +7,17 @@ import {
 } from '../dev-deployment.mjs';
 
 const revision = 'a'.repeat(40);
-const references = ['frontend', 'breeding-service'].map((service, i) => ({
-  service,
-  image: `ghcr.io/geo-cube/anico-${service}`,
-  digest: `sha256:${String(i).repeat(64)}`,
-  revision,
-}));
+const references = ['frontend', 'breeding-service', 'auth-service'].map(
+  (service, i) => ({
+    service,
+    image: `ghcr.io/geo-cube/anico-${service}`,
+    digest: `sha256:${String(i).repeat(64)}`,
+    revision,
+  }),
+);
 
-test('release requires both approved repositories, matching revision and digests', () => {
-  assert.equal(Object.keys(validateRelease(references, revision)).length, 2);
+test('release requires all approved repositories, matching revision and digests', () => {
+  assert.equal(Object.keys(validateRelease(references, revision)).length, 3);
   for (const invalid of [
     references.slice(0, 1),
     [references[0], references[0]],
@@ -119,5 +121,57 @@ test('failed API responses do not expose response bodies or credentials', async 
     (error) =>
       /HTTP 403/.test(error.message) &&
       !/private-token|sensitive-response-value/.test(error.message),
+  );
+});
+
+test('auth release guards API access and mounts provider secrets only into auth', () => {
+  const compose = composeForRelease(references, revision);
+  assert.equal(
+    compose.services.auth.environment.AUTH_PUBLIC_ORIGIN,
+    'https://dev.anico.online',
+  );
+  assert.equal(
+    compose.services.auth.environment.AUTH_AUDIENCE,
+    'anico-api-dev',
+  );
+  assert.equal(
+    compose.services.auth.environment.GOOGLE_CLIENT_SECRET,
+    undefined,
+  );
+  assert.equal(
+    compose.services.backend.environment.AUTH_JWKS_URL,
+    'http://auth:3000/.well-known/jwks.json',
+  );
+  assert.match(
+    compose.services.backend.labels[
+      'traefik.http.routers.anico-dev-backend.middlewares'
+    ],
+    /anico-session@file/,
+  );
+  assert.equal(
+    compose.services.backend.labels[
+      'traefik.http.routers.anico-dev-api-health.middlewares'
+    ],
+    'anico-dev-api-prefix',
+  );
+  const authRule =
+    compose.services.auth.labels['traefik.http.routers.anico-dev-auth.rule'];
+  assert.doesNotMatch(authRule, /PathPrefix|internal/);
+  assert.ok(
+    compose.services.auth.secrets.every((secret) =>
+      secret.source.startsWith('auth-'),
+    ),
+  );
+  assert.ok(
+    compose.services.backend.secrets.every(
+      (secret) => !secret.source.startsWith('auth-'),
+    ),
+  );
+  assert.throws(() => validateRelease(references.slice(0, 2), revision));
+  assert.equal(
+    Object.keys(
+      validateRelease(references.slice(0, 2), revision, { legacy: true }),
+    ).length,
+    2,
   );
 });

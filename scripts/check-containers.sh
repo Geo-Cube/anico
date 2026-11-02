@@ -11,9 +11,13 @@ context_image="anico/context-check:$smoke_project"
 context_probe="$(mktemp apps/breeding-service/src/.env.docker-check.XXXXXX)"
 printf '%s\n' 'build-context-sentinel' > "$context_probe"
 export ANICO_BACKEND_PORT=0 ANICO_FRONTEND_PORT=0
+ANICO_AUTH_SMOKE_CONFIG="$(mktemp "${TMPDIR:-/tmp}/anico-auth-proxy.XXXXXX")"
+export ANICO_AUTH_SMOKE_CONFIG
+node scripts/auth-container-smoke.mjs --proxy-config > "$ANICO_AUTH_SMOKE_CONFIG"
+chmod 0644 "$ANICO_AUTH_SMOKE_CONFIG"
 
 compose() {
-  docker compose --project-name "$smoke_project" -f infrastructure/compose.app.yaml "$@"
+  docker compose --project-name "$smoke_project" -f infrastructure/compose.app.yaml -f infrastructure/compose.auth-smoke.yaml "$@"
 }
 
 cleanup() {
@@ -24,7 +28,7 @@ cleanup() {
   fi
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker image rm "$context_image" >/dev/null 2>&1 || true
-  rm -f "$context_probe"
+  rm -f "$context_probe" "$ANICO_AUTH_SMOKE_CONFIG"
   exit "$smoke_status"
 }
 trap cleanup EXIT
@@ -54,7 +58,8 @@ database="$(compose ps --quiet mongodb)"
 backend_url="http://$(compose port breeding-service 3000)"
 frontend_url="http://$(compose port frontend 8080)"
 
-for container in "$backend" "$frontend"; do
+auth="$(compose ps --quiet auth)"
+for container in "$backend" "$frontend" "$auth"; do
   test "$(docker exec "$container" id -u)" -ne 0
   test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true
 done
@@ -144,5 +149,26 @@ wait_for_status 503
 curl --fail --silent --show-error "$backend_url/health" >/dev/null
 docker start "$database" >/dev/null
 wait_for_status 200
+
+
+
+# The auth image must start with mounted test-only keys and a separate DB.
+docker exec "$auth" node --input-type=module -e '
+  const base="http://127.0.0.1:3000";
+  for(const [path,status] of [["/ready",200],["/session",401],["/internal/verify",401],["/login/google",503]]) {
+    const response=await fetch(base+path,{redirect:"manual"});
+    if(response.status!==status)throw new Error("Auth HTTP smoke failed: "+path);
+  }
+  const jwks=await(await fetch(base+"/.well-known/jwks.json")).json();
+  if(jwks.keys.length!==1||jwks.keys[0].d)throw new Error("Invalid public JWKS");
+'
+
+# Exercise the pinned Traefik ForwardAuth implementation, not just a mock.
+# The deliberately public test-only key exists solely in this isolated stack.
+docker exec "$auth" node --input-type=module -e '
+  const response=await fetch("http://auth-proxy:8080/protected",{headers:{"X-Anico-Identity":"forged","X-Anico-Gateway-Key":"forged"}});
+  const body=await response.json();
+  if(response.status!==401 || body.error!=="AUTHENTICATION_REQUIRED")throw new Error("ForwardAuth did not authenticate the gateway or did not reject missing session");
+'
 
 echo 'Container checks passed: private context, production dependencies, non-root/read-only runtime, HTTP, persistence, SPA caching, graceful shutdown and DB recovery.'

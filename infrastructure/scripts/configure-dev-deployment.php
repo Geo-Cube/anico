@@ -22,9 +22,10 @@ try {
         // IaC re-application must preserve a newer CI release instead of rolling it back.
         if ($service) {
             $previous = parseDockerComposeYaml($service->docker_compose_raw);
-            foreach (['frontend', 'backend'] as $name) {
+            if (isset($previous['services']['auth']) && !isset($compose['services']['auth'])) throw new RuntimeException('Auth downgrade refused');
+            foreach (['frontend' => 'frontend', 'backend' => 'breeding-service', 'auth' => 'auth-service'] as $name => $repository) {
+                if (!isset($compose['services'][$name]) || !isset($previous['services'][$name])) continue;
                 $image = $previous['services'][$name]['image'] ?? '';
-                $repository = $name === 'frontend' ? 'frontend' : 'breeding-service';
                 if (!preg_match('#^ghcr\.io/geo-cube/anico-'.$repository.'@sha256:[a-f0-9]{64}$#', $image)) throw new RuntimeException('Unmanaged image');
                 $compose['services'][$name]['image'] = $image;
                 $compose['services'][$name]['labels']['com.anico.revision'] = $previous['services'][$name]['labels']['com.anico.revision'];
@@ -32,9 +33,11 @@ try {
             $revision = $compose['services']['frontend']['labels']['com.anico.revision'];
             $compose['services']['frontend']['volumes'][0]['source'] = './anico-release-'.$revision.'.json';
             $compose['services']['frontend']['volumes'][0]['target'] = '/usr/share/nginx/html/anico-release-'.$revision.'.json';
+            $releaseImages=['frontend'=>$compose['services']['frontend']['image'],'breeding-service'=>$compose['services']['backend']['image']];
+            if (isset($compose['services']['auth'])) $releaseImages['auth-service']=$compose['services']['auth']['image'];
             $compose['services']['frontend']['volumes'][0]['content'] = json_encode([
                 'revision' => $revision,
-                'images' => ['frontend' => $compose['services']['frontend']['image'], 'breeding-service' => $compose['services']['backend']['image']],
+                'images' => $releaseImages,
             ], JSON_THROW_ON_ERROR);
         }
         $service ??= new App\Models\Service;
@@ -76,9 +79,11 @@ try {
         if (!$token->exists || $rotated) $token->expires_at = now()->addYear();
         if ($token->expires_at && $token->expires_at->isPast()) throw new RuntimeException('Deploy token expired; rotate explicitly');
         if ($token->isDirty()) { $token->save(); $changed = true; }
-        return ['uuid' => $service->uuid, 'changed' => $changed];
+        $revisions = array_unique(array_map(fn($part) => $part['labels']['com.anico.revision'], $compose['services']));
+        return ['uuid' => $service->uuid, 'changed' => $changed, 'readyToStart' => count($revisions) === 1];
     });
     if (in_array('--start', $argv, true)) {
+        if (!$result['readyToStart']) throw new RuntimeException('Mixed bootstrap release; deploy verified CI images first');
         App\Actions\Service\StartService::run(App\Models\Service::where('uuid', $result['uuid'])->sole());
     }
     echo json_encode($result, JSON_THROW_ON_ERROR), "\n";

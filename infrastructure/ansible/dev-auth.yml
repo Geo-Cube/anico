@@ -1,0 +1,42 @@
+- name: Prepare isolated AniCo authentication runtime
+  hosts: anico
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Prepare encrypted auth inputs locally
+      ansible.builtin.command:
+        argv: [node, '{{ playbook_dir }}/../scripts/prepare-dev-auth.mjs']
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+      register: anico_auth_prepared
+    - name: Skip auth runtime until configured
+      ansible.builtin.meta: end_play
+      when: not (anico_auth_prepared.stdout | from_json).enabled
+  tasks:
+    - name: Create private auth runtime directory
+      ansible.builtin.file:
+        path: /srv/anico/dev/auth/secrets
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Install auth-only runtime secrets
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/dev-auth/{{ item }}'
+        dest: '/srv/anico/dev/auth/secrets/{{ item }}'
+        owner: '1000'
+        group: '1000'
+        mode: '0400'
+      loop: [mongodb-uri, provider.env, signing-key.pem, gateway-key]
+      no_log: true
+    - name: Install private session verification middleware
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/dev-auth/gateway.json'
+        dest: /data/coolify/proxy/dynamic/anico-session.json
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
