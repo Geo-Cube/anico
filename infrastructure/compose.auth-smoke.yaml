@@ -34,11 +34,11 @@ services:
     command:
       [
         --entrypoints.web.address=:8080,
-        --providers.file.filename=/etc/traefik/dynamic.yaml,
+        --providers.file.directory=/etc/traefik/dynamic/,
         --log.level=ERROR,
       ]
     volumes:
-      - ${ANICO_AUTH_SMOKE_CONFIG:?test config required}:/etc/traefik/dynamic.yaml:ro
+      - ${ANICO_AUTH_SMOKE_CONFIG:?test config required}:/etc/traefik/dynamic/anico-session.yaml:ro
     tmpfs: ['/tmp:rw,noexec,nosuid,size=8m']
     read_only: true
     cap_drop: [ALL]

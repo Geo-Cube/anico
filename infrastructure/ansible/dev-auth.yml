@@ -35,8 +35,13 @@
     - name: Install private session verification middleware
       ansible.builtin.copy:
         src: '{{ playbook_dir }}/../../.pulumi/dev-auth/gateway.json'
-        dest: /data/coolify/proxy/dynamic/anico-session.json
+        # Directory discovery ignores .json; JSON content is valid YAML.
+        dest: /data/coolify/proxy/dynamic/anico-session.yaml
         owner: root
         group: root
         mode: '0600'
       no_log: true
+    - name: Remove ignored legacy JSON configuration
+      ansible.builtin.file:
+        path: /data/coolify/proxy/dynamic/anico-session.json
+        state: absent
