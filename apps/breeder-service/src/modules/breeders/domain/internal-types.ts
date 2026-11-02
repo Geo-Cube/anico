@@ -4,7 +4,7 @@ export type VerificationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type AccountState = 'NOT_SUBMITTED' | VerificationStatus;
 
 export type Decision =
-  { decision: 'APPROVED' } | { decision: 'REJECTED'; rejectionReason: string };
+  { decision: 'APPROVED' } | { decision: 'REJECTED'; rejectionReason: string }; //discriminated union
 
 export type DecisionRecord = Decision & {
   reviewedBy: string;

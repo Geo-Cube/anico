@@ -1,17 +1,9 @@
 import type { StoredFile } from '@anico/shared-schemas';
-import type {
-  VerificationStatus,
-  AccountState,
-  Decision,
-} from './internal-types.js';
-import {
-  BreederNotFoundError,
-  VerificationAlreadySubmittedError,
-} from './errors.js';
+import type { VerificationStatus, AccountState } from './internal-types.js';
 
 //interfaces
 export interface VerificationRequest {
-  id: string;
+  requestId: string;
   status: VerificationStatus;
   submittedAt: Date;
   breedingStationCertificate: StoredFile;
@@ -21,7 +13,7 @@ export interface VerificationRequest {
 }
 
 export interface Breeder {
-  breederId: string; // user ID
+  breederId: string;
   firstName: string;
   lastName: string;
   emailAddress: string;
@@ -29,6 +21,26 @@ export interface Breeder {
   breedingStationNumber: string | null;
   isVerified: boolean;
   verificationRequest: VerificationRequest | null;
+}
+
+export interface NewBreeder {
+  breederId: string;
+  firstName: string;
+  lastName: string;
+  emailAddress: string;
+}
+
+export interface Submission {
+  firstName: string;
+  lastName: string;
+  emailAddress: string;
+  breedingStationName: string;
+  breedingStationNumber: string;
+  breedingStationCertificate: StoredFile;
+}
+
+export interface DecisionNotifier {
+  notifyDecision(breeder: Breeder): Promise<void>;
 }
 
 //functions

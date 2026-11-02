@@ -13,3 +13,24 @@ export class VerificationAlreadySubmittedError extends Error {
     this.name = 'VerificationAlreadySubmittedError';
   }
 }
+
+export class VerificationRequestNotFoundError extends Error {
+  constructor() {
+    super('Verification request not found');
+    this.name = 'VerificationRequestNotFoundError';
+  }
+}
+
+export class VerificationAlreadyDecidedError extends Error {
+  constructor(public readonly breeder: Breeder) {
+    super('Verification already decided');
+    this.name = 'VerificationAlreadyDecidedError';
+  }
+}
+
+export class InvalidCertificateError extends Error {
+  constructor() {
+    super('Invalid certificate');
+    this.name = 'InvalidCertificateError';
+  }
+}
