@@ -40,12 +40,50 @@ try {
     new URL('gateway.json', root),
     JSON.stringify({
       http: {
+        routers: {
+          'anico-auth-runtime-ready': {
+            rule: 'Host(`deploy-dev.anico.online`) && Path(`/__auth_ready`) && Method(`GET`)',
+            entryPoints: ['http'],
+            service: 'noop@internal',
+            middlewares: ['anico-auth-runtime-version'],
+          },
+        },
         middlewares: {
+          'anico-auth-runtime-version': {
+            headers: {
+              customResponseHeaders: {
+                'X-Anico-Gateway-Version': '2',
+                'Cache-Control': 'no-store',
+              },
+            },
+          },
           'anico-session': {
+            chain: {
+              middlewares: [
+                'anico-gateway-proof',
+                'anico-session-check',
+                'anico-gateway-clear',
+              ],
+            },
+          },
+          'anico-gateway-proof': {
+            headers: {
+              customRequestHeaders: { 'X-Anico-Gateway-Key': c.gatewayKey },
+            },
+          },
+          'anico-gateway-clear': {
+            headers: { customRequestHeaders: { 'X-Anico-Gateway-Key': '' } },
+          },
+          'anico-session-check': {
             forwardAuth: {
-              address: `http://anico-gateway:${c.gatewayKey}@auth-${meta.uuid}:3000/internal/verify`,
+              address: `http://auth-${meta.uuid}:3000/internal/verify`,
               trustForwardHeader: false,
-              authRequestHeaders: ['Cookie', 'Origin', 'X-CSRF-Token'],
+              authRequestHeaders: [
+                'Cookie',
+                'Origin',
+                'X-CSRF-Token',
+                'X-Anico-Gateway-Key',
+              ],
               authResponseHeaders: ['X-Anico-Identity'],
               maxResponseBodySize: 8192,
             },

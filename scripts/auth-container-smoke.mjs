@@ -5,8 +5,6 @@ const gatewayKey = 'c'.repeat(43);
 if (process.argv.includes('--proxy-config')) {
   const verification = new URL('http://auth:3000');
   verification.pathname = '/internal/verify';
-  verification.username = 'anico-gateway';
-  verification.password = gatewayKey;
   console.log(
     JSON.stringify({
       http: {
@@ -22,11 +20,25 @@ if (process.argv.includes('--proxy-config')) {
           auth: { loadBalancer: { servers: [{ url: 'http://auth:3000' }] } },
         },
         middlewares: {
-          session: {
+          session: { chain: { middlewares: ['proof', 'verify', 'clear'] } },
+          proof: {
+            headers: {
+              customRequestHeaders: { 'X-Anico-Gateway-Key': gatewayKey },
+            },
+          },
+          clear: {
+            headers: { customRequestHeaders: { 'X-Anico-Gateway-Key': '' } },
+          },
+          verify: {
             forwardAuth: {
               address: verification.href,
               trustForwardHeader: false,
-              authRequestHeaders: ['Cookie', 'Origin', 'X-CSRF-Token'],
+              authRequestHeaders: [
+                'Cookie',
+                'Origin',
+                'X-CSRF-Token',
+                'X-Anico-Gateway-Key',
+              ],
               authResponseHeaders: ['X-Anico-Identity'],
               maxResponseBodySize: 8192,
             },

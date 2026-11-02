@@ -153,8 +153,9 @@ nejdřív je potřeba dohodnout příjemce a význam „převzetí účtu“.
 5. Nastavit ForwardAuth před každou chráněnou API routou, přepsat příchozí
    `X-Anico-Identity` a předávat Cookie, Origin, X-CSRF-Token a původní HTTP metodu.
    Soukromý `/internal/verify` vyžaduje gateway credential ze secret souboru.
-   Traefik jej posílá jako Basic auth z chráněné konfigurace; pro interní testy
-   lze použít `X-Anico-Gateway-Key`. Do původního požadavku pro backend se credential nepřidává.
+   Traefik před ověřením přepíše `X-Anico-Gateway-Key` hodnotou z chráněné
+   konfigurace a po ověření ji odstraní. Backend tento údaj nedostává; credential
+   není součástí upstream URL.
    Veřejný router jej nesmí zpřístupnit. Session/callback/JWKS/health mají vlastní
    explicitní pravidla; callback ani login nesmí vyžadovat již existující relaci.
 6. Nezveřejňovat porty služeb a zapojit ověřovací middleware do doménových backendů.
@@ -182,6 +183,9 @@ a uloží je do šifrovaného `devAuthCredentials`. Existující DB heslo, gatew
 a podpisový klíč zachová. Google hodnoty se nedávají do sdílených Coolify proměnných.
 Runtime mounty dostává pouze auth-service; frontend ani breeding je nemají.
 Samotná příprava secrets stávající release nepřepíná.
+Aktuální `deploy:dev-auth` aplikuj až po zeleném CI a code owner review, před
+merge do dev. CI před změnou aplikací vyžaduje verzi runtime gateway 2;
+chybějící nebo stará konfigurace ponechá dosavadní release běžet.
 
 Po schválení a merge do `dev` CI sestaví, publikuje a nasadí tři images stejného
 commitu: frontend, breeding-service a auth-service. Gateway chrání aplikační API,

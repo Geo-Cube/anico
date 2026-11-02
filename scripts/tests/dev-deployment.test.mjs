@@ -68,6 +68,8 @@ test('deployment updates only the designated service and verifies healthy matchi
     clientSecret: 'private-client-secret',
     fetchImpl: async (url, options) => {
       requests.push({ url, ...options });
+      if (url.endsWith('/__auth_ready'))
+        return { headers: new Headers({ 'X-Anico-Gateway-Version': '2' }) };
       return {
         ok: true,
         json: async () =>
@@ -84,23 +86,24 @@ test('deployment updates only the designated service and verifies healthy matchi
   });
   assert.deepEqual(
     requests.map((x) => x.method),
-    ['PATCH', 'GET', undefined],
+    [undefined, 'PATCH', 'GET', undefined],
   );
   assert.ok(
     requests.every(
       (x) =>
         x.url.includes('/__release/') ||
+        x.url.endsWith('/__auth_ready') ||
         x.url.startsWith(
           'https://deploy-dev.anico.online/api/v1/services/example-service-id',
         ),
     ),
   );
   assert.ok(requests.every((x) => x.redirect === 'error'));
-  const body = JSON.parse(requests[0].body);
+  const body = JSON.parse(requests[1].body);
   assert.equal(body.instant_deploy, true);
   const compose = JSON.parse(Buffer.from(body.docker_compose_raw, 'base64'));
   assert.equal(compose.services.frontend.image, images.frontend);
-  assert.doesNotMatch(requests[0].body, /private-token|private-client-secret/);
+  assert.doesNotMatch(requests[1].body, /private-token|private-client-secret/);
 });
 
 test('failed API responses do not expose response bodies or credentials', async () => {
@@ -112,11 +115,14 @@ test('failed API responses do not expose response bodies or credentials', async 
       token: 'private-token',
       clientId: 'private-id',
       clientSecret: 'private-secret',
-      fetchImpl: async () => ({
-        ok: false,
-        status: 403,
-        json: async () => ({ secret: 'sensitive-response-value' }),
-      }),
+      fetchImpl: async (url) =>
+        url.endsWith('/__auth_ready')
+          ? { headers: new Headers({ 'X-Anico-Gateway-Version': '2' }) }
+          : {
+              ok: false,
+              status: 403,
+              json: async () => ({ secret: 'sensitive-response-value' }),
+            },
     }),
     (error) =>
       /HTTP 403/.test(error.message) &&
@@ -174,4 +180,26 @@ test('auth release guards API access and mounts provider secrets only into auth'
     ).length,
     2,
   );
+});
+
+test('deployment refuses legacy gateway runtime before any API mutation', async () => {
+  const requests = [];
+  await assert.rejects(
+    deployRelease({
+      references,
+      revision,
+      serviceId: 'example-service-id',
+      token: 'private-token',
+      clientId: 'private-id',
+      clientSecret: 'private-secret',
+      fetchImpl: async (url, options) => {
+        requests.push({ url, ...options });
+        return { headers: new Headers() };
+      },
+    }),
+    /gateway runtime is not ready/,
+  );
+  assert.equal(requests.length, 1);
+  assert.ok(requests[0].url.endsWith('/__auth_ready'));
+  assert.equal(requests[0].headers.Authorization, undefined);
 });

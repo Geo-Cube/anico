@@ -117,12 +117,7 @@ export function authRouter(options: {
   // Must be private in the gateway configuration; shared key is checked as
   // defense in depth even when somebody reaches this service directly.
   router.get('/internal/verify', async (req, res) => {
-    const basic = req.get('authorization');
-    const key = basic?.startsWith('Basic ')
-      ? Buffer.from(basic.slice(6), 'base64')
-          .toString('utf8')
-          .replace(/^anico-gateway:/, '')
-      : req.get('x-anico-gateway-key');
+    const key = req.get('x-anico-gateway-key');
     if (!key || !equalSecret(key, options.gatewayKey))
       throw new AuthError(401, 'GATEWAY_REQUIRED');
     const result = await service.authenticate(cookies(req)[sessionName]);

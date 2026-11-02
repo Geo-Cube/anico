@@ -235,6 +235,23 @@ export async function deployRelease({
       );
     return response.json();
   }
+  // A reviewed runtime config must be present before a new auth release can
+  // change running applications. Missing/legacy config leaves the old release up.
+  const ready = await fetchImpl(
+    `https://${deployment.apiHostname}/__auth_ready`,
+    {
+      headers: {
+        'CF-Access-Client-Id': clientId,
+        'CF-Access-Client-Secret': clientSecret,
+      },
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  if (ready.headers?.get('X-Anico-Gateway-Version') !== '2')
+    throw new Error(
+      'Auth gateway runtime is not ready; apply reviewed deploy:dev-auth before deployment',
+    );
   await request('PATCH', '', {
     docker_compose_raw: Buffer.from(JSON.stringify(compose)).toString('base64'),
     instant_deploy: true,

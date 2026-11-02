@@ -39,7 +39,7 @@ services:
       ]
     volumes:
       - ${ANICO_AUTH_SMOKE_CONFIG:?test config required}:/etc/traefik/dynamic.yaml:ro
-    tmpfs: [/tmp:rw, noexec, nosuid, size=8m]
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=8m']
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

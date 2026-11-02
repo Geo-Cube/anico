@@ -272,20 +272,7 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     await request(app)
       .get('/internal/verify')
       .set('Cookie', loginResult.cookie)
-      .set(
-        'Authorization',
-        'Basic ' +
-          Buffer.from('anico-gateway:' + gatewayKey).toString('base64'),
-      )
-      .set('x-forwarded-method', 'GET')
-      .expect(204);
-    await request(app)
-      .get('/internal/verify')
-      .set('Cookie', loginResult.cookie)
-      .set(
-        'Authorization',
-        'Basic ' + Buffer.from('anico-gateway:wrong').toString('base64'),
-      )
+      .set('x-anico-gateway-key', 'wrong')
       .set('x-forwarded-method', 'GET')
       .expect(401);
     const token = verifyResponse.headers['x-anico-identity']!;
