@@ -61,7 +61,10 @@ Diagnostika UI: `npm run doctor -- --frontend`.
 Diagnostika backendu i UI: `npm run doctor -- --service animal --frontend`.
 V PowerShellu můžeš používat `npm.cmd` místo `npm`.
 
-**Současný stav:** UI je zatím simulace; skutečné napojení obrazovek na API doplní vývojáři.
+**Současný stav:** business obrazovky jsou zatím simulace; jejich napojení na API doplní vývojáři.
+Google přihlašovací panel na týmovém devu už skutečně funguje. Předání této nové
+aplikační relace lokálnímu FE/backendu zatím není hotové: chráněné dev API může
+vracet 401 i po úspěšném GitHub Access přihlášení. [Co máme a co zbývá](STAV-PROJEKTU.md).
 `animal` je příklad: musíš mít `apps/animal-service` ve své větvi a přidělená DB oprávnění.
 Jinak vyber název služby, na které skutečně pracuješ.
 Nová lokální služba ještě automaticky neběží na týmovém devu. Její cloudové nasazení

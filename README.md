@@ -3,6 +3,7 @@
 React frontend a Express mikroservisy v jednom npm monorepu.
 
 **Začínáš v týmu? Otevři [návod pro vývojáře](docs/MANUAL-PRO-VYVOJARE.md).**
+Hotové části a zbývající práce: [aktuální stav projektu](docs/STAV-PROJEKTU.md).
 Potřebuješ Node podle `.nvmrc`, npm 11.6.0 a `cloudflared`. Osobní DB konfiguraci potřebuješ jen pro backend.
 
 ```bash
@@ -26,6 +27,8 @@ UI s vybraným lokálním backendem: `npm run dev:fullstack -- --service animal`
 
 Týmová aplikace: [dev.anico.online](https://dev.anico.online). Správa: [admin.anico.online](https://admin.anico.online).
 Obojí používá schválené GitHub účty. Produkce zatím není nasazená.
+Na devu je navíc ověřené aplikační Google přihlášení. Předávání této relace do
+lokálního vývoje zatím není hotové; GitHub Access sám chráněné API neodemkne.
 
 Po úspěšných kontrolách CI větev `dev` publikuje images a aktualizuje týmové dev nasazení.
 

@@ -63,7 +63,8 @@ závislosti a sledují jejich změny.
 
 Frontend má připravené přihlášení Google a práci s relací; business obrazovky
 zůstávají simulací. Auth backend, kontrakt identity a gateway jsou nasazené na devu;
-Google přihlášení a odhlášení jsou uživatelsky ověřené. Microsoft, Apple
+Google přihlášení a odhlášení jsou uživatelsky ověřené. Microsoft runtime je
+připravený v PR #20, čeká na schválení, nasazení a skutečný login test. Apple
 a lokální předávání cloudové relace zatím zbývají. [Postup a aktuální stav](AUTENTIZACE.md).
 Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí login uživatelů AniCo.
 

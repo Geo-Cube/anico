@@ -1,6 +1,7 @@
 # Co ještě zbývá
 
 Aktualizováno 2. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
+Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
 
 ## Nejbližší kroky
 
@@ -10,9 +11,15 @@ Aktualizováno 2. 11. 2026. Detailní historii inicializace nahrazuje tento prac
 - [ ] Potvrdit týmový stack, hranice mikroservis a API kontrakty.
 - [x] Nasadit Google přihlášení, společnou auth DB, runtime secrets a ForwardAuth;
       ověřit skutečné přihlášení i odhlášení. [Kontrakt](../docs/AUTENTIZACE.md).
-- [ ] Zaregistrovat a zapojit Microsoft a Apple; předávání cloudové identity
-      lokálním backendům zůstává samostatným krokem.
-- [ ] Propojit React s API a doplnit aplikační autentizaci/autorizaci.
+- [x] Zaregistrovat Microsoft aplikaci a uložit credentials lokálně šifrovaně;
+      ověřit discovery/PKCE a připravit provisioning v PR #20.
+- [ ] Review a zelené CI PR #20, aplikace runtime secrets a nasazení;
+      poté skutečně ověřit Microsoft i Google login/logout a aktualizovat recovery release.
+- [ ] Zaregistrovat a nasadit Apple přihlášení.
+- [ ] Doplnit bezpečné předávání cloudové identity lokálnímu FE/backendu.
+- [ ] Propojit business obrazovky Reactu s API; doplnit autorizaci podle doménových pravidel.
+- [ ] Jmenovat nebo ověřit prvního skutečného vlastníka na společném devu.
+- [ ] Dohodnout příjemce `user.registered` a implementovat doručování registrace další službě.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
 - [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).
 - [x] Review auth-service a sdíleného kontraktu identity (PR #17), oprava gateway (PR #19).

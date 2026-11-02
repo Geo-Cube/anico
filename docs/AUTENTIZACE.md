@@ -5,8 +5,12 @@ jsou nasazené a uživatelsky ověřené. CI i serverové kontroly ověřily sho
 images, neveřejné porty, oddělené DB přístupy, odmítnutí anonymních požadavků
 a podvržené identity. Google údaje a reference release pro obnovu jsou uložené
 v šifrovaném IaC configu; runtime secrets má jen auth-service.
-Microsoft a Apple nejsou nakonfigurované; lokální předávání cloudové aplikační relace zůstává další prací.
+Microsoft aplikace je zaregistrovaná, credentials jsou uložené lokálně šifrovaně;
+zapojení do runtime je připravené v PR #20. Microsoft zatím na devu není zapnutý
+ani ověřený skutečným přihlášením. Apple není nakonfigurovaný.
+Lokální předávání cloudové aplikační relace zůstává další prací.
 Současný GitHub Access chrání vývojáře; nepřihlašuje zákazníka do AniCo.
+[Přehled hotových a chybějících částí](STAV-PROJEKTU.md).
 
 ## Spuštění backendu
 
@@ -140,7 +144,11 @@ První registrace uloží profil i trvalý záznam `registration` typu `user.reg
 atomicky v jednom dokumentu. Doručování jiné službě zatím není implementované:
 nejdřív je potřeba dohodnout příjemce a význam „převzetí účtu“.
 
-## Co je potřeba pro skutečné přihlášení a nasazení
+## Pravidla pro přihlášení a nasazení
+
+Pro Google a současný nasazený backend je společná auth DB, secrets, gateway
+i ověřování JWT zapojené. Následující pravidla platí i pro každou další službu;
+nejsou seznamem nedokončených kroků Google nasazení.
 
 1. Zaregistrovat Google OAuth klienta, Microsoft aplikaci a Apple Services ID/klíč.
 2. Údaje uložit pouze do soukromého `.env` služby lokálně, nebo runtime secrets
