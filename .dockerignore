@@ -35,6 +35,12 @@ apps/frontend/**
 !apps/frontend/src/**
 !packages/
 packages/**
+!packages/auth/
+packages/auth/**
+!packages/auth/package.json
+!packages/auth/tsconfig.json
+!packages/auth/src/
+!packages/auth/src/**
 !packages/shared-schemas/
 packages/shared-schemas/**
 !packages/shared-schemas/package.json
@@ -53,6 +59,7 @@ infrastructure/**
 **/.env.*
 **/*.env
 **/*.pem
+**/*.p8
 **/*.key
 **/*.p12
 **/*.pfx

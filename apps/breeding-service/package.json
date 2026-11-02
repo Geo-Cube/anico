@@ -31,7 +31,9 @@
     "mongoose": "^8.19.0",
     "pino": "^10.0.0",
     "pino-http": "^11.0.0",
-    "zod": "^4.1.0"
+    "zod": "^4.1.0",
+    "@anico/auth": "^0.1.0",
+    "jose": "^6.2.14"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",

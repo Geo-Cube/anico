@@ -33,3 +33,10 @@ export const NamedRecordSchema = CreateNamedRecordSchema.extend({
 });
 export type CreateNamedRecordInput = z.infer<typeof CreateNamedRecordSchema>;
 export type NamedRecord = z.infer<typeof NamedRecordSchema>;
+
+export {
+  IdentitySchema,
+  RoleSchema,
+  type Identity,
+  type Role,
+} from './identity.js';

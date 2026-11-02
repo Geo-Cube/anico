@@ -6,6 +6,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/frontend/package.json ./apps/frontend/
 COPY apps/breeding-service/package.json ./apps/breeding-service/
 COPY packages/shared-schemas/package.json ./packages/shared-schemas/
+COPY packages/auth/package.json ./packages/auth/
 COPY infrastructure/package.json ./infrastructure/
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --ignore-scripts --no-audit --no-fund --include-workspace-root \

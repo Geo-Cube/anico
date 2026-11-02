@@ -4,3 +4,6 @@ coverage/
 .turbo/
 package-lock.json
 .husky/_/
+
+# Already applied migration: preserve its recorded checksum.
+apps/auth-service/migrations/20261101145837-create-auth-collections.mjs
