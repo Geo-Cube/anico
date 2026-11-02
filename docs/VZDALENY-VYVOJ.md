@@ -6,7 +6,7 @@ Celý první start je v [manuálu vývojáře](MANUAL-PRO-VYVOJARE.md).
 ## Připojení
 
 Potřebuješ `cloudflared` a vlastní soubor od správce uložený jako
-`apps/breeding-service/.env.remote.local`. Potom z kořene:
+`apps/<tvoje-service>/.env.remote.local`. Potom z kořene:
 
 Windows PowerShell: instalaci přes winget a variantu `npm.cmd` najdeš
 v [prvním spuštění](MANUAL-PRO-VYVOJARE.md#windows-powershell). Bash bootstrap ani `chmod` tam nepotřebuješ.
