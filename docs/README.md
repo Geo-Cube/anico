@@ -3,6 +3,11 @@
 **Vývojář začíná pouze [tímto návodem](MANUAL-PRO-VYVOJARE.md).**
 Cloudové tokeny, SSH a Pulumi pro běžný vývoj nepotřebuješ.
 
+`tvoje-service` v návodech nahraď názvem své služby, například `animal-service`.
+Ukázková `breeding-service` není společný adresář pro nové mikroservisy;
+každá má vlastní `apps/tvoje-service`. Skutečné názvy nasazených images,
+artifactů a databází v provozních návodech označují existující infrastrukturu.
+
 Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
 
 | Chci                                       | Návod                                     |

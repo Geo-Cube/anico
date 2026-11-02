@@ -1,40 +1,44 @@
 # Lokální Docker: volitelná alternativa
 
+**`tvoje-service` je zástupný název: všude ho nahraď svou existující službou**
+(například `animal-service`, workspace `@anico/animal-service`). Název DB a API prefix
+také přizpůsob své službě; `tvoje-service` používá v příkladech `anico_tvoje_*` a `/api/tvoje`.
+
 Pro běžný vývoj používej [tři vývojové režimy](MANUAL-PRO-VYVOJARE.md).
 Docker používej, pokud chceš vlastní místní MongoDB nebo ověřit celé images.
 Všechny příkazy níže jsou z kořene repozitáře a vyžadují spuštěný Docker s Compose.
 
 ## A. Hot reload + místní MongoDB
 
-Připrav projekt a spusť místní DB i breeding backend:
+Připrav projekt a spusť místní DB i vlastní backend:
 
 ```bash
 npm run setup
 docker compose -f infrastructure/compose.yaml up -d
-npm run dev -w @anico/breeding-service
+npm run dev -w @anico/tvoje-service
 ```
 
 `setup` vytvoří jen chybějící `.env` z veřejných příkladů. Existující
-`apps/breeding-service/.env` musí obsahovat URI místní DB
-`mongodb://127.0.0.1:27017/anico_breeding_local`; `setup` jej nepřepisuje.
-Backend je na portu 3000, MongoDB pouze lokálně na 27017.
+`apps/tvoje-service/.env` musí obsahovat URI místní DB
+`mongodb://127.0.0.1:27017/anico_tvoje_local`; `setup` jej nepřepisuje.
+Port backendu vezmi z `apps/tvoje-service/.env.example`; MongoDB je pouze lokálně na 27017.
 
 Chceš proti tomuto backendu testovat i UI? V druhém terminálu nastav lokální
-výjimku pro breeding API. macOS/zsh nebo Linux:
+výjimku pro API své služby. macOS/zsh nebo Linux:
 
 ```bash
-ANICO_API_MODE=hybrid ANICO_DEV_SERVICE=breeding-service npm run dev:frontend
+ANICO_API_MODE=hybrid ANICO_DEV_SERVICE=tvoje-service npm run dev:frontend
 ```
 
 Windows PowerShell:
 
 ```powershell
 $env:ANICO_API_MODE = 'hybrid'
-$env:ANICO_DEV_SERVICE = 'breeding-service'
+$env:ANICO_DEV_SERVICE = 'tvoje-service'
 npm run dev:frontend
 ```
 
-UI bude na portu 5173; `/api/breeding/*` míří na místní backend a ostatní
+UI bude na portu 5173; `/api/tvoje/*` míří na místní backend a ostatní
 `/api/*` na týmový dev přes Cloudflare přihlášení. Samotný `dev:frontend` bez
 této výjimky používá společné dev API. `dev:backend` a `dev:fullstack` otevírají
 vzdálenou osobní DB, proto je v tomto postupu nepoužívej.
@@ -50,7 +54,10 @@ Aplikace ukonči Ctrl+C, databázi se zachováním dat zastav:
 docker compose -f infrastructure/compose.yaml stop
 ```
 
-## B. Celá sestava v kontejnerech
+## B. Existující ukázková sestava v kontejnerech
+
+Tento Compose soubor spouští ukázkový backend `breeding-service` a frontend.
+Svou službu do této sestavy přidáš úpravou Compose; samotné vygenerování služby ji nepřidá.
 
 Nejdřív ukonči jiný backend na portu 3000. Potom:
 
@@ -81,7 +88,7 @@ V PowerShellu nastav odpovídající `$env:ANICO_BACKEND_PORT` a `$env:ANICO_FRO
 
 ```bash
 npm run containers:check
-docker build -f apps/breeding-service/Dockerfile -t anico/breeding-service:local .
+docker build -f apps/tvoje-service/Dockerfile -t anico/tvoje-service:local .
 docker build -f apps/frontend/Dockerfile -t anico/frontend:local .
 ```
 

@@ -1,13 +1,16 @@
 # Kde má být nový kód
 
-| Složka                    | Odpovědnost                                        |
-| ------------------------- | -------------------------------------------------- |
-| `apps/frontend`           | React UI, TypeScript, Vite                         |
-| `apps/auth-service`       | OIDC přihlášení, účty, relace a role               |
-| `packages/auth`           | Ověření aplikační identity v backendových službách |
-| `apps/breeding-service`   | Express mikroservisa, Mongoose, Pino               |
-| `packages/shared-schemas` | Zod schémata a odvozené typy pro API               |
-| `infrastructure`          | Cloud, server a nasazování; není aplikační doména  |
+| Složka                    | Odpovědnost                                           |
+| ------------------------- | ----------------------------------------------------- |
+| `apps/frontend`           | React UI, TypeScript, Vite                            |
+| `apps/auth-service`       | OIDC přihlášení, účty, relace a role                  |
+| `packages/auth`           | Ověření aplikační identity v backendových službách    |
+| `apps/tvoje-service`      | Tvoje samostatná Express mikroservisa, Mongoose, Pino |
+| `packages/shared-schemas` | Zod schémata a odvozené typy pro API                  |
+| `infrastructure`          | Cloud, server a nasazování; není aplikační doména     |
+
+`tvoje-service` je zástupný název vlastní služby. Ukázková `breeding-service`
+slouží jako příklad; nové mikroservisy vytvářej samostatně v `apps/` generátorem.
 
 Npm workspaces propojí balíčky, Turborepo řídí pořadí buildů.
 Všichni používáme jeden kořenový `package-lock.json`.
@@ -70,5 +73,5 @@ Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí 
 - Integrace: Supertest + skutečná dočasná MongoDB přes `mongodb-memory-server`.
 - Frontend: zatím typecheck, build a kontrola v prohlížeči; komponentové testy nejsou zavedené.
 
-Vitest používá V8 coverage. Limity jsou v `apps/breeding-service/vitest.config.ts`;
+Vitest používá V8 coverage. Limity jsou v `apps/tvoje-service/vitest.config.ts`;
 coverage se nevztahuje na React aplikaci. Příkazy: [tahák](PRIKAZY.md).

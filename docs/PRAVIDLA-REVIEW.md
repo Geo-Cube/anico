@@ -19,6 +19,7 @@ Pro `main` i `dev` platí aktivní ochrana bez bypass výjimek.
 | Schválení po push zmizelo | Požádej o nové review aktualizované změny                             |
 
 Nevypínej ochranu větví kvůli jednomu PR. Totéž platí pro Changesets verzovací PR.
+Aktualizace pracovní větve: [stáhnout `dev`, aktualizovat vlastní větev a začlenit `dev`](GIT-WORKFLOW.md#pokračování-na-existující-větvi).
 Pokud GitHub vyžádá **Approve workflows to run**, jde o schválení spuštění CI,
 nikoli code review.
 
