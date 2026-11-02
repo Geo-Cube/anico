@@ -43,9 +43,9 @@ export const NamedRecordSchema = CreateNamedRecordSchema.extend({
 export type CreateNamedRecordInput = z.infer<typeof CreateNamedRecordSchema>;
 export type NamedRecord = z.infer<typeof NamedRecordSchema>;
 
-//soubor - sdilena vnorena struktura
+// Shared structure for stored files (used for documents and photos)
 export const StoredFileSchema = z.strictObject({
-  fileName: z.string().regex(/^[a-f\d]{24}$/i),
-  fileReference: z.string().url(),
+  fileName: z.string(),
+  fileReference: z.string(),
 });
 export type StoredFile = z.infer<typeof StoredFileSchema>;
