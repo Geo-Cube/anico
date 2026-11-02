@@ -100,13 +100,14 @@ Migrační runner odmítne historii, kterou daný checkout nezná. Před návrat
 na starší image ověř kompatibilitu jeho migrací a dat; nepřepisuj ani nemaž
 evidenci společné DB. Často je bezpečnější oprava dopředu než návrat kódu.
 
-Sdílený ukázkový seed spusť výslovně v backendovém kontejneru v Coolify,
+Sdílený seed své služby spusť výslovně v jejím backendovém kontejneru v Coolify,
 z jeho výchozího pracovního adresáře `/app`:
 
 ```bash
-node apps/breeding-service/dist/database/cli.js seed --shared
+node apps/tvoje-service/dist/database/cli.js seed --shared
 ```
 
+`tvoje-service` nahraď skutečným názvem nasazené služby.
 Příkaz načte `MONGODB_URI_FILE` ze secret mountu, URI nevypisuje. Reset
 společné dev nebo produkční DB zůstává zakázaný i s potvrzením názvu.
 

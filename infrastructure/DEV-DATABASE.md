@@ -15,7 +15,7 @@ Má `readWrite` na vlastních DB podle registrovaných služeb, například
 Trvalý seznam služeb je v `infrastructure/dev-database-services.json`; generátor
 do něj přidá název nové služby. Díky tomu checkout jiné větve neodebere přístup
 ke službě, jejíž kód zrovna nemáš lokálně. Provisioning navíc objeví MongoDB služby podle `apps/*/package.json`
-(název `@anico/NAZEV-service`, odpovídající složka a závislost `mongoose`).
+(název `@anico/tvoje-service`, odpovídající složka a závislost `mongoose`).
 Po přidání služby stačí znovu `npm run deploy:dev-database -w @anico/infrastructure`.
 Připraví přesný seznam rolí, odebere již nepožadované role a ověří zápis do
 vlastních DB i odmítnutí ostatních. Data nemaže. Nové databáze používají stejnou
@@ -48,7 +48,7 @@ Nad existujícím volume negeneruj nové root heslo; obnov původní credentials
 
 Soubory pro předání vzniknou v `.pulumi/dev-database/clients/GITHUB_LOGIN.env`.
 Každému předej soukromě pouze jeho soubor. Na jeho počítači patří do
-kořenového `.env.remote.local`; původní umístění v `apps/breeding-service/`
+kořenového `.env.remote.local`; umístění v `apps/tvoje-service/` (nahraď názvem vybrané služby)
 zůstává podporované. Nekopíruj přístup ke každé službě. Celé přidání kolegy: [přístupy](ACCESS-MEMBERS.md).
 
 ## Provozní nastavení

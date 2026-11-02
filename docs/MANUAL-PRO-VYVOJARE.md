@@ -53,7 +53,7 @@ Při prvním požadavku na společné dev API dokonči GitHub přihlášení v p
 Vite si přes `cloudflared` opatří osobní přístup pouze v Node procesu.
 
 **Backend / fullstack:** od správce si vyžádej svůj soubor `.env.remote.local`
-a ulož jej do kořene. Stávající soubor v `apps/breeding-service` funguje také.
+a ulož jej do kořene. Soubor v `apps/tvoje-service/.env.remote.local` funguje také.
 Na macOS/Linuxu nastav `chmod 600 .env.remote.local`; na Windows tento krok vynech.
 Jeden soubor stačí pro služby, ke kterým máš přidělená osobní DB oprávnění.
 
@@ -69,7 +69,7 @@ vyžaduje samostatnou konfiguraci. Chybějící API se nenahrazuje osobní datab
 
 ## 2. Každý pracovní den
 
-1. V GitHub Desktop stáhni `dev` a založ vlastní `feature/kratky-popis` větev.
+1. V GitHub Desktop stáhni `dev`. Pro nový úkol z něj založ `feature/kratky-popis`; pokud už vlastní větev máš, přepni na ni, stáhni její vzdálené změny a začleň aktuální `dev` pomocí merge nebo rebase podle [Git workflow](GIT-WORKFLOW.md#pokračování-na-existující-větvi).
 2. Po změně závislostí spusť `npm ci`.
 3. Spusť vhodný režim z tabulky výše, uprav kód a ověř výsledek.
 4. Před PR proveď kontroly níže. Commitni jen související soubory a otevři PR do `dev`.
@@ -89,10 +89,13 @@ připraví jednou před paralelními testy; lokálně ji lze připravit přes
 
 ## 3. Kam psát kód
 
+**`tvoje-service` nahraď názvem své služby. Ukázková `breeding-service` není místo
+pro další mikroservisy.** Vlastní službu založ generátorem z návodu níže.
+
 | Co měním              | Složka                                  |
 | --------------------- | --------------------------------------- |
 | React UI              | `apps/frontend/src`                     |
-| Backendovou funkci    | `apps/NAZEV-service/src/modules/DOMENA` |
+| Backendovou funkci    | `apps/tvoje-service/src/modules/DOMENA` |
 | Sdílené Zod kontrakty | `packages/shared-schemas`               |
 
 Podrobnosti: [architektura](ARCHITEKTURA.md), [generátory](NOVA-SLUZBA.md).
