@@ -35,7 +35,7 @@ describe('canSubmitVerificationRequest', () => {
       breedingStationNumber: null,
       isVerified: false,
       verificationRequest: {
-        id: 'request-123',
+        requestId: 'request-123',
         status: 'REJECTED',
         submittedAt: new Date(),
         breedingStationCertificate: {
