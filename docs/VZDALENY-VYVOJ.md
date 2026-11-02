@@ -3,6 +3,11 @@
 **Aplikace běží u tebe, MongoDB na VPS. Jeden osobní účet, oddělená DB pro každou službu.**
 Celý první start je v [manuálu vývojáře](MANUAL-PRO-VYVOJARE.md).
 
+Osobní DB připojení je nezávislé na aplikačním přihlášení. Nový Google login
+funguje na týmovém devu; bezpečné předání cloudové relace lokálním aplikacím
+zatím není hotové. GitHub Access sám chráněné HTTP API neodemkne.
+[Aktuální stav](STAV-PROJEKTU.md).
+
 ## Připojení
 
 Potřebuješ `cloudflared` a vlastní soubor od správce uložený jako

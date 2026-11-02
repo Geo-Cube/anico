@@ -1,20 +1,29 @@
 # Co ještě zbývá
 
-Aktualizováno 1. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
+Aktualizováno 2. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
+Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
 
 ## Nejbližší kroky
 
 - [x] Propojit CI → GHCR → Coolify pro automatické dev nasazení.
-- [ ] Po sloučení aktuálních úprav ověřit zelené CI a odpovídající release na devu.
+- [x] Po sloučení auth a dokumentace ověřit zelené CI a odpovídající release na devu.
 - [ ] Předat osobní DB konfigurace všem kolegům a ověřit jejich první spuštění.
 - [ ] Potvrdit týmový stack, hranice mikroservis a API kontrakty.
-- [ ] Zaregistrovat Google/Microsoft/Apple pro auth-service, doplnit secrets,
-      společnou auth DB, ForwardAuth a předávání identity lokálním backendům.
-      Osobní auth DB a seed jsou připravené; [kontrakt](../docs/AUTENTIZACE.md).
-- [ ] Propojit React s API a doplnit aplikační autentizaci/autorizaci.
+- [x] Nasadit Google přihlášení, společnou auth DB, runtime secrets a ForwardAuth;
+      ověřit skutečné přihlášení i odhlášení. [Kontrakt](../docs/AUTENTIZACE.md).
+- [x] Zaregistrovat Microsoft aplikaci a uložit credentials lokálně šifrovaně;
+      ověřit discovery/PKCE a připravit provisioning v PR #20.
+- [ ] Review a zelené CI PR #20, aplikace runtime secrets a nasazení;
+      poté skutečně ověřit Microsoft i Google login/logout a aktualizovat recovery release.
+- [ ] Zaregistrovat a nasadit Apple přihlášení.
+- [ ] Doplnit bezpečné předávání cloudové identity lokálnímu FE/backendu.
+- [ ] Propojit business obrazovky Reactu s API; doplnit autorizaci podle doménových pravidel.
+- [ ] Jmenovat nebo ověřit prvního skutečného vlastníka na společném devu.
+- [ ] Dohodnout příjemce `user.registered` a implementovat doručování registrace další službě.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
 - [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).
-- [ ] Review auth-service a sdíleného kontraktu identity; následně zapojení do backendů.
+- [x] Review auth-service a sdíleného kontraktu identity (PR #17), oprava gateway (PR #19).
+- [ ] Zapojit ověřování identity do každé další doménové služby.
 - [ ] Každou další službu samostatně zahrnout do publish, Coolify a API routování;
       šablona a DB registr samy nasazení nevytvářejí.
 - [ ] Případné kopírování dat dev → osobní DB; nyní není implementované.

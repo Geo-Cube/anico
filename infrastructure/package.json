@@ -30,7 +30,7 @@
     "pulumi": "node --env-file-if-exists=.env.local scripts/run-pulumi.mjs",
     "preview": "npm run build && npm run pulumi -- preview",
     "up": "npm run build && npm run pulumi -- up",
-    "init:dev-auth": "node scripts/init-dev-auth.mjs",
+    "init:dev-auth": "node --import tsx scripts/init-dev-auth.mjs",
     "deploy:dev-auth": "bash scripts/deploy-dev-auth.sh"
   },
   "dependencies": {

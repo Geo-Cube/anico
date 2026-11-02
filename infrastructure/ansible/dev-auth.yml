@@ -5,7 +5,13 @@
   pre_tasks:
     - name: Prepare encrypted auth inputs locally
       ansible.builtin.command:
-        argv: [node, '{{ playbook_dir }}/../scripts/prepare-dev-auth.mjs']
+        argv:
+          [
+            node,
+            --import,
+            tsx,
+            '{{ playbook_dir }}/../scripts/prepare-dev-auth.mjs',
+          ]
         chdir: '{{ playbook_dir }}/..'
       delegate_to: localhost
       become: false

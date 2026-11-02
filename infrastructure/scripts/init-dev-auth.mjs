@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { parseEnv, parseArgs } from 'node:util';
 import { secret, setSecret } from './private-config.mjs';
 import { validateRelease } from '../../scripts/dev-deployment.mjs';
+import { reconcileAuthProviders } from '../src/dev-auth.ts';
 try {
   const { values } = parseArgs({
     options: {
@@ -17,13 +18,14 @@ try {
       'utf8',
     ),
   );
-  if (
-    !env.GOOGLE_CLIENT_ID?.endsWith('.apps.googleusercontent.com') ||
-    !env.GOOGLE_CLIENT_SECRET ||
-    /[\r\n]/.test(env.GOOGLE_CLIENT_SECRET)
-  )
-    throw new Error('Missing Google credentials');
   let config = secret('devAuthCredentials', true);
+  const providers = reconcileAuthProviders(
+    env,
+    config && {
+      google: config.google,
+      microsoft: config.microsoft,
+    },
+  );
   if (!config) {
     const { privateKey } = generateKeyPairSync('ec', {
       namedCurve: 'prime256v1',
@@ -38,10 +40,7 @@ try {
       gatewayKey: randomBytes(32).toString('base64url'),
     };
   }
-  config.google = {
-    clientId: env.GOOGLE_CLIENT_ID,
-    clientSecret: env.GOOGLE_CLIENT_SECRET,
-  };
+  Object.assign(config, providers);
   if (values['release-directory'] || values.revision) {
     if (!values['release-directory'] || !values.revision)
       throw new Error('Both release arguments required');
@@ -59,11 +58,11 @@ try {
   }
   setSecret('devAuthCredentials', config);
   console.log(
-    'Google configuration and stable auth DB/signing/gateway secrets stored encrypted. Values hidden.',
+    'Auth provider configuration and stable DB/signing/gateway secrets stored encrypted. Values hidden.',
   );
 } catch {
   console.error(
-    'Dev auth initialization failed; private values suppressed. Check Google configuration and optional verified release artifacts.',
+    'Dev auth initialization failed; private values suppressed. Check provider configuration and optional verified release artifacts.',
   );
   process.exitCode = 1;
 }

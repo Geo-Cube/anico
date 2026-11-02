@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { secret, privateFile } from './private-config.mjs';
 import { createPrivateKey } from 'node:crypto';
+import { authProviderEnvironment } from '../src/dev-auth.ts';
 try {
   const c = secret('devAuthCredentials', true);
   if (!c) {
@@ -11,21 +12,20 @@ try {
     c.database?.username !== 'anico_auth_dev_app' ||
     c.database.database !== 'anico_auth' ||
     !/^[a-f0-9]{64}$/.test(c.database.password) ||
-    !/^[A-Za-z0-9_-]{43}$/.test(c.gatewayKey) ||
-    !c.google?.clientId?.endsWith('.apps.googleusercontent.com') ||
-    !/^[A-Za-z0-9._-]+$/.test(c.google?.clientSecret ?? '')
+    !/^[A-Za-z0-9_-]{43}$/.test(c.gatewayKey)
   )
     throw new Error('Invalid auth secrets');
   createPrivateKey(c.signingKey);
+  const providerEnv = authProviderEnvironment({
+    google: c.google,
+    microsoft: c.microsoft,
+  });
   const root = new URL('../../.pulumi/dev-auth/', import.meta.url);
   privateFile(
     new URL('mongodb-uri', root),
     `mongodb://${c.database.username}:${c.database.password}@anico-dev-mongodb:27017/anico_auth?authSource=anico_auth\n`,
   );
-  privateFile(
-    new URL('provider.env', root),
-    `GOOGLE_CLIENT_ID=${c.google.clientId}\nGOOGLE_CLIENT_SECRET=${c.google.clientSecret}\n`,
-  );
+  privateFile(new URL('provider.env', root), providerEnv);
   privateFile(new URL('signing-key.pem', root), c.signingKey);
   privateFile(new URL('gateway-key', root), c.gatewayKey + '\n');
   const meta = JSON.parse(
