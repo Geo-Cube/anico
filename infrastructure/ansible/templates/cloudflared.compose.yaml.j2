@@ -1,0 +1,46 @@
+name: {{ anico_tunnel.project }}
+services:
+  cloudflared:
+    image: {{ anico_tunnel.image }}
+    user: '65532:65532'
+    read_only: true
+    restart: unless-stopped
+    stop_grace_period: 45s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    labels:
+      com.anico.managed-by: ansible
+      com.anico.environment: shared
+      com.anico.role: tunnel
+    command:
+      - tunnel
+      - --metrics
+      - 127.0.0.1:20241
+      - --output
+      - json
+      - run
+      - --token-file
+      - /run/secrets/tunnel-token
+    volumes:
+      - type: bind
+        source: ./secrets
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [management]
+    healthcheck:
+      test: [CMD, cloudflared, tunnel, --metrics, '127.0.0.1:20241', ready]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '3'
+networks:
+  management:
+    external: true
+    name: {{ anico_foundation.managementNetwork }}

@@ -1,0 +1,33 @@
+- name: Create the Docker configuration directory
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Check for existing daemon configuration before enabling live restore
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  register: docker_lifecycle_file
+
+- name: Read existing daemon configuration before enabling live restore
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: docker_lifecycle_content
+  when: docker_lifecycle_file.stat.exists
+
+- name: Enable live restore while preserving other daemon settings
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'dockerd --validate --config-file %s'
+    content: >-
+      {{
+        (docker_lifecycle_content.content | default('e30=') | b64decode | from_json)
+        | combine({'live-restore': true})
+        | to_nice_json
+      }}
+  notify: Reload Docker

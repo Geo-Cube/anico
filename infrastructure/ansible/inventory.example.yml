@@ -1,0 +1,7 @@
+all:
+  children:
+    anico:
+      hosts:
+        anico-server:
+          # Use your Host alias from ~/.ssh/config. User, key and port come from SSH config.
+          ansible_host: REPLACE_WITH_SSH_ALIAS

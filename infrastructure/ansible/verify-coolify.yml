@@ -1,0 +1,56 @@
+- name: Verify the private Coolify management stack
+  hosts: anico
+  become: true
+  gather_facts: false
+  vars:
+    anico_access: '{{ lookup("ansible.builtin.file", playbook_dir + "/../access.json") | from_json }}'
+  tasks:
+    - name: Verify health, pinned images, private ports, persistence and instance policy
+      ansible.builtin.script:
+        cmd: ../scripts/verify_coolify.py /data/coolify/source/anico/installation.json
+        executable: python3
+      changed_when: false
+      check_mode: false
+
+    - name: Verify the local management SSH connection using its dedicated key
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - coolify
+          - ssh
+          - -i
+          - /var/www/html/storage/app/ssh/management-key
+          - -o
+          - BatchMode=yes
+          - -o
+          - StrictHostKeyChecking=accept-new
+          - -o
+          - UserKnownHostsFile=/var/www/html/storage/app/ssh/known_hosts
+          - -o
+          - ConnectTimeout=10
+          - root@host.docker.internal
+          - docker
+          - version
+          - --format
+          - '{{ "{{.Server.Version}}" }}'
+      changed_when: false
+      check_mode: false
+
+    - name: Verify the private login page
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8000/login
+        status_code: 200
+
+    - name: Verify anonymous registration is closed
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8000/register
+        follow_redirects: none
+        status_code: [302, 403, 404]
+
+    - name: Verify private admin origin HTTP, secure headers and WebSocket routing
+      ansible.builtin.script:
+        cmd: ../scripts/verify_admin_origin.py
+        executable: python3
+      changed_when: false
+      when: anico_access.publish.administration

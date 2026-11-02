@@ -1,0 +1,45 @@
+- name: Verify dev and production network isolation
+  hosts: anico
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify isolation using temporary probes
+      when: not ansible_check_mode
+      block:
+        - name: Create a private temporary test directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: anico-isolation-
+          register: anico_isolation_directory
+
+        - name: Copy the isolation test
+          ansible.builtin.copy:
+            src: ../scripts/verify_environment_isolation.py
+            dest: '{{ anico_isolation_directory.path }}/verify.py'
+            mode: '0600'
+
+        - name: Copy the non-secret environment definition
+          ansible.builtin.copy:
+            src: ../environments.json
+            dest: '{{ anico_isolation_directory.path }}/environments.json'
+            mode: '0600'
+
+        - name: Verify resource ownership and actual network isolation
+          ansible.builtin.command:
+            argv:
+              - python3
+              - '{{ anico_isolation_directory.path }}/verify.py'
+              - '{{ anico_isolation_directory.path }}/environments.json'
+          register: anico_isolation_result
+          changed_when: true
+
+        - name: Show verification results
+          ansible.builtin.debug:
+            var: anico_isolation_result.stdout_lines
+
+      always:
+        - name: Remove the temporary test directory
+          ansible.builtin.file:
+            path: '{{ anico_isolation_directory.path }}'
+            state: absent
+          when: anico_isolation_directory is defined and anico_isolation_directory.path is defined

@@ -1,0 +1,35 @@
+{
+  "name": "@anico/infrastructure",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bootstrap": "bash scripts/bootstrap.sh",
+    "deploy:tunnel": "bash scripts/deploy-tunnel.sh",
+    "deploy:coolify": "bash scripts/deploy-coolify.sh",
+    "coolify:init": "node scripts/init-coolify.mjs",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "npm run test:unit",
+    "test:unit": "node --import tsx --test tests/*.test.ts",
+    "state:init:local": "node scripts/init-local-state.mjs",
+    "preflight:cloud": "node --env-file-if-exists=.env.local scripts/cloud-preflight.mjs",
+    "verify:admin": "node scripts/verify-admin-edge.mjs",
+    "verify:firewall": "node --env-file-if-exists=.env.local scripts/verify-firewall.mjs",
+    "recovery:create": "node --env-file-if-exists=.env.local scripts/create-recovery-snapshot.mjs",
+    "recovery:verify": "node --env-file-if-exists=.env.local scripts/verify-recovery-snapshot.mjs",
+    "pulumi": "node --env-file-if-exists=.env.local scripts/run-pulumi.mjs",
+    "preview": "npm run build && npm run pulumi -- preview",
+    "up": "npm run build && npm run pulumi -- up"
+  },
+  "dependencies": {
+    "@pulumi/cloudflare": "^6.23.1",
+    "@pulumi/hcloud": "^1.43.1",
+    "@pulumi/pulumi": "^3.271.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15"
+  }
+}

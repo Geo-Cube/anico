@@ -1,0 +1,27 @@
+- name: Enable live restore on an existing Docker installation
+  hosts: anico
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Verify that Docker is already running
+      ansible.builtin.command: systemctl is-active docker
+      changed_when: false
+      check_mode: false
+
+  tasks:
+    - name: Configure Docker live restore
+      ansible.builtin.import_tasks: tasks/docker-lifecycle.yml
+
+    - name: Reload changed daemon configuration
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify that live restore is effective
+      ansible.builtin.command: docker info --format '{{ "{{.LiveRestoreEnabled}}" }}'
+      register: docker_live_restore
+      changed_when: false
+      failed_when: docker_live_restore.stdout != 'true'
+      when: not ansible_check_mode
+
+  handlers:
+    - name: Import Docker handlers
+      ansible.builtin.import_tasks: handlers/docker.yml

@@ -1,0 +1,75 @@
+- name: Prepare the application network for {{ anico_environment.key }}
+  ansible.builtin.include_tasks: ensure-network.yml
+  vars:
+    anico_network:
+      name: '{{ anico_environment.value.appNetwork }}'
+      environment: '{{ anico_environment.key }}'
+      role: app
+      internal: false
+
+- name: Prepare the internal data network for {{ anico_environment.key }}
+  ansible.builtin.include_tasks: ensure-network.yml
+  vars:
+    anico_network:
+      name: '{{ anico_environment.value.dataNetwork }}'
+      environment: '{{ anico_environment.key }}'
+      role: data
+      internal: true
+
+- name: Inspect the database volume for {{ anico_environment.key }}
+  ansible.builtin.command:
+    argv:
+      [docker, volume, inspect, '{{ anico_environment.value.databaseVolume }}']
+  register: anico_volume_inspection
+  changed_when: false
+  failed_when: anico_volume_inspection.rc not in [0, 1]
+  check_mode: false
+
+- name: Reject unmanaged or incompatible database volumes
+  ansible.builtin.assert:
+    that:
+      - existing_volume.Driver == 'local'
+      - (existing_volume.Labels | default({}, true)).get('com.anico.environment') == anico_environment.key
+      - (existing_volume.Labels | default({}, true)).get('com.anico.managed-by') == 'ansible'
+    fail_msg: 'Existing volume differs from IaC. It will not be deleted or adopted automatically.'
+  vars:
+    existing_volume: '{{ anico_volume_inspection.stdout | from_json | first }}'
+  when: anico_volume_inspection.rc == 0
+
+- name: Create the database volume for {{ anico_environment.key }}
+  ansible.builtin.command:
+    argv:
+      - docker
+      - volume
+      - create
+      - --driver
+      - local
+      - --label
+      - com.anico.managed-by=ansible
+      - --label
+      - 'com.anico.environment={{ anico_environment.key }}'
+      - '{{ anico_environment.value.databaseVolume }}'
+  when: anico_volume_inspection.rc == 1
+  changed_when: true
+
+- name: Create the environment configuration directory
+  ansible.builtin.file:
+    path: '{{ anico_foundation.rootDirectory }}/{{ anico_environment.key }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Check whether the environment directory already exists
+  ansible.builtin.stat:
+    path: '{{ anico_foundation.rootDirectory }}/{{ anico_environment.key }}'
+  register: anico_environment_directory
+
+- name: Store non-secret environment metadata
+  ansible.builtin.copy:
+    dest: '{{ anico_foundation.rootDirectory }}/{{ anico_environment.key }}/environment.json'
+    content: '{{ anico_environment.value | to_nice_json }}{{ "\n" }}'
+    owner: root
+    group: root
+    mode: '0640'
+  when: not ansible_check_mode or anico_environment_directory.stat.exists
