@@ -4,6 +4,18 @@
 Registrace ani schválení chovatele nenahrazují kontrolu oprávnění.
 Nový účet má roli `breeder`; administrátora jmenuje vlastník přes auth API.
 
+## Jednoduše, než začneš psát kód
+
+- **Frontend** je stránka v prohlížeči. **Backendová služba** přijímá její HTTP požadavky a pracuje s DB.
+- **Middleware** je kontrola, která proběhne před tvou routou. Tady ověří přihlášení a připraví `req.auth`.
+- **`req.auth.userId`** říká, kdo požadavek poslal. Použij ho jako vlastníka nového záznamu.
+- **Role** říká, zda může uživatel například moderovat. U běžné úpravy navíc ověř, že záznam patří jemu.
+- **401** znamená chybějící nebo neplatné přihlášení. **403** znamená, že pro tuto operaci nemá oprávnění.
+- **Událost registrace** je zpráva pro jinou službu o novém účtu. Není to přihlášení každého požadavku.
+
+Nejdřív rozběhni svou službu podle [manuálu](MANUAL-PRO-VYVOJARE.md). Potom projdi kroky
+1 a 2 níže. Část 3 potřebuješ až při implementaci služby, která zpracovává registraci.
+
 ## 1. Zapoj middleware
 
 Nový generátor zapojení připravuje. U starší služby:

@@ -1,6 +1,7 @@
 # Dokumentace AniCo
 
 **Vývojář začíná pouze [tímto návodem](MANUAL-PRO-VYVOJARE.md).**
+Jeho úvod vede úplného začátečníka od klonování po první spuštění a PR v GitHub Desktop.
 Cloudové tokeny, SSH a Pulumi pro běžný vývoj nepotřebuješ.
 
 **Co už funguje a co chybí:** [aktuální stav projektu](STAV-PROJEKTU.md).
