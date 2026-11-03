@@ -5,7 +5,8 @@
     "outDir": "dist",
     "declaration": true,
     "declarationMap": true,
-    "types": []
+    "types": [],
+    "resolveJsonModule": true
   },
   "include": ["src/**/*.ts"]
 }
