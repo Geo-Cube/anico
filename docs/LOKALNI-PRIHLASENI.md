@@ -3,6 +3,10 @@
 **Nasazené a ověřené 3. 11. 2026: Google i Microsoft login, obě API a odhlášení.**
 Vývojář nepotřebuje Google/Microsoft Client ID, secret ani podpisový klíč.
 
+Tento postup je pro vývoj frontendu a doménových služeb, například `animal-service`.
+Přihlášení zajišťuje společná auth-service na devu; lokálně ji nespouštěj.
+Samotný vývoj auth-service je zvláštní režim popsaný níže a nyní ho pro tým nenastavujeme.
+
 ## Frontend nebo frontend s backendem
 
 Z kořene projektu:
@@ -26,6 +30,10 @@ Ve fullstack režimu jde vybrané API do lokální služby a osobní DB;
 ostatní API dál do společného devu. Přihlášení nesynchronizuje databáze.
 Google a Microsoft účty zůstávají oddělené, pokud je sám výslovně nepropojíš.
 
+Například s `--service animal-service` frontend volá `/api/animal/...` pro lokální
+animal backend. Používej relativní URL; cestu za prefixem určuje router služby.
+Služba musí být ve tvé větvi a správce jí musí přidělit osobní DB oprávnění.
+
 ## Jen backend, Postman nebo REST klient
 
 ```bash
@@ -47,6 +55,7 @@ Token nikam nekopíruj. Přímý backendový port zůstává pro chráněné rou
 - 401: přihlas se. 403 po přihlášení: ověř roli nebo vlastnictví daného záznamu.
 - Chybějící API nebo zastavený lokální backend se nepřepne na společná data.
 - Chyba Google testovacího účtu nebo školního Microsoft přístupu patří správci registrace poskytovatele; neposílej secrets ani URL parametry do chatu.
+- `redirect_uri_mismatch` s callbackem na localhost: ověř, zda jsi nevybral `--service auth-service`. Pro běžný vývoj vyber svou doménovou službu; OAuth callbacky u Googlu ani Microsoftu neměň.
 
 ## Existující služba versus generátor
 

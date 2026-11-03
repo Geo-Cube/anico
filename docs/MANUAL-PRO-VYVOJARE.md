@@ -51,7 +51,9 @@ UI otevři na **http://127.0.0.1:5173**. **Ctrl+C** ukončí spuštěné procesy
 Frontend nikdy nepřistupuje přímo do MongoDB. Vlastní DB konfiguraci pro samotný frontend nepotřebuješ.
 Při prvním přístupu dokonči týmový GitHub Access podle pokynů terminálu.
 V UI se potom přihlas přes Google/Microsoft a potvrď **Povolit místní vývoj**.
-[Přihlášení pro frontend i backend](LOKALNI-PRIHLASENI.md) funguje po nasazení této změny na dev; tokeny se nikam nekopírují.
+[Přihlášení pro frontend i backend](LOKALNI-PRIHLASENI.md) je nasazené a ověřené; tokeny se nikam nekopírují.
+Přihlášení zajišťuje společná dev auth-service. Jako `--service` vyber vlastní doménovou
+službu, nikoli `auth-service`; kolegové nepotřebují OAuth secrets ani lokální callbacky.
 
 **Backend / fullstack:** od správce si vyžádej svůj soubor `.env.remote.local`
 a ulož jej do kořene. Soubor v `apps/tvoje-service/.env.remote.local` funguje také.
@@ -63,8 +65,8 @@ Diagnostika backendu i UI: `npm run doctor -- --service animal --frontend`.
 V PowerShellu můžeš používat `npm.cmd` místo `npm`.
 
 **Současný stav:** business obrazovky jsou zatím simulace; jejich napojení na API doplní vývojáři.
-Google/Microsoft login na týmovém devu je ověřený. Tato verze doplňuje přihlášení
-pro lokální nástroje; před prvním použitím musí být nasazená i serverová část.
+Google/Microsoft login na týmovém devu i pro lokální nástroje je nasazený a ověřený,
+včetně předání identity do lokálního i sdíleného API a odhlášení.
 Samotný GitHub Access nestačí pro business API. [Co máme a co zbývá](STAV-PROJEKTU.md).
 `animal` je příklad: musíš mít `apps/animal-service` ve své větvi a přidělená DB oprávnění.
 Jinak vyber název služby, na které skutečně pracuješ.

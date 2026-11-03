@@ -45,6 +45,8 @@ dohodnout příjemce a doručování registrace. Lokální auth tok je dokončen
 stále potřebují vlastní zapojení `@anico/auth`, nasazení a DB oprávnění.
 [Návod pro vývojáře](LOKALNI-PRIHLASENI.md). Další integrace přijdou na řadu následně.
 Apple ani produkci nyní nepřipravujeme.
+Lokální OAuth konfiguraci pro vývoj samotné auth-service podle domluvy nenastavujeme;
+vývojáři ostatních služeb používají společnou dev autentizaci.
 
 [Auth kontrakt a příkazy](AUTENTIZACE.md) · [vývojářský návod](MANUAL-PRO-VYVOJARE.md) ·
 [nasazování](NASAZOVANI.md) · [provozní checklist](../infrastructure/NEXT-STEPS.md)
