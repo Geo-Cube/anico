@@ -132,6 +132,8 @@ Docker images a secrets. Testy používají vlastní dočasnou DB, nikoli tvou o
 Při prvním běhu potřebují internet ke stažení MongoDB binárky. V CI se binárka
 připraví jednou před paralelními testy; lokálně ji lze připravit přes
 `npm run test:prepare-db`.
+Auth testy si navíc automaticky připraví dočasný NATS broker z ověřené binárky;
+žádný broker ani další secrets ručně nenastavuješ. Předem lze spustit `npm run test:prepare-broker`.
 
 ## 3. Kam psát kód
 

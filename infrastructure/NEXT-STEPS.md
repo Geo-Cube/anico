@@ -20,8 +20,9 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
 - [x] Review/CI PR #22 a #23, gateway 3, migrace a skutečný Google/Microsoft test [lokálního přihlášení](../docs/LOKALNI-PRIHLASENI.md); ověřené obě API, logout a aktualizovaný recovery release.
 - [ ] Propojit business obrazovky Reactu s API; doplnit autorizaci podle doménových pravidel.
 - [x] Jmenovat a ověřit prvního skutečného Google vlastníka na společném devu; audit potvrzený.
-- [ ] Review/CI a nasazení verzovaného `user.registered` kontraktu a backfill migrace; [integrační návod](../docs/INTEGRACE-IDENTITY.md).
-- [ ] Potvrdit breeder-service jako příjemce `user.registered` a implementovat publisher, transport, idempotentní consumer a retry. Příprava outboxu sama zprávy nedoručuje.
+- [x] Review/CI PR #25, nasazení registračního kontraktu, backfill migrace a ověření payloadů i vlastníka.
+- [ ] Review/CI a nasazení NATS JetStream a publisheru, gateway runtime 4; [postup](../docs/REGISTRACNI-UDALOSTI.md).
+- [ ] Později potvrdit potřebu animal projekce, implementovat vlastní durable/idempotentní consumer a otestovat celý tok včetně výpadků a duplicit. Nyní se consumer ani business tok nemění.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
 - [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).
 - [x] Review auth-service a sdíleného kontraktu identity (PR #17), oprava gateway (PR #19).

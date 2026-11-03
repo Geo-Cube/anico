@@ -27,7 +27,7 @@ Připravený kód nebo uložené credentials nejsou totéž jako ověřené nasa
 
 - Apple je odložený dle domluvy; není součástí aktuálního dokončení auth.
 - Business obrazovky: nahradit simulace skutečným API a daty. Přihlašovací panel už skutečný je.
-- Předání registrace: verzovaný Zod kontrakt `user.registered` a atomické uložení payloadu jsou připravené v této změně, včetně migrace starých pending záznamů. Čekají na review a nasazení. Navržený příjemce je breeder-service; publisher, broker a consumer nejsou implementované. [Integrační kontrakt](INTEGRACE-IDENTITY.md).
+- Předání registrace: kontrakt v1, atomický outbox a migrace pending záznamů jsou nasazené a ověřené po PR #25. Privátní NATS JetStream a publisher jsou připravené v této změně a čekají na review/nasazení. Případný animal consumer a celý business tok zůstávají na později. [Provoz a předání](REGISTRACNI-UDALOSTI.md).
 - Ověřit první spuštění a potřebná DB oprávnění u každého člena týmu; předání všem není potvrzené.
 - Produkce je nyní odložená. Veřejná `anico.online`, samostatné DB/secrets a schvalované nasazení zatím nejsou hotové.
 - Provoz: limity prostředků, monitoring/upozornění a domluvené aktualizace.

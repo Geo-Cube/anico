@@ -115,15 +115,17 @@ doručení zachovají. Změna profilu nebo role není nová registrace.
 Nepodporovanou verzi nebo neplatnou zprávu příjemce nesmí zpracovat jako v1;
 musí ji odložit pro nápravu, bez logování celého profilu.
 
-**Připravené v tomto kódu, ještě bez doručování:** účet a jeho registrační událost
+**Nasazené a ověřené po PR #25:** účet a jeho registrační událost
 vznikají atomicky ve stejném MongoDB dokumentu pod `users.registration.event`.
 Stav zůstává `pending`. Migrace doplní událost starým pending registracím se stejným
 ID a časem; jejich profil je snapshot dostupný při migraci. Fixture a publikované
-registrace vynechá. Migrace zatím není aplikovaná na živém devu.
+registrace vynechá. Migrace je aplikovaná na živém devu; stávající pending payloady jsou ověřené.
 
-**Navržený příjemce je breeder-service:** po registraci může vytvořit základ profilu,
-ale neschválí chovatele a nepřidělí administrátorskou roli. Tuto integraci ještě
-musí implementovat vlastník služby. Broker, publisher a consumer zatím neběží.
+**Budoucí příjemce může být animal-service:** může udržovat potřebnou projekci
+uživatele, nikoli automaticky vytvořit zvíře nebo schválený profil chovatele.
+Profil chovatele patří breeder-service. Pokud animal potřebuje jen vlastníka,
+stačí ověřené `userId` v JWT. [Broker a publisher](REGISTRACNI-UDALOSTI.md) jsou
+připravené v navazující změně a čekají na review/nasazení. Consumer ani celý business tok nyní nezapojujeme.
 Transport musí být privátní a autentizovaný; publikovat tuto událost smí jen
 auth-service. Frontend ani veřejné API nesmí zapisovat zprávy o registraci.
 

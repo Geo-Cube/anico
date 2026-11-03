@@ -1,6 +1,8 @@
 # Obnova: konfigurace není záloha dat
 
 **IaC obnoví nastavení. Bez záloh neobnoví DB data, uploady ani ruční změny Coolify.**
+Pro registrace obnovuje také privátní broker a šifrované přístupy; jeho data volume
+vyžadují vlastní zálohu. [Nasazení brokeru a publisheru](../docs/REGISTRACNI-UDALOSTI.md).
 Ověřili jsme lokální import/dešifrování Pulumi state. Úplná obnova na novém VPS
 ani automatické datové zálohy zatím nejsou dokončené.
 
