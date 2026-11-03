@@ -49,3 +49,27 @@ export const StoredFileSchema = z.strictObject({
   fileReference: z.string(),
 });
 export type StoredFile = z.infer<typeof StoredFileSchema>;
+
+// Profile-related schemas and types
+export const accountSchema = z.enum([
+  'NOT_SUBMITTED',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+]);
+export type AccountState = z.infer<typeof accountSchema>;
+
+export const MyAccountSchema = z.object({
+  accountState: accountSchema,
+
+  breeder: z.object({
+    breederId: z.string(),
+    firstName: z.string(),
+    lastName: z.string(),
+    emailAddress: z.string().email(),
+    breedingStationName: z.string().nullable(),
+    breedingStationNumber: z.string().nullable(),
+    isVerified: z.boolean(),
+  }),
+});
+export type MyAccount = z.infer<typeof MyAccountSchema>;
