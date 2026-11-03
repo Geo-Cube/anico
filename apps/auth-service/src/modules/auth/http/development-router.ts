@@ -89,6 +89,9 @@ export function developmentRouter(options: {
       [current.user.givenName, current.user.familyName]
         .filter(Boolean)
         .join(' ') || 'uživatel AniCo';
+    // no-referrer makes native form POSTs send Origin: null. Preserve the
+    // origin for CSRF checks while keeping request IDs out of Referer.
+    res.setHeader('Referrer-Policy', 'strict-origin');
     // form-action also applies to the approval POST's loopback redirect.
     res.setHeader(
       'Content-Security-Policy',

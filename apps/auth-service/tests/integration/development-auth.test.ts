@@ -166,6 +166,7 @@ describe('local development authorization and PKCE', () => {
       .set('Cookie', signed.cookie)
       .expect(200);
     expect(consent.text).toContain('Povolit místní vývoj');
+    expect(consent.headers['referrer-policy']).toBe('strict-origin');
     expect(consent.headers['content-security-policy']).toContain(
       "form-action 'self' http://127.0.0.1:49152;",
     );
@@ -267,6 +268,16 @@ describe('local development authorization and PKCE', () => {
       .type('form')
       .send({ request: id, csrfToken: signed.csrf, decision: 'allow' })
       .expect(403);
+    for (const originHeader of [undefined, 'null']) {
+      const submission = request(app)
+        .post('/development/approve')
+        .set('Cookie', signed.cookie);
+      if (originHeader) submission.set('Origin', originHeader);
+      await submission
+        .type('form')
+        .send({ request: id, csrfToken: signed.csrf, decision: 'allow' })
+        .expect(403);
+    }
     await request(app)
       .post('/development/approve')
       .set('Cookie', signed.cookie)
