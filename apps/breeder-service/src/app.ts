@@ -11,7 +11,11 @@ export function createApp(dependencies: {
   app.disable('x-powered-by');
   app.use(pinoHttp({ logger: dependencies.logger }));
   app.use(express.json({ limit: '32kb' }));
+
   app.use(healthRouter(dependencies));
+
+  //zde napojíme router pro chovatele
+
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
   const handleError: ErrorRequestHandler = (
