@@ -21,7 +21,7 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
 - [ ] Propojit business obrazovky Reactu s API; doplnit autorizaci podle doménových pravidel.
 - [x] Jmenovat a ověřit prvního skutečného Google vlastníka na společném devu; audit potvrzený.
 - [x] Review/CI PR #25, nasazení registračního kontraktu, backfill migrace a ověření payloadů i vlastníka.
-- [ ] Review/CI a nasazení NATS JetStream a publisheru, gateway runtime 4; [postup](../docs/REGISTRACNI-UDALOSTI.md).
+- [x] Review/CI PR #26, nasazení privátního NATS JetStream a publisheru, runtime 4; shodné payloady obou registrací v outboxu/brokeru, nulové pending/failed a aktualizovaný recovery release. [Postup](../docs/REGISTRACNI-UDALOSTI.md).
 - [ ] Později potvrdit potřebu animal projekce, implementovat vlastní durable/idempotentní consumer a otestovat celý tok včetně výpadků a duplicit. Nyní se consumer ani business tok nemění.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
 - [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).

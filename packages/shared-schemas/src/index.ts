@@ -47,3 +47,21 @@ export {
   type UserRegisteredData,
   type UserRegisteredEvent,
 } from './registration.js';
+
+export {
+  AnimalSpeciesSchema,
+  AnimalSexSchema,
+  AnimalIdSchema,
+  CreateAnimalSchema,
+  UpdateAnimalSchema,
+  AnimalSchema,
+  ListAnimalsQuerySchema,
+  AnimalListSchema,
+  animalBreeds,
+  type AnimalSpecies,
+  type CreateAnimalInput,
+  type UpdateAnimalInput,
+  type Animal,
+  type ListAnimalsQuery,
+  type AnimalList,
+} from './animal.js';

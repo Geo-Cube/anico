@@ -1,7 +1,8 @@
 # Doručování registrací: auth → broker
 
-**Stav této změny:** registrační migrace je ověřená na devu. Broker a publisher
-jsou připravené k review, zatím nejsou nasazené. Animal consumer a celý business tok necháváme na později.
+**Ověřené na devu 3. 11. 2026 po PR #26:** privátní broker, gateway runtime 4 a publisher
+jsou nasazené. Obě existující pending registrace jsou publikované; otisky payloadů
+v MongoDB a JetStream se shodují. Pending/failed je nula. Animal consumer ani celý business tok nejsou zapojené.
 
 ## Co to udělá
 
@@ -51,7 +52,7 @@ Admin a publisher credentials se kolegům neposílají; consumer bude mít vlast
 Jeden VPS není HA. Volume a fsync nenahrazují zálohu; broker data zahrneme do
 plánovaných záloh a zkoušky obnovy. Ty podle domluvy zatím neřešíme.
 
-## Nasazení správcem po review a zeleném CI
+## Nasazení a obnova správcem po review a zeleném CI
 
 Z kořene repozitáře:
 
@@ -73,6 +74,12 @@ streamu a secrets. Data volume se nepřepisují. Prázdný broker neobnoví ztra
 zprávy bez zálohy nebo výslovného replay postupu z uložených outbox payloadů.
 
 ## Testy
+
+Na skutečném devu je potvrzené trvalé file storage, discard-new, vypnutá časová
+expirace, nulové veřejné porty, zamítnutá správa streamu publisherem a nula consumerů.
+Opakované spuštění broker IaC zachovalo stejný kontejner bez restartu.
+Všechny tři aplikační image jsou zdravé a odpovídají ověřenému release
+`22939abb9cee7d8fe3752dd106a5b735a07cad43`, uloženému také pro obnovu.
 
 Skutečný dočasný NATS a MongoDB ověřují ACK před změnou stavu, restart, výpadek,
 retry, plný stream, deduplikaci, lease, neplatný payload, oprávnění a shutdown.
