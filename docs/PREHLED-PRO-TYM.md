@@ -65,8 +65,8 @@ API kontrakt, image a konfiguraci nasazení; není to jen další složka.
 
 ## Co ještě není hotové
 
-Google i Microsoft login/logout na devu funguje. Zbývá nasazení a ověření
-propojení účtů do stejného `userId`, předávání relace do lokálního vývoje, napojení business UI na API,
+Google i Microsoft login/logout na devu funguje. Volitelné propojení účtů je nasazené, ale vlastník ho nevyužívá.
+Tato změna doplňuje lokální přihlášení a čeká na nasazení/ověření. Zbývá napojení business UI na API,
 autorizace jednotlivých domén a doručování registrace další službě.
 Message broker není nasazený. Apple a produkci jsme odložili. Provozní limity,
 monitoring a zálohy s testem obnovy ještě zbývají.

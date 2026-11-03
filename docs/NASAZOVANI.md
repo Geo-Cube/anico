@@ -19,7 +19,7 @@ Týmový dev používá společnou DB. Lokální `dev:frontend` volá jeho API;
 `dev:backend -- --service animal` používá osobní DB. `dev:fullstack -- --service animal`
 přepne jen animal API na lokální službu s osobní DB, ostatní API zůstanou na devu.
 Jméno služby a její lokální port určuje workspace; breeding má port 3000.
-Předávání nové cloudové aplikační relace lokálnímu FE/backendu ještě není hotové.
+Tato verze doplňuje [lokální přihlášení](LOKALNI-PRIHLASENI.md); vyžaduje nasazení auth-service i gateway runtime 3.
 GitHub Access řeší týmový vstup, nikoli oprávnění uživatele k chráněnému API.
 
 ## Co spravujeme
@@ -36,7 +36,7 @@ Images jsou veřejné `ghcr.io/geo-cube/anico-frontend` a
 `ghcr.io/geo-cube/anico-breeding-service` a `ghcr.io/geo-cube/anico-auth-service`. Nasazujeme digesty z CI artifactů
 `image-reference-SLUZBA-COMMIT`, všechny ze stejného commitu. Secrets se do images nedávají.
 Nasazená sestava obsahuje frontend, breeding a auth backend. Google i Microsoft login/logout
-jsou ověřené. Propojení obou přihlášení do jednoho účtu zatím čeká na nasazení.
+jsou ověřené. Volitelné propojení účtů je nasazené; vlastník své účty ponechává oddělené.
 Postupy jsou v [auth návodu](AUTENTIZACE.md), přehled v [aktuálním stavu](STAV-PROJEKTU.md). Novou
 mikroservisu generátor automaticky nepřidá do publish ani nasazení; správce musí
 doplnit image, runtime proměnné, DB účet a API routu. Historické breeding API je

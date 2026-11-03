@@ -36,6 +36,7 @@ Nejdřív aktualizuj `dev`, potom svou pracovní větev a začleň do ní `dev`.
 | Prohlédnout sestavený frontend na portu 4173      | `npm run preview -w @anico/frontend`                     |
 | Spustit sestavený backend s dostupnou DB a `.env` | `npm run start -w @anico/tvoje-service`                  |
 
+Po spuštění se přihlas podle [lokálního auth návodu](LOKALNI-PRIHLASENI.md).
 Procesy ukonči **Ctrl+C**. Samostatný backend s osobní DB:
 `npm run dev:backend -- --service animal`. Samostatný frontend s týmovým API:
 `npm run dev:frontend`. Kombinace: `npm run dev:fullstack -- --service animal`.

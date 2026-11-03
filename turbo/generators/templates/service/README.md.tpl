@@ -1,5 +1,9 @@
 # __SERVICE_NAME__
 
+Vzdálený vývoj používá `@anico/auth` a ověřené JWT. Konfiguraci veřejných klíčů
+předává launcher za běhu; API se bez ní v dev/produkčním prostředí nespustí.
+[Přihlášení při lokálním vývoji](../../docs/LOKALNI-PRIHLASENI.md).
+
 Z kořene repozitáře:
 
 ```bash
