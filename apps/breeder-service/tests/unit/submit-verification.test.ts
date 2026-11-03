@@ -313,7 +313,7 @@ describe('canSubmitVerificationRequest', () => {
     const result = await repository.listByVerificationStatus();
 
     expect(result).toHaveLength(1);
-    expect(result[0].breederId).toBe('user-123');
+    expect(result[0]?.breederId).toBe('user-123');
   });
 
   it('lists breeders filtered by PENDING status', async () => {
@@ -369,7 +369,7 @@ describe('canSubmitVerificationRequest', () => {
       await repository.listByVerificationStatus('PENDING');
 
     expect(pendingBreeders).toHaveLength(1);
-    expect(pendingBreeders[0].breederId).toBe('user-123');
+    expect(pendingBreeders[0]?.breederId).toBe('user-123');
   });
 
   it('returns zero counts when there are no verification requests', async () => {

@@ -9,9 +9,11 @@ import type {
   DecisionRecord,
   VerificationStatus,
 } from '../../src/modules/breeders/domain/internal-types.js';
-import { BreederNotFoundError } from '../../src/modules/breeders/domain/errors.js';
+
+import type { BreederRepository } from '../../src/modules/breeders/domain/ports.js';
 import { randomBytes } from 'node:crypto';
-export function inMemoryBreeders() {
+
+export function inMemoryBreeders(): BreederRepository {
   const breeders = new Map<string, Breeder>();
 
   return {
