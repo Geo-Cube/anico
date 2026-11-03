@@ -125,7 +125,7 @@ registrace vynechá. Migrace je aplikovaná na živém devu; stávající pendin
 uživatele, nikoli automaticky vytvořit zvíře nebo schválený profil chovatele.
 Profil chovatele patří breeder-service. Pokud animal potřebuje jen vlastníka,
 stačí ověřené `userId` v JWT. [Broker a publisher](REGISTRACNI-UDALOSTI.md) jsou
-připravené v navazující změně a čekají na review/nasazení. Consumer ani celý business tok nyní nezapojujeme.
+nasazené a ověřené po PR #26. Consumer ani celý business tok nyní nezapojujeme.
 Transport musí být privátní a autentizovaný; publikovat tuto událost smí jen
 auth-service. Frontend ani veřejné API nesmí zapisovat zprávy o registraci.
 
