@@ -1,6 +1,6 @@
 # Přihlášení při lokálním vývoji
 
-**Připravená změna: používej po review a nasazení této verze na týmový dev.**
+**Nasazené a ověřené 3. 11. 2026: Google i Microsoft login, obě API a odhlášení.**
 Vývojář nepotřebuje Google/Microsoft Client ID, secret ani podpisový klíč.
 
 ## Frontend nebo frontend s backendem
@@ -43,6 +43,7 @@ Token nikam nekopíruj. Přímý backendový port zůstává pro chráněné rou
 - **Odhlásit se** v lokálním UI zruší vývojovou relaci; přihlášení na cloudovém devu ponechá.
 - **Ctrl+C** zastaví procesy a pokusí se odvolat vývojovou relaci. Tokeny se neukládají do souborů.
 - Po restartu příkazu nebo vypršení relace se přihlas znovu. Platnost je nejvýše 8 hodin a nepřesáhne platnost relace, kterou jsi vývoj povolil.
+- `CSRF_REJECTED` při potvrzování: spusť nové přihlášení z lokálního UI, nepoužívej starý formulář. Oprava formuláře je nasazená v PR #23; CSRF kontrola zůstává zapnutá.
 - 401: přihlas se. 403 po přihlášení: ověř roli nebo vlastnictví daného záznamu.
 - Chybějící API nebo zastavený lokální backend se nepřepne na společná data.
 - Chyba Google testovacího účtu nebo školního Microsoft přístupu patří správci registrace poskytovatele; neposílej secrets ani URL parametry do chatu.

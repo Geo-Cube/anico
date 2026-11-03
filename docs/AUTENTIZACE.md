@@ -9,7 +9,7 @@ Microsoft je nasazený po PR #20; skutečný login/logout potvrdil uživatel.
 První vlastník je jmenovaný na Google identitě s auditním záznamem.
 Volitelné propojení je nasazené po PR #21; aktuální vlastník si zvolil účty ponechat oddělené.
 Apple a produkce jsou podle aktuální domluvy odložené.
-Lokální přihlášení je připravené v této změně, čeká na CI, review, runtime gateway 3 a skutečný test po nasazení.
+Lokální přihlášení je nasazené po PR #22 a opravě formuláře v PR #23. Uživatel ověřil Google i Microsoft login; ověřené je také předání identity do lokálního i sdíleného API a odmítnutí relace po odhlášení.
 [Krátký postup pro vývojáře](LOKALNI-PRIHLASENI.md).
 Současný GitHub Access chrání vývojáře; nepřihlašuje zákazníka do AniCo.
 [Přehled hotových a chybějících částí](STAV-PROJEKTU.md).
@@ -277,7 +277,7 @@ případnou opravu proto nasazuj dopředu, nikoli prostým návratem starého au
 
 ## Přihlášení lokálních vývojových nástrojů
 
-Tato změna přidává oddělenou relaci pro Node nástroje. Zapíná se výhradně přes
+Lokální vývoj používá oddělenou relaci pro Node nástroje. Zapíná se výhradně přes
 `AUTH_DEVELOPMENT_ENABLED=true` spolu s `APP_ENV=dev`; v jiném prostředí konfigurace selže.
 IdP callbacky zůstávají na dev doméně, kolegové nepotřebují vlastní OAuth klienty ani secrets.
 
@@ -303,6 +303,9 @@ lokální prostředník. Cookies z cloudu ani Access tokeny se neposílají do l
 Vývojová relace platí nejvýše 8 hodin, nikdy déle než schvalující app relace. Lokální
 logout ji zruší, ale neruší jiné zařízení. Role a stav uživatele se kontrolují při
 ověření; již vydaný interní JWT může platit maximálně 30 sekund. Správa propojení účtů
-zůstává v cloudové aplikaci. Dokončení této změny vyžaduje migraci
-`20261103104355-development-login-grants`, aplikaci gateway konfigurace před merge
-po zeleném CI/review a následný skutečný test lokálního loginu i logoutu.
+zůstává v cloudové aplikaci. Migrace `20261103104355-development-login-grants` je aplikovaná,
+gateway runtime 3 je nasazený a CI obou PR je zelené. Google/Microsoft lokální login
+a předání identity byly ověřené se skutečnými relacemi. Po logoutu vracejí relace,
+lokální i sdílené chráněné API 401; přímý backend bez identity zůstává odmítnutý.
+Při API kontrole se použilo neplatné tělo končící business validací 400, bez zápisu dat.
+Ověřený release `014865356ab76a896dea89705d6d3f2e70758b7d` je zaregistrovaný pro obnovu.

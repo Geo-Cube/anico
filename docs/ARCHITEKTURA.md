@@ -64,8 +64,8 @@ závislosti a sledují jejich změny.
 Frontend má nasazené přihlášení Google/Microsoft a práci s relací; business obrazovky
 zůstávají simulací. Auth backend, kontrakt identity a gateway jsou nasazené na devu;
 Google i Microsoft login/logout jsou uživatelsky ověřené. Volitelné propojení účtů je nasazené,
-vlastník ponechává své účty oddělené. Tato verze doplňuje [lokální přihlášení](LOKALNI-PRIHLASENI.md);
-jeho serverová část ještě čeká na review a nasazení; Apple a produkce jsou odložené. [Postup a aktuální stav](AUTENTIZACE.md).
+vlastník ponechává své účty oddělené. [Lokální přihlášení](LOKALNI-PRIHLASENI.md) je také
+nasazené a ověřené pro Google/Microsoft, lokální i sdílené API a logout. Apple a produkce jsou odložené. [Postup a aktuální stav](AUTENTIZACE.md).
 Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí login uživatelů AniCo.
 
 ## Co testovat

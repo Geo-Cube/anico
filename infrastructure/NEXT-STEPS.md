@@ -17,7 +17,7 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
       poté skutečně ověřit Microsoft i Google login/logout a aktualizovat recovery release.
 - [x] Nasadit volitelné propojení Google/Microsoft (PR #21), ověřit migraci a zachování vlastníka.
       Vlastník zvolil účty ponechat oddělené; skutečné propojení neprovádíme.
-- [ ] Review/CI, gateway 3, nasazení a browser test [lokálního přihlášení](../docs/LOKALNI-PRIHLASENI.md); kód a integrační testy jsou připravené.
+- [x] Review/CI PR #22 a #23, gateway 3, migrace a skutečný Google/Microsoft test [lokálního přihlášení](../docs/LOKALNI-PRIHLASENI.md); ověřené obě API, logout a aktualizovaný recovery release.
 - [ ] Propojit business obrazovky Reactu s API; doplnit autorizaci podle doménových pravidel.
 - [x] Jmenovat a ověřit prvního skutečného Google vlastníka na společném devu; audit potvrzený.
 - [ ] Dohodnout příjemce `user.registered` a implementovat doručování registrace další službě.
