@@ -5,6 +5,8 @@ import type { AuthService } from '../application/auth.js';
 import { equalSecret } from '../application/auth.js';
 import { AuthError, type Provider } from '../domain/auth.js';
 import type { IdentitySigner } from '../infrastructure/signer.js';
+import type { DevelopmentAuthService } from '../application/development.js';
+import { developmentRouter } from './development-router.js';
 
 const providerSchema = z.enum(['google', 'microsoft', 'apple']);
 export function authRouter(options: {
@@ -13,6 +15,7 @@ export function authRouter(options: {
   publicOrigin: string;
   gatewayKey: string;
   sessionSeconds: number;
+  development?: DevelopmentAuthService;
 }) {
   const { service, signer, publicOrigin } = options;
   const router = Router();
@@ -32,6 +35,34 @@ export function authRouter(options: {
     res.setHeader('Cache-Control', 'no-store');
     next();
   });
+  async function authenticate(req: Request) {
+    const token = req.get('x-anico-development-token');
+    if (token !== undefined) {
+      if (!options.development)
+        throw new AuthError(401, 'DEVELOPMENT_LOGIN_UNAVAILABLE');
+      return {
+        ...(await options.development.authenticate(token, req.headers.origin)),
+        native: true,
+        token,
+      };
+    }
+    const browserToken = cookies(req)[sessionName];
+    return {
+      ...(await service.authenticate(browserToken)),
+      native: false,
+      token: browserToken!,
+    };
+  }
+  if (options.development)
+    router.use(
+      '/development',
+      developmentRouter({
+        auth: service,
+        development: options.development,
+        signer,
+        sessionName,
+      }),
+    );
   router.get('/providers', (_req, res) =>
     res.json({ providers: service.providers }),
   );
@@ -40,7 +71,11 @@ export function authRouter(options: {
     const provider = providerSchema.parse(req.params.provider);
     if (provider === 'apple' && !secure)
       throw new AuthError(503, 'APPLE_REQUIRES_HTTPS');
-    const login = await service.begin(provider);
+    const returnTo =
+      req.query.returnTo === undefined
+        ? undefined
+        : z.string().max(160).parse(req.query.returnTo);
+    const login = await service.begin(provider, returnTo);
     res.setHeader(
       'Set-Cookie',
       cookie(loginName, login.browser, 600, provider === 'apple'),
@@ -48,6 +83,8 @@ export function authRouter(options: {
     res.redirect(302, login.url);
   });
   router.post('/connections/:provider', async (req, res) => {
+    if (req.get('x-anico-development-token'))
+      throw new AuthError(403, 'ACCOUNT_MANAGEMENT_REQUIRES_BROWSER');
     const provider = providerSchema.parse(req.params.provider);
     const token = cookies(req)[sessionName];
     const current = await service.authenticate(token);
@@ -92,7 +129,7 @@ export function authRouter(options: {
         cookie(sessionName, result.token, options.sessionSeconds),
         cookie(loginName, '', 0),
       ]);
-      res.redirect(303, `${publicOrigin}/`);
+      res.redirect(303, publicOrigin + result.returnTo);
     } catch (error) {
       res.setHeader('Set-Cookie', cookie(loginName, '', 0));
       if (error instanceof AuthError) throw error;
@@ -102,25 +139,30 @@ export function authRouter(options: {
   router.get('/login/:provider/callback', callback);
   router.post('/login/:provider/callback', callback);
   router.get('/session', async (req, res) => {
-    const result = await service.authenticate(cookies(req)[sessionName]);
+    const result = await authenticate(req);
     res.json({
       identity: result.user,
       csrfToken: result.session.csrfToken,
       expiresAt: result.session.expiresAt.toISOString(),
       linkedProviders: await service.linkedProviders(result.user.userId),
+      canManageAccounts: !result.native,
     });
   });
   router.post('/logout', async (req, res) => {
-    const token = cookies(req)[sessionName];
-    const result = await service.authenticate(token);
-    service.csrf(result.session, req.headers.origin, req.get('x-csrf-token'));
-    await service.logout(token!);
-    res.setHeader('Set-Cookie', cookie(sessionName, '', 0));
+    const result = await authenticate(req);
+    if (result.native)
+      await options.development!.logout(result.token, req.headers.origin);
+    else {
+      service.csrf(result.session, req.headers.origin, req.get('x-csrf-token'));
+      await service.logout(result.token);
+      res.setHeader('Set-Cookie', cookie(sessionName, '', 0));
+    }
     res.sendStatus(204);
   });
   router.put('/users/:userId/admin', async (req, res) => {
-    const result = await service.authenticate(cookies(req)[sessionName]);
-    service.csrf(result.session, req.headers.origin, req.get('x-csrf-token'));
+    const result = await authenticate(req);
+    if (!result.native)
+      service.csrf(result.session, req.headers.origin, req.get('x-csrf-token'));
     const userId = z.uuid().parse(req.params.userId);
     const { admin } = z.strictObject({ admin: z.boolean() }).parse(req.body);
     res.json({ identity: await service.setAdmin(result.user, userId, admin) });
@@ -131,9 +173,12 @@ export function authRouter(options: {
     const key = req.get('x-anico-gateway-key');
     if (!key || !equalSecret(key, options.gatewayKey))
       throw new AuthError(401, 'GATEWAY_REQUIRED');
-    const result = await service.authenticate(cookies(req)[sessionName]);
+    const result = await authenticate(req);
     const method = req.get('x-forwarded-method');
-    if (!method || !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()))
+    if (
+      !result.native &&
+      (!method || !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()))
+    )
       service.csrf(result.session, req.headers.origin, req.get('x-csrf-token'));
     res.setHeader('X-Anico-Identity', await signer.sign(result.user));
     res.sendStatus(204);

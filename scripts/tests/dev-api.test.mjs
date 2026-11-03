@@ -174,10 +174,7 @@ test(
         body: 'shared-body',
       });
       assert.equal(requests[1].headers['cf-access-token'], secret);
-      assert.equal(
-        requests[1].headers.authorization,
-        'Bearer application-session',
-      );
+      assert.equal(requests[1].headers.authorization, undefined);
       assert.ok(!requests[1].headers.cookie.includes('CF_Authorization'));
       assert.equal(shared.headers.get('cf-access-token'), null);
       assert.ok(!shared.headers.get('set-cookie').includes('CF_Authorization'));

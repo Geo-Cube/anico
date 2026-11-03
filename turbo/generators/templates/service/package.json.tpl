@@ -26,6 +26,7 @@
     "db:remote:unlock": "node ../../scripts/dev-remote.mjs --service=__SERVICE_NAME__ --db=unlock"
   },
   "dependencies": {
+    "@anico/auth": "^0.1.0",
     "@anico/shared-schemas": "^0.1.0",
     "express": "^5.1.0",
     "mongoose": "^8.19.0",

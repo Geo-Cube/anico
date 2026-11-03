@@ -25,6 +25,8 @@ apps/frontend/**
 !apps/frontend/tsconfig.node.json
 !apps/frontend/dev-access.mjs
 !apps/frontend/dev-access.d.mts
+!apps/frontend/dev-app-auth.mjs
+!apps/frontend/dev-app-auth.d.mts
 !apps/frontend/dev-api-proxy.mjs
 !apps/frontend/dev-api-proxy.d.mts
 !apps/frontend/vite.config.ts

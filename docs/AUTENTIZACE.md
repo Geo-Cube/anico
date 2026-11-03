@@ -1,15 +1,16 @@
 # Identita a přihlášení AniCo
 
-**Stav k 2. 11. 2026:** Google i Microsoft přihlášení a odhlášení na `dev.anico.online`
+**Stav k 3. 11. 2026:** Google i Microsoft přihlášení a odhlášení na `dev.anico.online`
 jsou nasazené a uživatelsky ověřené. CI i serverové kontroly ověřily shodné
 images, neveřejné porty, oddělené DB přístupy, odmítnutí anonymních požadavků
 a podvržené identity. Credentials obou poskytovatelů a reference release pro obnovu jsou uložené
 v šifrovaném IaC configu; runtime secrets má jen auth-service.
 Microsoft je nasazený po PR #20; skutečný login/logout potvrdil uživatel.
 První vlastník je jmenovaný na Google identitě s auditním záznamem.
-Propojení poskytovatelů do jednoho účtu je připravené v této změně, ale zatím není nasazené.
+Volitelné propojení je nasazené po PR #21; aktuální vlastník si zvolil účty ponechat oddělené.
 Apple a produkce jsou podle aktuální domluvy odložené.
-Lokální předávání cloudové aplikační relace zůstává další prací.
+Lokální přihlášení je připravené v této změně, čeká na CI, review, runtime gateway 3 a skutečný test po nasazení.
+[Krátký postup pro vývojáře](LOKALNI-PRIHLASENI.md).
 Současný GitHub Access chrání vývojáře; nepřihlašuje zákazníka do AniCo.
 [Přehled hotových a chybějících částí](STAV-PROJEKTU.md).
 
@@ -177,8 +178,8 @@ nejsou seznamem nedokončených kroků Google nasazení.
    explicitní pravidla; callback ani login nesmí vyžadovat již existující relaci.
 6. Nezveřejňovat porty služeb a zapojit ověřovací middleware do doménových backendů.
    Před dokončením těchto kroků není celý dev automaticky chráněný aplikačním loginem.
-7. Doplnit bezpečné předání aplikační identity lokálním backendům ve fullstack režimu.
-   Současná proxy zajišťuje směrování a Cloudflare přístup, nikoli tento nový login.
+7. Lokální přihlášení používá níže popsaný loopback/PKCE tok; vyžaduje tuto verzi
+   auth-service i runtime gateway 3. Před nasazením nefunguje jen aktualizací klienta.
 
 Po odhlášení gateway zamítne další požadavek bez platné relace. Již vydaný interní
 JWT je kryptograficky platný nejvýše dalších 30 s; nesmí se zpřístupnit prohlížeči
@@ -202,7 +203,7 @@ a podpisový klíč zachová. Google hodnoty se nedávají do sdílených Coolif
 Runtime mounty dostává pouze auth-service; frontend ani breeding je nemají.
 Samotná příprava secrets stávající release nepřepíná.
 Aktuální `deploy:dev-auth` aplikuj až po zeleném CI a code owner review, před
-merge do dev. CI před změnou aplikací vyžaduje verzi runtime gateway 2;
+merge do dev. CI před změnou aplikací vyžaduje verzi runtime gateway 3;
 chybějící nebo stará konfigurace ponechá dosavadní release běžet.
 
 Po schválení a merge do `dev` CI sestaví, publikuje a nasadí tři images stejného
@@ -247,7 +248,7 @@ shodném e-mailu. Samotné přidání poskytovatele nikomu nepřidává oprávn�
 
 ## Jeden účet přes Google i Microsoft
 
-**Propojení je připravené v kódu; před použitím musí projít CI, review a nasazením.**
+**Volitelné propojení je nasazené. Vlastník zvolil Google a Microsoft účty ponechat oddělené; tento postup není povinný.**
 
 1. Odhlas se a přihlas se přes původního poskytovatele (u prvního vlastníka Google).
 2. Do pěti minut klikni v přihlašovacím panelu na **Propojit Microsoft**.
@@ -273,3 +274,35 @@ identity a vytvoří unikátní index. Lokálně ji proveď přes
 `npm run db:remote:migrate -- --service auth`; na devu se spustí před startem.
 Starší auth image bez této migrace po změně DB odmítne neznámou migrační historii;
 případnou opravu proto nasazuj dopředu, nikoli prostým návratem starého auth image.
+
+## Přihlášení lokálních vývojových nástrojů
+
+Tato změna přidává oddělenou relaci pro Node nástroje. Zapíná se výhradně přes
+`AUTH_DEVELOPMENT_ENABLED=true` spolu s `APP_ENV=dev`; v jiném prostředí konfigurace selže.
+IdP callbacky zůstávají na dev doméně, kolegové nepotřebují vlastní OAuth klienty ani secrets.
+
+Tok vychází z [autorizačního kódu s PKCE pro loopback klienty](https://www.rfc-editor.org/info/rfc8252/):
+Node nástroj vytvoří state/verifier a poslouchá na náhodném portu `127.0.0.1`.
+Po skutečném app loginu a explicitním potvrzení vrátí server jednorázový kód na
+přesný `/callback`. Jen Node s odpovídajícím verifierem jej může vyměnit za neprůhlednou relaci.
+Kód platí minutu, žádost o schválení pět minut. Kódy i session tokeny mají v DB jen hash;
+TTL úklid nenahrazuje kontrolu expirace. Aktivita ani role se nepřebírají z hlaviček klienta.
+
+Pouze Node nástroj používá `/api/auth/development/token`, `/identity` a `/logout`.
+Prohlížeč má přístup k authorize/consent/approve toku, nikoli k internímu JWT.
+Vite tokenové endpointy blokuje i v kódovaných cestách. Vývojový token zůstává v Node paměti,
+privátní RPC mezi launcherem a Vite vyžaduje náhodný klíč a odmítá browser Origin.
+Lokální backend dostane jen krátkodobý `X-Anico-Identity`; veřejné JWK načte launcher
+přes Cloudflare a předá jako `AUTH_JWKS_JSON`. Soukromý podpisový klíč se nesdílí.
+
+Gateway kontroluje `X-Anico-Development-Token` jen v dev režimu a s přesným povoleným
+loopback Origin. Před business backendem jej odstraní. Proxy na localhostu kontroluje
+Host/Origin a cross-site požadavky, takže web z internetu nemůže používat přihlášený
+lokální prostředník. Cookies z cloudu ani Access tokeny se neposílají do lokálního backendu.
+
+Vývojová relace platí nejvýše 8 hodin, nikdy déle než schvalující app relace. Lokální
+logout ji zruší, ale neruší jiné zařízení. Role a stav uživatele se kontrolují při
+ověření; již vydaný interní JWT může platit maximálně 30 sekund. Správa propojení účtů
+zůstává v cloudové aplikaci. Dokončení této změny vyžaduje migraci
+`20261103104355-development-login-grants`, aplikaci gateway konfigurace před merge
+po zeleném CI/review a následný skutečný test lokálního loginu i logoutu.

@@ -26,6 +26,7 @@ export interface LoginAttempt {
   browserHash: string;
   expiresAt: Date;
   link?: { userId: string; sessionHash: string };
+  returnTo?: string;
 }
 export interface AuthRepository {
   register(identity: ExternalIdentity): Promise<User>;

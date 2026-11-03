@@ -10,6 +10,8 @@ Ukázková `breeding-service` není společný adresář pro nové mikroservisy;
 každá má vlastní `apps/tvoje-service`. Skutečné názvy nasazených images,
 artifactů a databází v provozních návodech označují existující infrastrukturu.
 
+Lokální identita uživatele: [přihlášení pro vývoj](LOKALNI-PRIHLASENI.md).
+
 Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
 
 | Chci                                       | Návod                                     |

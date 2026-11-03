@@ -1,6 +1,6 @@
 # Co ještě zbývá
 
-Aktualizováno 2. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
+Aktualizováno 3. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
 Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
 
 ## Nejbližší kroky
@@ -15,8 +15,9 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
       ověřit discovery/PKCE a připravit provisioning v PR #20.
 - [x] Review a zelené CI PR #20, aplikace runtime secrets a nasazení;
       poté skutečně ověřit Microsoft i Google login/logout a aktualizovat recovery release.
-- [ ] Nasadit a ověřit propojení Google/Microsoft do jednoho AniCo účtu.
-- [ ] Doplnit bezpečné předávání cloudové identity lokálnímu FE/backendu.
+- [x] Nasadit volitelné propojení Google/Microsoft (PR #21), ověřit migraci a zachování vlastníka.
+      Vlastník zvolil účty ponechat oddělené; skutečné propojení neprovádíme.
+- [ ] Review/CI, gateway 3, nasazení a browser test [lokálního přihlášení](../docs/LOKALNI-PRIHLASENI.md); kód a integrační testy jsou připravené.
 - [ ] Propojit business obrazovky Reactu s API; doplnit autorizaci podle doménových pravidel.
 - [x] Jmenovat a ověřit prvního skutečného Google vlastníka na společném devu; audit potvrzený.
 - [ ] Dohodnout příjemce `user.registered` a implementovat doručování registrace další službě.

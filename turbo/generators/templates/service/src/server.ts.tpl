@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { pino } from 'pino';
 import { z } from 'zod';
+import { requestAuthenticator } from '@anico/auth';
 import { createApp } from './app.js';
 import { createModules } from './modules/index.js';
 import { migrateDatabase } from './database/engine.js';
@@ -22,7 +23,7 @@ const env = z
 const logger = pino({
   level: env.LOG_LEVEL,
   base: { service: '__SERVICE_NAME__' },
-  redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["cf-access-token"]', 'req.headers["cf-access-jwt-assertion"]', 'req.headers["cf-access-client-secret"]'],
+  redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-anico-identity"]', 'req.headers["x-anico-development-token"]', 'req.headers["cf-access-token"]', 'req.headers["cf-access-jwt-assertion"]', 'req.headers["cf-access-client-secret"]'],
 });
 
 const connection = mongoose.createConnection();
@@ -46,7 +47,9 @@ try {
     }
   }
   let stopping = false;
+  const authenticate = requestAuthenticator(process.env);
   const app = createApp({
+    ...(authenticate ? { authenticate } : {}),
     logger,
     modules: createModules(connection),
     isReady: () => !stopping && connection.readyState === 1,

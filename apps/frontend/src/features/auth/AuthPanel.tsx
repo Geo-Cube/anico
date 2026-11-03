@@ -5,6 +5,7 @@ type Session = {
   csrfToken: string;
   expiresAt: string;
   linkedProviders: string[];
+  canManageAccounts?: boolean;
 };
 const providerNames: Record<string, string> = {
   google: 'Google',
@@ -66,7 +67,12 @@ export function AuthPanel({
             )
           )
             throw new Error('Invalid session');
-          setSession({ ...body, identity, linkedProviders });
+          setSession({
+            ...body,
+            identity,
+            linkedProviders,
+            canManageAccounts: body.canManageAccounts !== false,
+          });
           onIdentity(identity);
         }
       } catch {
@@ -169,23 +175,35 @@ export function AuthPanel({
               .map((provider) => providerNames[provider])
               .join(', ') || 'načítání není dostupné'}
           </p>
-          {providers
-            .filter(
-              (provider) =>
-                provider !== 'apple' &&
-                !session.linkedProviders.includes(provider),
-            )
-            .map((provider) => (
-              <p key={provider}>
-                <button
-                  className="wf-btn"
-                  disabled={busy}
-                  onClick={() => void connect(provider)}
-                >
-                  Propojit {providerNames[provider]}
-                </button>
-              </p>
-            ))}
+          {session.canManageAccounts !== false &&
+            providers
+              .filter(
+                (provider) =>
+                  provider !== 'apple' &&
+                  !session.linkedProviders.includes(provider),
+              )
+              .map((provider) => (
+                <p key={provider}>
+                  <button
+                    className="wf-btn"
+                    disabled={busy}
+                    onClick={() => void connect(provider)}
+                  >
+                    Propojit {providerNames[provider]}
+                  </button>
+                </p>
+              ))}
+          {session.canManageAccounts === false && (
+            <p>
+              <a
+                href="https://dev.anico.online"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Spravovat přihlášení v AniCo
+              </a>
+            </p>
+          )}
           <button
             className="wf-btn"
             disabled={busy}

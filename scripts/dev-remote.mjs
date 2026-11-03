@@ -5,6 +5,12 @@ import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { createAccessSession } from '../apps/frontend/dev-access.mjs';
+import {
+  startDevelopmentRelay,
+  DEV_AUTH_ISSUER,
+  DEV_AUTH_AUDIENCE,
+} from '../apps/frontend/dev-app-auth.mjs';
 import {
   loadRemoteWorkspace,
   loadPersonalEnvironment,
@@ -23,6 +29,7 @@ let cleanupPromise;
 const initialParent = process.ppid;
 let parentWatch;
 let databaseTask = false;
+let authRelay;
 
 function stop(signal = 'SIGTERM') {
   for (const child of children)
@@ -61,6 +68,7 @@ function cleanup() {
       }),
     ]);
     clearTimeout(timer);
+    await authRelay?.close().catch(() => {});
   })();
   return cleanupPromise;
 }
@@ -106,6 +114,15 @@ try {
   const name = selectedService ?? 'breeding-service';
   const serviceDirectory = join(root, 'apps', name);
   const service = loadRemoteWorkspace(root, name);
+  if (!check && !command && name !== 'auth-service') {
+    const manifest = JSON.parse(
+      readFileSync(join(serviceDirectory, 'package.json'), 'utf8'),
+    );
+    if (!manifest.dependencies?.['@anico/auth'])
+      throw new Error(
+        'Service must integrate @anico/auth before remote development. See docs/AUTENTIZACE.md; existing services need the authenticated app/server setup from the current template.',
+      );
+  }
   const settings = JSON.parse(
     readFileSync(
       new URL('../infrastructure/dev-database.json', import.meta.url),
@@ -182,6 +199,38 @@ try {
   if (stopping) throw new Error('Remote development stopped');
   console.log(`Connected to your workspace ${config.database}.`);
   if (!check) {
+    let identityEnvironment = {};
+    if (!command && (service.name !== 'auth-service' || frontend)) {
+      authRelay = await startDevelopmentRelay({
+        accessSession: createAccessSession(),
+        ...(frontend ? { appOrigin: 'http://127.0.0.1:5173' } : {}),
+        backend: {
+          prefix: `/api/${service.name.replace(/-service$/, '')}`,
+          port: config.port,
+        },
+      });
+      const keys = await authRelay.publicKeys();
+      identityEnvironment = {
+        ...(service.name === 'auth-service'
+          ? {}
+          : {
+              AUTH_JWKS_JSON: JSON.stringify(keys),
+              AUTH_JWKS_URL: '',
+              AUTH_ISSUER: DEV_AUTH_ISSUER,
+              AUTH_AUDIENCE: DEV_AUTH_AUDIENCE,
+            }),
+        ANICO_DEV_AUTH_RELAY: authRelay.origin,
+        ANICO_DEV_AUTH_KEY: authRelay.relayKey,
+      };
+      console.log(`AniCo login: ${authRelay.origin}`);
+      console.log(
+        `Authenticated local API: ${authRelay.origin}/api/${service.name.replace(/-service$/, '')}`,
+      );
+      if (frontend)
+        console.log(
+          'Frontend: http://127.0.0.1:5173 — sign in using the AniCo login panel.',
+        );
+    }
     const task = command
       ? ['run', `db:${command}`, '-w', service.workspace, '--', ...extra]
       : [
@@ -202,6 +251,7 @@ try {
         env: {
           ...process.env,
           ...config.env,
+          ...identityEnvironment,
           ANICO_DEV_SERVICE: service.name,
           ANICO_API_MODE: 'hybrid',
         },

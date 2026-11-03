@@ -52,7 +52,7 @@ try {
           'anico-auth-runtime-version': {
             headers: {
               customResponseHeaders: {
-                'X-Anico-Gateway-Version': '2',
+                'X-Anico-Gateway-Version': '3',
                 'Cache-Control': 'no-store',
               },
             },
@@ -72,7 +72,12 @@ try {
             },
           },
           'anico-gateway-clear': {
-            headers: { customRequestHeaders: { 'X-Anico-Gateway-Key': '' } },
+            headers: {
+              customRequestHeaders: {
+                'X-Anico-Gateway-Key': '',
+                'X-Anico-Development-Token': '',
+              },
+            },
           },
           'anico-session-check': {
             forwardAuth: {
@@ -83,6 +88,7 @@ try {
                 'Origin',
                 'X-CSRF-Token',
                 'X-Anico-Gateway-Key',
+                'X-Anico-Development-Token',
               ],
               authResponseHeaders: ['X-Anico-Identity'],
               maxResponseBodySize: 8192,

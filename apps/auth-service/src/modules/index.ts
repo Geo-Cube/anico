@@ -8,6 +8,8 @@ import { oidcProvider } from './auth/infrastructure/oidc.js';
 import { createAuthService } from './auth/application/auth.js';
 import { authRouter } from './auth/http/router.js';
 import type { Provider, ProviderClient } from './auth/domain/auth.js';
+import { mongoDevelopmentRepository } from './auth/infrastructure/development-repository.js';
+import { createDevelopmentAuthService } from './auth/application/development.js';
 export async function createModules(connection: Connection) {
   const providerEnv = process.env.AUTH_PROVIDER_ENV_FILE
     ? parseEnv(await readFile(process.env.AUTH_PROVIDER_ENV_FILE, 'utf8'))
@@ -55,8 +57,9 @@ export async function createModules(connection: Connection) {
     env.AUTH_ISSUER,
     env.AUTH_AUDIENCE,
   );
+  const repository = mongoAuthRepository(connection);
   const service = createAuthService({
-    repository: mongoAuthRepository(connection),
+    repository,
     providers,
     publicOrigin: env.AUTH_PUBLIC_ORIGIN,
     sessionSeconds: env.AUTH_SESSION_SECONDS,
@@ -67,5 +70,15 @@ export async function createModules(connection: Connection) {
     publicOrigin: env.AUTH_PUBLIC_ORIGIN,
     gatewayKey,
     sessionSeconds: env.AUTH_SESSION_SECONDS,
+    ...(env.AUTH_DEVELOPMENT_ENABLED === 'true'
+      ? {
+          development: createDevelopmentAuthService({
+            auth: service,
+            users: repository,
+            repository: mongoDevelopmentRepository(connection),
+            sessionSeconds: env.AUTH_SESSION_SECONDS,
+          }),
+        }
+      : {}),
   });
 }
