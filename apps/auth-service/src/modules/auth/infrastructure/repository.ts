@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { UserRegisteredEventSchema } from '@anico/shared-schemas';
 import type { Connection } from 'mongoose';
 import { AuthError, initialRoles } from '../domain/auth.js';
 import type {
@@ -40,6 +41,20 @@ export function mongoAuthRepository(connection: Connection): AuthRepository {
         ],
       };
       const userId = randomUUID();
+      const createdAt = new Date();
+      const event = UserRegisteredEventSchema.parse({
+        eventId: randomUUID(),
+        type: 'user.registered',
+        schemaVersion: 1,
+        producer: 'auth-service',
+        occurredAt: createdAt.toISOString(),
+        data: {
+          userId,
+          givenName: identity.givenName,
+          familyName: identity.familyName,
+          email: identity.email,
+        },
+      });
       try {
         await users.updateOne(
           filter,
@@ -54,10 +69,11 @@ export function mongoAuthRepository(connection: Connection): AuthRepository {
               roles: initialRoles(),
               status: 'active',
               registration: {
-                id: randomUUID(),
+                id: event.eventId,
                 type: 'user.registered',
                 status: 'pending',
-                createdAt: new Date(),
+                createdAt,
+                event,
               },
             },
           },

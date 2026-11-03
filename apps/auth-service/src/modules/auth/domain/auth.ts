@@ -1,4 +1,8 @@
-import type { Identity, Role } from '@anico/shared-schemas';
+import type {
+  Identity,
+  Role,
+  UserRegisteredEvent,
+} from '@anico/shared-schemas';
 export type Provider = 'google' | 'microsoft' | 'apple';
 export interface ExternalIdentity {
   provider: Provider;
@@ -11,6 +15,13 @@ export interface ExternalIdentity {
 export interface User extends Identity {
   status: 'active' | 'disabled';
   fixture?: boolean;
+  registration?: {
+    id: string;
+    type: 'user.registered';
+    status: 'pending' | 'published';
+    createdAt: Date;
+    event?: UserRegisteredEvent;
+  };
 }
 export interface Session {
   userId: string;
