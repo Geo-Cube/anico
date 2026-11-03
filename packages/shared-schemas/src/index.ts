@@ -56,3 +56,14 @@ export const MyAccountSchema = z.object({
   }),
 });
 export type MyAccount = z.infer<typeof MyAccountSchema>;
+
+// Verification-related schemas and types
+export const VerificationRequestSchema = z.strictObject({
+  id: z.string(),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']),
+  submittedAt: z.iso.datetime(),
+  reviewedBy: z.string().nullable(),
+  reviewedAt: z.iso.datetime().nullable(),
+  rejectedReason: z.string().nullable(),
+});
+export type VerificationRequest = z.infer<typeof VerificationRequestSchema>;
