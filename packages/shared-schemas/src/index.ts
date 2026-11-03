@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+// services
 export const ServiceNameSchema = z.enum([
   'breeding-service',
   'breeder-service',
@@ -33,6 +34,18 @@ export const CertificateFileSchema = z.strictObject({
 });
 export type CertificateFile = z.infer<typeof CertificateFileSchema>;
 
+// Verification-related schemas and types
+export const VerificationRequestSchema = z.strictObject({
+  id: z.string().regex(/^[a-fA-F0-9]{24}$/),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']),
+  submittedAt: z.iso.datetime(),
+  breedingStationCertificate: CertificateFileSchema,
+  reviewedBy: z.string().nullable(),
+  reviewedAt: z.iso.datetime().nullable(),
+  rejectionReason: z.string().nullable(),
+});
+export type VerificationRequestDto = z.infer<typeof VerificationRequestSchema>;
+
 // Profile-related schemas and types
 export const accountSchema = z.enum([
   'NOT_SUBMITTED',
@@ -42,28 +55,15 @@ export const accountSchema = z.enum([
 ]);
 export type AccountState = z.infer<typeof accountSchema>;
 
-export const MyAccountSchema = z.object({
+export const MyAccountSchema = z.strictObject({
   accountState: accountSchema,
-
-  breeder: z.object({
-    breederId: z.string(),
-    firstName: z.string(),
-    lastName: z.string(),
-    emailAddress: z.string().email(),
-    breedingStationName: z.string().nullable(),
-    breedingStationNumber: z.string().nullable(),
-    isVerified: z.boolean(),
-  }),
+  breederId: z.string(),
+  firstName: z.string(),
+  lastName: z.string(),
+  emailAddress: z.string().email(),
+  breedingStationName: z.string().nullable(),
+  breedingStationNumber: z.string().nullable(),
+  isVerified: z.boolean(),
+  verificationRequest: VerificationRequestSchema.nullable(),
 });
 export type MyAccount = z.infer<typeof MyAccountSchema>;
-
-// Verification-related schemas and types
-export const VerificationRequestSchema = z.strictObject({
-  id: z.string(),
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']),
-  submittedAt: z.iso.datetime(),
-  reviewedBy: z.string().nullable(),
-  reviewedAt: z.iso.datetime().nullable(),
-  rejectionReason: z.string().nullable(),
-});
-export type VerificationRequest = z.infer<typeof VerificationRequestSchema>;

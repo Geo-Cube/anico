@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import type { BreederRepository } from '../domain/ports.js';
 import type { CurrentBreederResolver } from './current-breeder.js';
 import { getMyAccount } from '../application/get-my-account.js';
-import { toMyAccount } from './mappers.js';
+import { toMyAccount } from './breeder-mapper.js';
 
 export function getMyAccountHandler(
   repository: BreederRepository,
