@@ -11,6 +11,7 @@ Volitelné propojení je nasazené po PR #21; aktuální vlastník si zvolil ú�
 Apple a produkce jsou podle aktuální domluvy odložené.
 Lokální přihlášení je nasazené po PR #22 a opravě formuláře v PR #23. Uživatel ověřil Google i Microsoft login; ověřené je také předání identity do lokálního i sdíleného API a odmítnutí relace po odhlášení.
 [Krátký postup pro vývojáře](LOKALNI-PRIHLASENI.md).
+[Zapojení identity do dalších služeb a registrační událost](INTEGRACE-IDENTITY.md).
 Současný GitHub Access chrání vývojáře; nepřihlašuje zákazníka do AniCo.
 [Přehled hotových a chybějících částí](STAV-PROJEKTU.md).
 

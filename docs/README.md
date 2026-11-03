@@ -14,6 +14,8 @@ Lokální identita uživatele: [přihlášení pro vývoj](LOKALNI-PRIHLASENI.md
 
 Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
 
+Backend používající přihlášení: [middleware, role, vlastnictví a registrace](INTEGRACE-IDENTITY.md).
+
 | Chci                                       | Návod                                     |
 | ------------------------------------------ | ----------------------------------------- |
 | První spuštění, denní práce, kontroly      | [Manuál vývojáře](MANUAL-PRO-VYVOJARE.md) |

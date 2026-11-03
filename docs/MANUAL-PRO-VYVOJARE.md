@@ -68,6 +68,8 @@ V PowerShellu můžeš používat `npm.cmd` místo `npm`.
 Google/Microsoft login na týmovém devu i pro lokální nástroje je nasazený a ověřený,
 včetně předání identity do lokálního i sdíleného API a odhlášení.
 Samotný GitHub Access nestačí pro business API. [Co máme a co zbývá](STAV-PROJEKTU.md).
+Pro vlastní backend použij [krátký integrační kontrakt](INTEGRACE-IDENTITY.md): middleware,
+`req.auth`, role a kontrola vlastnictví patří do každé služby.
 `animal` je příklad: musíš mít `apps/animal-service` ve své větvi a přidělená DB oprávnění.
 Jinak vyber název služby, na které skutečně pracuješ.
 Nová lokální služba ještě automaticky neběží na týmovém devu. Její cloudové nasazení
