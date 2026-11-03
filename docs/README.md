@@ -17,6 +17,8 @@ Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
 
 Backend používající přihlášení: [middleware, role, vlastnictví a registrace](INTEGRACE-IDENTITY.md).
 
+Správce doručování registrací: [broker, publisher a budoucí animal consumer](REGISTRACNI-UDALOSTI.md).
+
 | Chci                                       | Návod                                     |
 | ------------------------------------------ | ----------------------------------------- |
 | První spuštění, denní práce, kontroly      | [Manuál vývojáře](MANUAL-PRO-VYVOJARE.md) |

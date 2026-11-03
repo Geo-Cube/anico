@@ -124,6 +124,7 @@ export function composeForRelease(references, revision, options = {}) {
       'provider.env',
       'signing-key.pem',
       'gateway-key',
+      'registration-broker.json',
     ])
       compose.secrets['auth-' + name.replaceAll('.', '-')] = {
         file: root + name,
@@ -131,7 +132,7 @@ export function composeForRelease(references, revision, options = {}) {
     compose.services.auth = {
       ...common,
       image: images['auth-service'],
-      networks: ['app', 'data'],
+      networks: ['app', 'data', 'events'],
       environment: {
         NODE_ENV: 'production',
         APP_ENV: 'dev',
@@ -147,6 +148,9 @@ export function composeForRelease(references, revision, options = {}) {
         AUTH_GATEWAY_KEY_FILE: '/run/secrets/auth-gateway-key',
         AUTH_PROVIDER_ENV_FILE: '/run/secrets/auth-provider-env',
         AUTH_DEVELOPMENT_ENABLED: 'true',
+        AUTH_REGISTRATION_PUBLISHER_ENABLED: 'true',
+        AUTH_REGISTRATION_BROKER_FILE:
+          '/run/secrets/auth-registration-broker-json',
       },
       secrets: Object.keys(compose.secrets)
         .filter((name) => name.startsWith('auth-'))
@@ -163,6 +167,7 @@ export function composeForRelease(references, revision, options = {}) {
     };
     compose.services.backend.environment.AUTH_JWKS_URL =
       'http://auth:3000/.well-known/jwks.json';
+    compose.networks.events = { external: true, name: 'anico-dev-events' };
     compose.services.backend.environment.AUTH_ISSUER =
       'https://dev.anico.online/api/auth';
     compose.services.backend.environment.AUTH_AUDIENCE = 'anico-api-dev';
@@ -249,7 +254,7 @@ export async function deployRelease({
       signal: AbortSignal.timeout(10000),
     },
   );
-  if (ready.headers?.get('X-Anico-Gateway-Version') !== '3')
+  if (ready.headers?.get('X-Anico-Gateway-Version') !== '4')
     throw new Error(
       'Auth gateway runtime is not ready; apply reviewed deploy:dev-auth before deployment',
     );

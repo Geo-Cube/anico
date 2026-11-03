@@ -30,6 +30,8 @@
   "dependencies": {
     "@anico/auth": "^0.1.0",
     "@anico/shared-schemas": "^0.1.0",
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
     "cookie": "^1.1.1",
     "express": "^5.1.0",
     "express-rate-limit": "^8.7.2",

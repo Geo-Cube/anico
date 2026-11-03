@@ -1,0 +1,10 @@
+{
+  "project": "anico-dev-events",
+  "containerName": "anico-dev-events",
+  "network": "anico-dev-events",
+  "volume": "anico-dev-events-data",
+  "rootDirectory": "/srv/anico/dev/events",
+  "image": "nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5",
+  "stream": "ANICO_AUTH_REGISTRATIONS",
+  "subject": "anico.dev.auth.user.registered.v1"
+}

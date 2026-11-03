@@ -18,7 +18,7 @@ export interface User extends Identity {
   registration?: {
     id: string;
     type: 'user.registered';
-    status: 'pending' | 'published';
+    status: 'pending' | 'published' | 'failed';
     createdAt: Date;
     event?: UserRegisteredEvent;
   };

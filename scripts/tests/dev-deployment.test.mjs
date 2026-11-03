@@ -32,6 +32,17 @@ test('dev compose keeps secrets out of images/frontend and publishes no ports or
   const compose = composeForRelease(references, revision);
   assert.deepEqual(compose.services.frontend.networks, ['app']);
   assert.deepEqual(compose.services.backend.networks, ['app', 'data']);
+  assert.deepEqual(compose.services.auth.networks, ['app', 'data', 'events']);
+  assert.equal(compose.networks.events.name, 'anico-dev-events');
+  assert.equal(
+    compose.services.auth.environment.AUTH_REGISTRATION_PUBLISHER_ENABLED,
+    'true',
+  );
+  assert.equal(
+    compose.services.auth.environment.AUTH_REGISTRATION_BROKER_FILE,
+    '/run/secrets/auth-registration-broker-json',
+  );
+  assert.equal(compose.services.auth.environment.NATS_PASSWORD, undefined);
   assert.equal(compose.services.frontend.environment, undefined);
   for (const service of Object.values(compose.services)) {
     assert.equal(service.ports, undefined);
@@ -69,7 +80,7 @@ test('deployment updates only the designated service and verifies healthy matchi
     fetchImpl: async (url, options) => {
       requests.push({ url, ...options });
       if (url.endsWith('/__auth_ready'))
-        return { headers: new Headers({ 'X-Anico-Gateway-Version': '3' }) };
+        return { headers: new Headers({ 'X-Anico-Gateway-Version': '4' }) };
       return {
         ok: true,
         json: async () =>
@@ -117,7 +128,7 @@ test('failed API responses do not expose response bodies or credentials', async 
       clientSecret: 'private-secret',
       fetchImpl: async (url) =>
         url.endsWith('/__auth_ready')
-          ? { headers: new Headers({ 'X-Anico-Gateway-Version': '3' }) }
+          ? { headers: new Headers({ 'X-Anico-Gateway-Version': '4' }) }
           : {
               ok: false,
               status: 403,
