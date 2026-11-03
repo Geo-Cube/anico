@@ -5,8 +5,7 @@ import type {
   VerificationRequest,
 } from '../../src/modules/breeders/domain/breeder.js';
 import { BreederNotFoundError } from '../../src/modules/breeders/domain/errors.js';
-import crypto from 'node:crypto';
-
+import { randomBytes } from 'node:crypto';
 export function inMemoryBreeders() {
   const breeders = new Map<string, Breeder>();
 
@@ -62,7 +61,7 @@ export function inMemoryBreeders() {
       if (breeder.verificationRequest) {
         return null;
       }
-      const requestId = crypto.randomBytes(12).toString('hex');
+      const requestId = randomBytes(12).toString('hex');
 
       const request: VerificationRequest = {
         requestId: requestId,

@@ -78,4 +78,56 @@ describe('canSubmitVerificationRequest', () => {
     expect(result?.verificationRequest).not.toBeNull();
     expect(result?.verificationRequest?.status).toBe('PENDING');
   });
+
+  it('does not allow submitting verification twice', async () => {
+    const repository = inMemoryBreeders();
+
+    await repository.provision({
+      breederId: 'user-123',
+      firstName: 'Jan',
+      lastName: 'Novák',
+      emailAddress: 'jan@example.com',
+    });
+
+    const submission = {
+      firstName: 'Jan',
+      lastName: 'Novák',
+      emailAddress: 'jan@example.com',
+      breedingStationName: 'Stanice U Nováků',
+      breedingStationNumber: '123456',
+      breedingStationCertificate: {
+        fileName: 'certifikat.pdf',
+        fileReference: 'file-123',
+      },
+    };
+
+    const first = await repository.submitVerification('user-123', submission);
+    const second = await repository.submitVerification('user-123', submission);
+
+    expect(first).not.toBeNull();
+    expect(first?.verificationRequest).not.toBeNull();
+    expect(first?.verificationRequest?.status).toBe('PENDING');
+
+    expect(second).toBeNull();
+  });
+
+  it('returns null when submitting for a non-existing breeder', async () => {
+    const repository = inMemoryBreeders();
+
+    const submission = {
+      firstName: 'Jan',
+      lastName: 'Novák',
+      emailAddress: 'jan@example.com',
+      breedingStationName: 'Stanice U Nováků',
+      breedingStationNumber: '123456',
+      breedingStationCertificate: {
+        fileName: 'certifikat.pdf',
+        fileReference: 'file-123',
+      },
+    };
+
+    const result = await repository.submitVerification('user-999', submission);
+
+    expect(result).toBeNull();
+  });
 });
