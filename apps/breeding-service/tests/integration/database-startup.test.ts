@@ -27,6 +27,10 @@ function start(uri: string, port: number) {
       MIGRATE_ON_START: 'true',
       HOST: '127.0.0.1',
       PORT: String(port),
+      AUTH_JWKS_JSON: '',
+      AUTH_JWKS_URL: 'http://127.0.0.1:1/api/auth/.well-known/jwks.json',
+      AUTH_ISSUER: 'anico-startup-test',
+      AUTH_AUDIENCE: 'anico-api',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -83,6 +87,9 @@ describe('migration gate before actual HTTP startup', () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       expect(ready, running.output()).toBe(true);
+      expect(
+        (await fetch(`http://127.0.0.1:${port}/api/breeding-plans`)).status,
+      ).toBe(401);
       expect(
         (await connection.db!.collection('breedingplans').findOne({ _id: id }))
           ?.createdAt,

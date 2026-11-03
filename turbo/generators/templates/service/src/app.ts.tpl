@@ -1,4 +1,4 @@
-import express, { type ErrorRequestHandler, type Router } from 'express';
+import express, { type ErrorRequestHandler, type Router, type RequestHandler } from 'express';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { healthRouter } from './health/health-router.js';
@@ -7,12 +7,14 @@ export function createApp(dependencies: {
   logger: Logger;
   modules?: Router;
   isReady: () => boolean;
+  authenticate?: RequestHandler;
 }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(pinoHttp({ logger: dependencies.logger }));
-  app.use(express.json({ limit: '32kb' }));
   app.use(healthRouter(dependencies));
+  if (dependencies.authenticate) app.use(dependencies.authenticate);
+  app.use(express.json({ limit: '32kb' }));
   if (dependencies.modules) app.use(dependencies.modules);
   app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 

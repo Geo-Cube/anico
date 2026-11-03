@@ -50,7 +50,18 @@ export function createAuthService(options: {
     if (age < 0 || age > 300000)
       throw new AuthError(401, 'RECENT_LOGIN_REQUIRED');
   }
-  async function begin(provider: Provider, link?: LoginAttempt['link']) {
+  async function begin(
+    provider: Provider,
+    link?: LoginAttempt['link'],
+    returnTo?: string,
+  ) {
+    if (
+      returnTo &&
+      !/^\/api\/auth\/development\/consent\?request=[A-Za-z0-9_-]{43}$/.test(
+        returnTo,
+      )
+    )
+      throw new AuthError(400, 'INVALID_LOGIN_RETURN');
     const client = providers[provider];
     if (!client) throw new AuthError(503, 'PROVIDER_NOT_CONFIGURED');
     const state = random(),
@@ -63,7 +74,7 @@ export function createAuthService(options: {
       nonce,
       verifier,
       callback,
-      ...(link ? { prompt: 'select_account' as const } : {}),
+      ...(link || returnTo ? { prompt: 'select_account' as const } : {}),
     });
     await repository.saveAttempt(hash(state), {
       provider,
@@ -73,12 +84,14 @@ export function createAuthService(options: {
       browserHash: hash(browser),
       expiresAt: new Date(now().getTime() + 600000),
       ...(link ? { link } : {}),
+      ...(returnTo ? { returnTo } : {}),
     });
     return { url, browser };
   }
   return {
     providers: Object.keys(providers),
-    begin,
+    begin: (provider: Provider, returnTo?: string) =>
+      begin(provider, undefined, returnTo),
     linkedProviders: (userId: string) => repository.linkedProviders(userId),
     async beginLink(provider: Provider, token: string) {
       if (provider === 'apple')
@@ -148,7 +161,12 @@ export function createAuthService(options: {
         authenticatedAt: now(),
       };
       await repository.createSession(hash(token), session);
-      return { token, session, user: publicIdentity(user) };
+      return {
+        token,
+        session,
+        user: publicIdentity(user),
+        returnTo: attempt.returnTo ?? '/',
+      };
     },
     authenticate,
     csrf(

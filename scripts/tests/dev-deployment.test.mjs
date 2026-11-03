@@ -69,7 +69,7 @@ test('deployment updates only the designated service and verifies healthy matchi
     fetchImpl: async (url, options) => {
       requests.push({ url, ...options });
       if (url.endsWith('/__auth_ready'))
-        return { headers: new Headers({ 'X-Anico-Gateway-Version': '2' }) };
+        return { headers: new Headers({ 'X-Anico-Gateway-Version': '3' }) };
       return {
         ok: true,
         json: async () =>
@@ -117,7 +117,7 @@ test('failed API responses do not expose response bodies or credentials', async 
       clientSecret: 'private-secret',
       fetchImpl: async (url) =>
         url.endsWith('/__auth_ready')
-          ? { headers: new Headers({ 'X-Anico-Gateway-Version': '2' }) }
+          ? { headers: new Headers({ 'X-Anico-Gateway-Version': '3' }) }
           : {
               ok: false,
               status: 403,

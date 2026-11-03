@@ -3,7 +3,12 @@ import {
   type Identity,
   type Role,
 } from '@anico/shared-schemas';
-import { jwtVerify, type JWTVerifyGetKey } from 'jose';
+import {
+  jwtVerify,
+  createLocalJWKSet,
+  createRemoteJWKSet,
+  type JWTVerifyGetKey,
+} from 'jose';
 import type { RequestHandler } from 'express';
 export type { Identity, Role } from '@anico/shared-schemas';
 
@@ -67,4 +72,54 @@ export function requireRole(...allowed: Role[]): RequestHandler {
     }
     next();
   };
+}
+
+export function requestAuthenticator(
+  env: NodeJS.ProcessEnv,
+): RequestHandler | undefined {
+  const local = env.AUTH_JWKS_JSON;
+  const remote = env.AUTH_JWKS_URL;
+  if (!local && !remote) {
+    if (
+      env.APP_ENV === 'dev' ||
+      (env.NODE_ENV === 'production' && env.APP_ENV !== 'local')
+    )
+      throw new Error(
+        'API requires identity configuration; start remote development through AniCo commands',
+      );
+    return undefined;
+  }
+  if ((local && remote) || !env.AUTH_ISSUER || !env.AUTH_AUDIENCE)
+    throw new Error('Invalid identity configuration');
+  let key: JWTVerifyGetKey;
+  if (local) {
+    if (
+      env.NODE_ENV === 'production' ||
+      env.APP_ENV !== 'dev' ||
+      env.HOST !== '127.0.0.1'
+    )
+      throw new Error('Local identity keys require loopback development mode');
+    try {
+      const jwks = JSON.parse(local);
+      if (
+        !Array.isArray(jwks.keys) ||
+        !jwks.keys.length ||
+        jwks.keys.some(
+          (item: Record<string, unknown>) =>
+            !item || item.kty !== 'EC' || item.crv !== 'P-256' || 'd' in item,
+        )
+      )
+        throw new Error();
+      key = createLocalJWKSet(jwks);
+    } catch {
+      throw new Error('Invalid public identity keys; values hidden');
+    }
+  } else key = createRemoteJWKSet(new URL(remote!));
+  return requireAuth(
+    createIdentityVerifier({
+      key,
+      issuer: env.AUTH_ISSUER,
+      audience: env.AUTH_AUDIENCE,
+    }),
+  );
 }

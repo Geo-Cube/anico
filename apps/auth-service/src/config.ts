@@ -11,6 +11,7 @@ const schema = z.object({
     .min(300)
     .max(86400)
     .default(28800),
+  AUTH_DEVELOPMENT_ENABLED: z.enum(['true', 'false']).default('false'),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   MICROSOFT_CLIENT_ID: z.string().min(1).optional(),
@@ -25,6 +26,10 @@ export function authConfiguration(env: NodeJS.ProcessEnv) {
   if (!parsed.success)
     throw new Error('Invalid auth environment configuration; values hidden');
   const value = parsed.data;
+  if (value.AUTH_DEVELOPMENT_ENABLED === 'true' && env.APP_ENV !== 'dev')
+    throw new Error(
+      'Development authorization is available only in the dev environment',
+    );
   const origin = new URL(value.AUTH_PUBLIC_ORIGIN);
   if (
     origin.origin !== value.AUTH_PUBLIC_ORIGIN ||
