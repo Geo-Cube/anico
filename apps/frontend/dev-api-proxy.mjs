@@ -1,10 +1,14 @@
 import { DEV_API_ORIGIN } from './dev-access.mjs';
+import { guardLocalRequest } from './dev-app-auth.mjs';
 
 const accessHeaders = new Set([
   'cf-access-token',
   'cf-access-jwt-assertion',
   'cf-access-client-id',
   'cf-access-client-secret',
+  'x-anico-identity',
+  'x-anico-development-token',
+  'x-anico-relay-key',
 ]);
 const hopHeaders = new Set([
   'connection',
@@ -19,7 +23,7 @@ const hopHeaders = new Set([
 
 export function createDevApiProxy(
   session,
-  { target = DEV_API_ORIGIN, localPrefix } = {},
+  { target = DEV_API_ORIGIN, localPrefix, appAuth } = {},
 ) {
   const url = new URL(target);
   if (
@@ -53,13 +57,134 @@ export function createDevApiProxy(
     });
     res.end(JSON.stringify({ error: message }));
   }
+  function cleanRequest(outgoing) {
+    for (const header of accessHeaders) outgoing.removeHeader(header);
+    outgoing.removeHeader('authorization');
+    for (const key of outgoing.getHeaderNames())
+      if (key.startsWith('x-user-')) outgoing.removeHeader(key);
+  }
   return {
+    configureLocal(proxy) {
+      proxy.on('proxyReq', (outgoing, req) => {
+        cleanRequest(outgoing);
+        const proof = tokens.get(req);
+        if (proof?.identity)
+          outgoing.setHeader('x-anico-identity', proof.identity);
+        if (localPrefix !== '/api/auth') outgoing.removeHeader('cookie');
+      });
+      proxy.on('proxyRes', (upstream) => {
+        for (const header of accessHeaders) delete upstream.headers[header];
+      });
+    },
     plugin: {
       name: 'anico-private-dev-api',
       configureServer(server) {
         // Vite runs these middleware before its HTTP proxy. Tokens remain in
         // this server-side WeakMap, never in env, source modules or responses.
         server.middlewares.use((req, res, next) => {
+          if (appAuth && /^\/api(?:\/|\?|$)/.test(req.url ?? '')) {
+            void (async () => {
+              guardLocalRequest(
+                req,
+                `http://127.0.0.1:${req.socket.localPort}`,
+              );
+              const path = decodeURIComponent(
+                new URL(req.url, 'http://127.0.0.1').pathname,
+              ).replace(/\/+/g, '/');
+              if (/[\\%\u0000-\u001f]/.test(path)) {
+                reject(res, 400, 'Neplatná API cesta.');
+                return;
+              }
+              const localAuthService =
+                localPrefix === '/api/auth' && !isRemote(req.url);
+              if (
+                !localAuthService &&
+                path.toLowerCase().startsWith('/api/auth/development/')
+              ) {
+                reject(
+                  res,
+                  403,
+                  'Tento endpoint je vyhrazený vývojovým nástrojům.',
+                );
+                return;
+              }
+              if (
+                !localAuthService &&
+                req.method === 'GET' &&
+                path === '/api/auth/session'
+              ) {
+                const data = await appAuth.session();
+                res.writeHead(200, {
+                  'Content-Type': 'application/json',
+                  'Cache-Control': 'no-store',
+                });
+                res.end(JSON.stringify(data));
+                return;
+              }
+              if (
+                !localAuthService &&
+                req.method === 'GET' &&
+                /^\/api\/auth\/login\/(google|microsoft)$/.test(path)
+              ) {
+                res.writeHead(303, {
+                  Location: await appAuth.beginLogin(path.split('/').at(-1)),
+                });
+                res.end();
+                return;
+              }
+              if (
+                !localAuthService &&
+                req.method === 'POST' &&
+                path === '/api/auth/logout'
+              ) {
+                await appAuth.logout();
+                res.writeHead(204, { 'Cache-Control': 'no-store' });
+                res.end();
+                return;
+              }
+              if (
+                !localAuthService &&
+                path.startsWith('/api/auth/connections/')
+              ) {
+                reject(
+                  res,
+                  403,
+                  'Správa přihlášení je dostupná na dev.anico.online.',
+                );
+                return;
+              }
+              if (!isRemote(req.url)) {
+                if (
+                  !localAuthService &&
+                  ![`${localPrefix}/health`, `${localPrefix}/ready`].includes(
+                    path,
+                  )
+                )
+                  tokens.set(req, { identity: await appAuth.identityToken() });
+              } else if (
+                [
+                  '/api/auth/providers',
+                  '/api/auth/.well-known/jwks.json',
+                  '/api/health',
+                  '/api/ready',
+                ].includes(path)
+              ) {
+                tokens.set(req, { accessToken: await session.getToken() });
+              } else tokens.set(req, await appAuth.credentials());
+              next();
+            })().catch((error) =>
+              reject(
+                res,
+                error.status === 401 || error.status === 403
+                  ? error.status
+                  : 502,
+                error.status
+                  ? error.message
+                  : 'Místní přihlášení není dostupné.',
+              ),
+            );
+            return;
+          }
           if (!isRemote(req.url ?? '')) return next();
           session
             .getToken()
@@ -86,9 +211,22 @@ export function createDevApiProxy(
         selfHandleResponse: true,
         configure(proxy) {
           proxy.on('proxyReq', (outgoing, req) => {
-            for (const header of accessHeaders) outgoing.removeHeader(header);
-            const token = tokens.get(req);
+            cleanRequest(outgoing);
+            const proof = tokens.get(req);
+            const token =
+              typeof proof === 'string' ? proof : proof?.accessToken;
             if (token) outgoing.setHeader('cf-access-token', token);
+            if (proof?.developmentToken) {
+              outgoing.setHeader(
+                'x-anico-development-token',
+                proof.developmentToken,
+              );
+              outgoing.setHeader('origin', proof.origin);
+            }
+            if (appAuth) {
+              outgoing.removeHeader('cookie');
+              return;
+            }
             // A cached browser Access cookie must never override this user's CLI session.
             const cookie = String(outgoing.getHeader('cookie') ?? '')
               .split(';')
@@ -144,6 +282,7 @@ export function createDevApiProxy(
               )
                 continue;
               if (key === 'set-cookie') {
+                if (appAuth) continue;
                 const cookies = (Array.isArray(value) ? value : [value]).filter(
                   (cookie) => !/^CF_Authorization=/i.test(cookie),
                 );

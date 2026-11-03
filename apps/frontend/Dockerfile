@@ -14,6 +14,7 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY apps/frontend/tsconfig.json apps/frontend/tsconfig.node.json apps/frontend/vite.config.ts apps/frontend/index.html ./apps/frontend/
 COPY apps/frontend/vite-proxy.mjs apps/frontend/vite-proxy.d.mts ./apps/frontend/
 COPY apps/frontend/dev-access.mjs apps/frontend/dev-access.d.mts ./apps/frontend/
+COPY apps/frontend/dev-app-auth.mjs apps/frontend/dev-app-auth.d.mts ./apps/frontend/
 COPY apps/frontend/dev-api-proxy.mjs apps/frontend/dev-api-proxy.d.mts ./apps/frontend/
 COPY apps/frontend/src ./apps/frontend/src
 COPY packages/shared-schemas/tsconfig.json ./packages/shared-schemas/
