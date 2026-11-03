@@ -17,6 +17,9 @@ Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
 
 Backend používající přihlášení: [middleware, role, vlastnictví a registrace](INTEGRACE-IDENTITY.md).
 
+Domluvený budoucí tok: [doplňující formulář po přihlášení a dashboard](ONBOARDING-PROFILU.md).
+Nový animal backend: [základ a API](../apps/animal-service/README.md).
+
 Správce doručování registrací: [broker, publisher a budoucí animal consumer](REGISTRACNI-UDALOSTI.md).
 
 | Chci                                       | Návod                                     |

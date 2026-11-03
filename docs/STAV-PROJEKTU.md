@@ -25,6 +25,9 @@ Připravený kód nebo uložené credentials nejsou totéž jako ověřené nasa
 
 ## Ještě zbývá
 
+- Základ `animal-service` je připravený v aktuální pracovní větvi: vlastní DB připojení, CRUD vlastních zvířat a sdílená validace druhů/plemen. Není nasazený na cloudovém devu a neobsahuje meziservisní komunikaci.
+- [Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md): nedokončený profil → formulář dalších údajů, dokončený → dashboard. Dohodnuté, zatím neimplementované; povinná pole včetně IČO je potřeba upřesnit.
+
 - Apple je odložený dle domluvy; není součástí aktuálního dokončení auth.
 - Business obrazovky: nahradit simulace skutečným API a daty. Přihlašovací panel už skutečný je.
 - Předání registrace: kontrakt v1, outbox, migrace, privátní NATS JetStream a publisher jsou nasazené a ověřené po PR #25/#26. Obě existující registrace jsou uložené v brokeru, payloady odpovídají outboxu, pending/failed je nula. Animal consumer a celý business tok zůstávají na později; published zatím neznamená business zpracování. [Provoz a předání](REGISTRACNI-UDALOSTI.md).
