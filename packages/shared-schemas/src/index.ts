@@ -25,7 +25,6 @@ export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 export const StoredFileSchema = z.strictObject({
   fileName: z.string(),
   fileReference: z.string(),
-  contentType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
 });
 export type StoredFile = z.infer<typeof StoredFileSchema>;
 
