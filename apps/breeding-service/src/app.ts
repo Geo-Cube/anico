@@ -6,6 +6,7 @@ import express, {
 } from 'express';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
+import { AuthorizationError } from '@anico/auth';
 import type { BreedingPlanRepository } from './modules/breeding/domain/breeding-plan.js';
 import { breedingRouter } from './modules/breeding/http/breeding-router.js';
 
@@ -42,6 +43,10 @@ export function createApp(dependencies: {
   ) => {
     if (res.headersSent) {
       _next(error);
+      return;
+    }
+    if (error instanceof AuthorizationError) {
+      res.status(error.status).json({ error: error.message });
       return;
     }
     if (error instanceof SyntaxError && 'body' in error) {

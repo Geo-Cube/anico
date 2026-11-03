@@ -11,6 +11,7 @@ import {
 } from 'jose';
 import type { RequestHandler } from 'express';
 export type { Identity, Role } from '@anico/shared-schemas';
+export { AuthorizationError, assertResourceOwner } from './authorization.js';
 
 declare global {
   namespace Express {
