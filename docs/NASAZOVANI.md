@@ -19,7 +19,7 @@ Týmový dev používá společnou DB. Lokální `dev:frontend` volá jeho API;
 `dev:backend -- --service animal` používá osobní DB. `dev:fullstack -- --service animal`
 přepne jen animal API na lokální službu s osobní DB, ostatní API zůstanou na devu.
 Jméno služby a její lokální port určuje workspace; breeding má port 3000.
-Tato verze doplňuje [lokální přihlášení](LOKALNI-PRIHLASENI.md); vyžaduje nasazení auth-service i gateway runtime 3.
+[Lokální přihlášení](LOKALNI-PRIHLASENI.md), odpovídající auth-service i gateway runtime 3 jsou nasazené a ověřené. Při obnově musí zůstat kompatibilní verze klienta, serveru a gateway.
 GitHub Access řeší týmový vstup, nikoli oprávnění uživatele k chráněnému API.
 
 ## Co spravujeme

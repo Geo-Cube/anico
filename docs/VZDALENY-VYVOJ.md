@@ -4,8 +4,8 @@
 Celý první start je v [manuálu vývojáře](MANUAL-PRO-VYVOJARE.md).
 
 Osobní DB připojení je nezávislé na aplikačním přihlášení. Pro práci s identitou
-použij [lokální přihlášení](LOKALNI-PRIHLASENI.md); tato změna vyžaduje také nasazení
-serverové části na dev. GitHub Access sám business API neodemkne.
+použij [lokální přihlášení](LOKALNI-PRIHLASENI.md); jeho serverová část je nasazená
+a ověřená na devu. GitHub Access sám business API neodemkne.
 
 ## Připojení
 
