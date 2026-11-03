@@ -40,3 +40,10 @@ export {
   type Identity,
   type Role,
 } from './identity.js';
+
+export {
+  UserRegisteredDataSchema,
+  UserRegisteredEventSchema,
+  type UserRegisteredData,
+  type UserRegisteredEvent,
+} from './registration.js';

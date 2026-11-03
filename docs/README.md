@@ -1,6 +1,7 @@
 # Dokumentace AniCo
 
 **Vývojář začíná pouze [tímto návodem](MANUAL-PRO-VYVOJARE.md).**
+Jeho úvod vede úplného začátečníka od klonování po první spuštění a PR v GitHub Desktop.
 Cloudové tokeny, SSH a Pulumi pro běžný vývoj nepotřebuješ.
 
 **Co už funguje a co chybí:** [aktuální stav projektu](STAV-PROJEKTU.md).
@@ -13,6 +14,8 @@ artifactů a databází v provozních návodech označují existující infrastr
 Lokální identita uživatele: [přihlášení pro vývoj](LOKALNI-PRIHLASENI.md).
 
 Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
+
+Backend používající přihlášení: [middleware, role, vlastnictví a registrace](INTEGRACE-IDENTITY.md).
 
 | Chci                                       | Návod                                     |
 | ------------------------------------------ | ----------------------------------------- |

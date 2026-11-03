@@ -3,6 +3,44 @@
 **Vyber si, zda vyvíjíš frontend, backend, nebo je potřebuješ spojit.**
 Docker, SSH ani cloudové API tokeny k tomu nepotřebuješ.
 
+## Pokud programuješ poprvé, začni tady
+
+1. Přijmi pozvánku do GitHub repozitáře a naklonuj ho v **GitHub Desktop**.
+2. Připrav Node, npm a `cloudflared` podle svého systému v části **1. Jednou na počítači** níže.
+3. V GitHub Desktop přepni na `dev`, dej **Fetch origin** a případně **Pull origin**.
+   Pro svůj úkol vytvoř **New Branch**, například `feature/moje-prvni-zmena`.
+4. Otevři projekt ve VS Code a vyber **Terminal → New Terminal**. Jsi v kořeni,
+   pokud vidíš složky `apps`, `packages` a hlavní `package.json`.
+5. Pro první spuštění napiš postupně:
+
+   ```bash
+   npm run setup
+   npm run dev:frontend
+   ```
+
+   `setup` stáhne potřebné knihovny a připraví projekt. `dev:frontend` spustí stránku
+   na tvém počítači; její API požadavky půjdou do týmového dev prostředí.
+
+6. Nech terminál běžet a otevři **http://127.0.0.1:5173**. Dokonči případný týmový
+   GitHub přístup. V aplikaci zvol Google nebo Microsoft a potvrď **Povolit místní vývoj**.
+   Pokud se vrátíš do UI jako přihlášený, první spuštění se povedlo.
+7. Změň drobný text v `apps/frontend/src/App.tsx`, soubor ulož a ověř změnu v prohlížeči.
+   Před odesláním spusť kontroly z části **2. Každý pracovní den** a postupuj podle
+   [GitHub Desktop návodu pro commit a PR](GIT-WORKFLOW.md#běžná-práce). PR má cílit do `dev`.
+
+Při dalším spuštění už `setup` neopakuj; běžnou práci popisuje část 2. Aplikaci ukončíš
+v terminálu pomocí **Ctrl+C**. Na Windows při chybě `npm.ps1` napiš `npm.cmd` místo `npm`.
+
+**Děláš backend?** Od správce potřebuješ osobní `.env.remote.local`, přesný název své služby
+a oprávnění k její DB. Místo `dev:frontend` spusť například
+`npm run dev:fullstack -- --service animal-service`, pouze pokud tuto službu máš ve své větvi.
+Novou službu vytvoří [generátor](NOVA-SLUZBA.md); nevkládej ji do ukázkové `breeding-service`.
+Přihlášení obstará týmový dev, proto jako svou službu nevybírej `auth-service`.
+Chybějící přístup nebo DB řeš se správcem; hesla nekopíruj od kolegy ani je neposílej do Gitu.
+
+Když něco selže, pošli název příkazu a text chyby. Neposílej `.env`, databázové URI,
+tokeny nebo celou přihlašovací URL. Nezkoušej problém řešit mazáním DB nebo lockfile.
+
 ## 1. Jednou na počítači
 
 Přijmi GitHub pozvánku a naklonuj `Geo-Cube/anico` v GitHub Desktop.
@@ -68,6 +106,8 @@ V PowerShellu můžeš používat `npm.cmd` místo `npm`.
 Google/Microsoft login na týmovém devu i pro lokální nástroje je nasazený a ověřený,
 včetně předání identity do lokálního i sdíleného API a odhlášení.
 Samotný GitHub Access nestačí pro business API. [Co máme a co zbývá](STAV-PROJEKTU.md).
+Pro vlastní backend použij [krátký integrační kontrakt](INTEGRACE-IDENTITY.md): middleware,
+`req.auth`, role a kontrola vlastnictví patří do každé služby.
 `animal` je příklad: musíš mít `apps/animal-service` ve své větvi a přidělená DB oprávnění.
 Jinak vyber název služby, na které skutečně pracuješ.
 Nová lokální služba ještě automaticky neběží na týmovém devu. Její cloudové nasazení

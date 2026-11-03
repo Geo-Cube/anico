@@ -72,3 +72,8 @@ docker build -f apps/__SERVICE_NAME__/Dockerfile -t anico/__SERVICE_NAME__:local
 Migrace i seed začínají bez obchodních dat. [DB postup](../../docs/DATABAZE.md).
 Kontejner používá port 3000; proměnné, GHCR publish, Coolify a veřejné API routy
 se konfigurují samostatně. Lokální Vite proxy nenastavuje routování na VPS.
+
+Middleware ověří identitu, ale business oprávnění doplňuje tvoje služba.
+Používej `req.auth`, `requireRole` a `assertResourceOwner` z `@anico/auth`.
+`AuthorizationError` už zpracovává centrální handler. Žádná role nemá automatickou
+výjimku z kontroly vlastnictví. [Krátký kontrakt a příklady](../../docs/INTEGRACE-IDENTITY.md).

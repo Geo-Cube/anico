@@ -1,6 +1,7 @@
 import express, { type ErrorRequestHandler, type Router, type RequestHandler } from 'express';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
+import { AuthorizationError } from '@anico/auth';
 import { healthRouter } from './health/health-router.js';
 
 export function createApp(dependencies: {
@@ -26,6 +27,10 @@ export function createApp(dependencies: {
   ) => {
     if (res.headersSent) {
       _next(error);
+      return;
+    }
+    if (error instanceof AuthorizationError) {
+      res.status(error.status).json({ error: error.message });
       return;
     }
     if (error instanceof SyntaxError && 'body' in error) {
