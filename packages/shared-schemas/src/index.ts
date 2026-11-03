@@ -64,6 +64,6 @@ export const VerificationRequestSchema = z.strictObject({
   submittedAt: z.iso.datetime(),
   reviewedBy: z.string().nullable(),
   reviewedAt: z.iso.datetime().nullable(),
-  rejectedReason: z.string().nullable(),
+  rejectionReason: z.string().nullable(),
 });
 export type VerificationRequest = z.infer<typeof VerificationRequestSchema>;
