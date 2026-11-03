@@ -27,8 +27,8 @@ describe('GET /breeders/me', () => {
     MyAccountSchema.parse(response.body);
     expect(response.status).toBe(200);
     expect(response.body.accountState).toBe('NOT_SUBMITTED');
-    expect(response.body.breeder.breederId).toBe('user-123');
-    expect(response.body.breeder.isVerified).toBe(false);
+    expect(response.body.breederId).toBe('user-123');
+    expect(response.body.isVerified).toBe(false);
   });
 
   it('returns updated account state after verification submission', async () => {

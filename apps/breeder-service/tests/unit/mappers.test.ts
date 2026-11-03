@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { inMemoryBreeders } from '../support/in-memory.js';
-import { toMyAccount } from '../../src/modules/breeders/http/mappers.js';
+import { toMyAccount } from '../../src/modules/breeders/http/breeder-mapper.js';
 import { MyAccountSchema } from '@anico/shared-schemas';
 
 describe('toMyAccount', () => {
@@ -14,12 +14,12 @@ describe('toMyAccount', () => {
       emailAddress: 'jan@example.com',
     });
 
-    const myAccount = toMyAccount(breeder);
+    const myAccount = toMyAccount(breeder, 'application/pdf');
 
     MyAccountSchema.parse(myAccount);
 
     expect(myAccount.accountState).toBe('NOT_SUBMITTED');
-    expect(myAccount.breeder).not.toHaveProperty('verificationRequest');
+    expect(myAccount.verificationRequest).toBeNull();
   });
 
   it('maps a breeder with a pending verification request', async () => {
@@ -48,11 +48,14 @@ describe('toMyAccount', () => {
       throw new Error('Breeder not found');
     }
 
-    const myAccount = toMyAccount(breeder);
+    const myAccount = toMyAccount(breeder, 'application/pdf');
 
     MyAccountSchema.parse(myAccount);
 
     expect(myAccount.accountState).toBe('PENDING');
-    expect(myAccount.breeder).not.toHaveProperty('verificationRequest');
+    expect(
+      myAccount.verificationRequest?.breedingStationCertificate.contentType,
+    ).toBe('application/pdf');
+    expect(myAccount.verificationRequest?.status).toBe('PENDING');
   });
 });
