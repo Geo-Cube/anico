@@ -4,6 +4,11 @@ import type {
   Submission,
   VerificationRequest,
 } from '../../src/modules/breeders/domain/breeder.js';
+import type {
+  Decision,
+  DecisionRecord,
+  VerificationStatus,
+} from '../../src/modules/breeders/domain/internal-types.js';
 import { BreederNotFoundError } from '../../src/modules/breeders/domain/errors.js';
 import { randomBytes } from 'node:crypto';
 export function inMemoryBreeders() {
@@ -78,6 +83,72 @@ export function inMemoryBreeders() {
       breeder.verificationRequest = request;
 
       return breeder;
+    },
+
+    async decideVerification(
+      requestId: string,
+      decision: DecisionRecord,
+    ): Promise<Breeder | null> {
+      const breeder = await this.findByVerificationRequestId(requestId);
+
+      if (!breeder) {
+        return null;
+      }
+
+      if (breeder.verificationRequest?.status !== 'PENDING') {
+        return null;
+      }
+
+      breeder.verificationRequest.status = decision.decision;
+      breeder.verificationRequest.reviewedBy = decision.reviewedBy;
+      breeder.verificationRequest.reviewedAt = decision.reviewedAt;
+
+      if (decision.decision === 'REJECTED') {
+        breeder.verificationRequest.rejectionReason = decision.rejectionReason;
+      } else {
+        breeder.verificationRequest.rejectionReason = null;
+      }
+
+      breeder.isVerified = breeder.verificationRequest.status === 'APPROVED';
+      return breeder;
+    },
+
+    async listByVerificationStatus(
+      status?: VerificationStatus,
+    ): Promise<Breeder[]> {
+      const allBreeders = Array.from(breeders.values());
+
+      const breedersWithRequest = allBreeders.filter(
+        (breeder) => breeder.verificationRequest !== null,
+      );
+
+      if (!status) {
+        return breedersWithRequest;
+      }
+
+      const breedersWithStatus = breedersWithRequest.filter(
+        (breeder) => breeder.verificationRequest?.status === status,
+      );
+
+      return breedersWithStatus;
+    },
+
+    async countByVerificationStatus(): Promise<
+      Record<VerificationStatus, number>
+    > {
+      const counts: Record<VerificationStatus, number> = {
+        PENDING: 0,
+        APPROVED: 0,
+        REJECTED: 0,
+      };
+
+      for (const breeder of breeders.values()) {
+        if (breeder.verificationRequest) {
+          counts[breeder.verificationRequest.status]++;
+        }
+      }
+
+      return counts;
     },
   };
 }
