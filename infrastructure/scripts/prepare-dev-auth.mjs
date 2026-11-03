@@ -52,7 +52,7 @@ try {
           'anico-auth-runtime-version': {
             headers: {
               customResponseHeaders: {
-                'X-Anico-Gateway-Version': '3',
+                'X-Anico-Gateway-Version': '4',
                 'Cache-Control': 'no-store',
               },
             },

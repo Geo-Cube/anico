@@ -39,11 +39,17 @@ for name, container in containers.items():
     assert re.fullmatch('ghcr.io/geo-cube/anico-' + repository + '@sha256:[a-f0-9]{64}', container['Config']['Image'])
     networks = set(container['NetworkSettings']['Networks'])
     assert 'anico-dev-app' in networks
-    assert networks <= {'anico-dev-app', 'anico-dev-data', identity}
+    publisher_enabled = 'AUTH_REGISTRATION_PUBLISHER_ENABLED=true' in container['Config']['Env']
+    allowed_networks = {'anico-dev-app', 'anico-dev-data', identity}
+    if name == 'auth' and publisher_enabled:
+        allowed_networks.add('anico-dev-events')
+    assert networks <= allowed_networks
     if name == 'frontend':
+        assert 'anico-dev-events' not in networks
         assert 'anico-dev-data' not in networks
         assert not any(value.startswith('MONGODB_URI=') for value in container['Config']['Env'])
     elif name == 'backend':
+        assert 'anico-dev-events' not in networks
         assert 'anico-dev-data' in networks
         assert not any(value.startswith('MONGODB_URI=') for value in container['Config']['Env'])
         assert any(mount['Destination'] == '/run/secrets/dev-mongodb-uri' and not mount['RW'] for mount in container['Mounts'])
@@ -55,6 +61,10 @@ for name, container in containers.items():
         assert 'anico-dev-data' in networks
         assert not any(value.startswith(('MONGODB_URI=', 'GOOGLE_CLIENT_SECRET=')) for value in container['Config']['Env'])
         assert len(container['Mounts']) >= 4
+        if publisher_enabled:
+            assert 'anico-dev-events' in networks
+            assert any(mount['Destination'] == '/run/secrets/auth-registration-broker-json' and not mount['RW'] for mount in container['Mounts'])
+        assert not any(value.startswith(('NATS_PASSWORD=', 'NATS_URL=')) for value in container['Config']['Env'])
 assert len(revisions) == 1, 'Mixed release revisions'
 
 

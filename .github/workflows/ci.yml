@@ -50,6 +50,8 @@ jobs:
       - run: npm ci
       - name: Prepare a single verified MongoDB binary before parallel tests
         run: npm run test:prepare-db
+      - name: Prepare verified NATS binary for publisher integration tests
+        run: npm run test:prepare-broker
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run test:dev-remote

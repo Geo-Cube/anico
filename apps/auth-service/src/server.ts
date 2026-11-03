@@ -12,6 +12,9 @@ import { createModules } from './modules/index.js';
 import { migrateDatabase } from './database/engine.js';
 import { loadMigrations } from './database/registry.js';
 import { databaseTarget } from './database/policy.js';
+import { configuredRegistrationPublisher } from './modules/auth/infrastructure/nats-registration-publisher.js';
+import { mongoRegistrationOutbox } from './modules/auth/infrastructure/registration-outbox.js';
+import { registrationDispatcher } from './modules/auth/application/registration-dispatcher.js';
 
 const env = z
   .object({
@@ -38,6 +41,7 @@ const logger = pino({
 });
 
 const connection = mongoose.createConnection();
+let dispatcher: ReturnType<typeof registrationDispatcher> | undefined;
 
 try {
   await connection.openUri(env.MONGODB_URI, {
@@ -58,6 +62,14 @@ try {
     }
   }
   let stopping = false;
+  const publisher = configuredRegistrationPublisher(process.env);
+  if (publisher) {
+    dispatcher = registrationDispatcher({
+      outbox: mongoRegistrationOutbox(connection),
+      publisher,
+      logger,
+    });
+  }
   const app = createApp({
     logger,
     modules: await createModules(connection),
@@ -66,6 +78,7 @@ try {
   const server = app.listen(env.PORT, env.HOST, () =>
     logger.info({ port: env.PORT }, 'Server listening'),
   );
+  server.once('listening', () => dispatcher?.start());
   server.on('error', (error) => {
     logger.fatal({ err: error }, 'HTTP server failed');
     void shutdown(1);
@@ -80,11 +93,13 @@ try {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
+      await dispatcher?.stop();
       await connection.close();
       logger.info('Server stopped');
       process.exitCode = code;
     } catch (error) {
       logger.error({ err: error }, 'Shutdown failed');
+      await dispatcher?.stop().catch(() => undefined);
       await connection.close().catch(() => undefined);
       process.exitCode = 1;
     } finally {
@@ -98,6 +113,7 @@ try {
   logger.fatal(
     'Startup failed; inspect database connectivity and migration status. Private details suppressed.',
   );
+  await dispatcher?.stop().catch(() => undefined);
   await connection.close();
   process.exitCode = 1;
 }

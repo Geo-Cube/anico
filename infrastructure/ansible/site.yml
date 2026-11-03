@@ -19,6 +19,9 @@
 - name: Deploy private developer databases when explicitly enabled
   ansible.builtin.import_playbook: dev-database.yml
 
+- name: Prepare private development registration broker when configured
+  ansible.builtin.import_playbook: dev-events.yml
+
 - name: Configure development applications when explicitly enabled
   ansible.builtin.import_playbook: dev-deployment.yml
 
