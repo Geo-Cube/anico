@@ -44,12 +44,14 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
   const origin = 'https://dev.example.test',
     gatewayKey = 'test-gateway-secret';
   let provider: Provider = 'google',
-    subject = 'first-user';
+    subject = 'first-user',
+    exchangeFails = false;
   const fake: ProviderClient = {
     async authorize(input) {
       return 'https://provider.example.test/login?state=' + input.state;
     },
     async exchange() {
+      if (exchangeFails) throw new Error('provider rejected the response');
       return {
         provider,
         issuer: 'https://' + provider + '.example.test',
@@ -60,6 +62,18 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
       };
     },
   };
+  function failedLogin(
+    response: { status: number; headers: Record<string, unknown> },
+    page: '/prihlaseni' | '/ucet',
+    code: string,
+  ) {
+    expect(response.status).toBe(303);
+    expect(response.headers.location).toBe(`${origin}${page}?error=${code}`);
+    // Only the transient login cookie is cleared; no session is issued.
+    expect(response.headers['set-cookie']).toEqual([
+      expect.stringMatching(/^__Host-anico-login=;/),
+    ]);
+  }
   beforeAll(async () => {
     mongo = await MongoMemoryServer.create();
     connection = await mongoose
@@ -84,6 +98,7 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     now = new Date();
     provider = 'google';
     subject = 'first-user';
+    exchangeFails = false;
     repo = mongoAuthRepository(connection);
     const service = createAuthService({
       repository: repo,
@@ -195,7 +210,11 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     expect(secondaryLogin.identity.roles).toContain('owner');
     const repeatedPrimary = await login();
     expect(repeatedPrimary.identity.userId).toBe(primary.identity.userId);
-    await completeLink(attempt, firstCookie(complete)).expect(401);
+    failedLogin(
+      await completeLink(attempt, firstCookie(complete)),
+      '/prihlaseni',
+      'LOGIN_EXPIRED',
+    );
   });
   it('requires a current session, exact origin, CSRF and recent primary login to initiate linking', async () => {
     await request(app).post('/connections/microsoft').expect(401);
@@ -244,8 +263,11 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     const primary = await login();
     const other = await login('google', 'other-user');
     const attempt = await startLink(primary);
-    const response = await completeLink(attempt, other.cookie).expect(401);
-    expect(response.body.error).toBe('LINK_SESSION_MISMATCH');
+    failedLogin(
+      await completeLink(attempt, other.cookie),
+      '/ucet',
+      'RECENT_LOGIN_REQUIRED',
+    );
     expect(await repo.linkedProviders(primary.identity.userId)).toEqual([
       'google',
     ]);
@@ -262,11 +284,19 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
       .set('Origin', origin)
       .set('X-CSRF-Token', primary.csrf)
       .expect(204);
-    await completeLink(revoked, primary.cookie).expect(401);
+    failedLogin(
+      await completeLink(revoked, primary.cookie),
+      '/ucet',
+      'RECENT_LOGIN_REQUIRED',
+    );
     const fresh = await login();
     const stale = await startLink(fresh);
     now = new Date(now.getTime() + 300001);
-    await completeLink(stale, fresh.cookie).expect(401);
+    failedLogin(
+      await completeLink(stale, fresh.cookie),
+      '/ucet',
+      'RECENT_LOGIN_REQUIRED',
+    );
     const again = await login();
     const disabled = await startLink(again);
     await connection
@@ -275,7 +305,11 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
         { userId: again.identity.userId },
         { $set: { status: 'disabled' } },
       );
-    await completeLink(disabled, again.cookie).expect(401);
+    failedLogin(
+      await completeLink(disabled, again.cookie),
+      '/ucet',
+      'ACCOUNT_DISABLED',
+    );
     expect(await repo.linkedProviders(primary.identity.userId)).toEqual([
       'google',
     ]);
@@ -284,8 +318,11 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     const primary = await login();
     const secondary = await login('microsoft', 'linked-microsoft');
     const attempt = await startLink(primary);
-    const response = await completeLink(attempt, primary.cookie).expect(409);
-    expect(response.body.error).toBe('IDENTITY_ALREADY_LINKED');
+    failedLogin(
+      await completeLink(attempt, primary.cookie),
+      '/ucet',
+      'IDENTITY_ALREADY_LINKED',
+    );
     expect(await repo.linkedProviders(primary.identity.userId)).toEqual([
       'google',
     ]);
@@ -384,30 +421,86 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     const start = await request(app).get('/login/google');
     const state = new URL(start.headers.location!).searchParams.get('state')!;
     const browser = firstCookie(start);
-    await request(app)
-      .get('/login/google/callback')
-      .query({ state, code: 'x' })
-      .expect(401);
+    failedLogin(
+      await request(app)
+        .get('/login/google/callback')
+        .query({ state, code: 'x' }),
+      '/prihlaseni',
+      'LOGIN_EXPIRED',
+    );
     await request(app)
       .get('/login/google/callback')
       .query({ state, code: 'x' })
       .set('Cookie', browser)
       .expect(303);
-    await request(app)
-      .get('/login/google/callback')
-      .query({ state, code: 'x' })
-      .set('Cookie', browser)
-      .expect(401);
+    failedLogin(
+      await request(app)
+        .get('/login/google/callback')
+        .query({ state, code: 'x' })
+        .set('Cookie', browser),
+      '/prihlaseni',
+      'LOGIN_EXPIRED',
+    );
     const stale = await request(app).get('/login/google');
     const staleState = new URL(stale.headers.location!).searchParams.get(
       'state',
     )!;
     now = new Date(now.getTime() + 601000);
-    await request(app)
+    failedLogin(
+      await request(app)
+        .get('/login/google/callback')
+        .query({ state: staleState, code: 'x' })
+        .set('Cookie', firstCookie(stale)),
+      '/prihlaseni',
+      'LOGIN_EXPIRED',
+    );
+  });
+  it('returns to a safe in-app path after login and rejects anything that could leave the app', async () => {
+    const start = await request(app)
+      .get('/login/google')
+      .query({ returnTo: '/administrace/chovatele?stav=PENDING' })
+      .expect(302);
+    const state = new URL(start.headers.location!).searchParams.get('state');
+    const finish = await request(app)
       .get('/login/google/callback')
-      .query({ state: staleState, code: 'x' })
-      .set('Cookie', firstCookie(stale))
-      .expect(401);
+      .query({ state, code: 'x' })
+      .set('Cookie', firstCookie(start))
+      .expect(303);
+    expect(finish.headers.location).toBe(
+      origin + '/administrace/chovatele?stav=PENDING',
+    );
+    for (const returnTo of [
+      'https://attacker.example.test/',
+      '//attacker.example.test',
+      '/\\attacker.example.test',
+      '/%2F%2Fattacker.example.test',
+      '/./ucet',
+      '/a/../ucet',
+      '/api/auth/session',
+      '/API/animal',
+      '/ucet#fragment',
+      'ucet',
+      '/' + 'a'.repeat(160),
+    ])
+      await request(app).get('/login/google').query({ returnTo }).expect(400);
+  });
+  it('reports a cancelled or failed provider login with a fixed public code', async () => {
+    exchangeFails = true;
+    for (const [query, code] of [
+      [{ error: 'access_denied' }, 'LOGIN_CANCELLED'],
+      [{ error: 'server_error', error_description: 'secret' }, 'LOGIN_FAILED'],
+    ] as const) {
+      const start = await request(app).get('/login/google').expect(302);
+      const state = new URL(start.headers.location!).searchParams.get('state');
+      failedLogin(
+        await request(app)
+          .get('/login/google/callback')
+          .query({ state, ...query })
+          .set('Cookie', firstCookie(start)),
+        '/prihlaseni',
+        code,
+      );
+    }
   });
   it('requires CSRF and immediately revokes logged-out sessions while keeping other sessions active', async () => {
     const one = await login(),

@@ -72,7 +72,8 @@ Reset a řešení přerušené migrace: [DB postup](DATABAZE.md).
 | Zkontrolovat / opravit formát                       | `npm run format:check` / `npm run format`          |
 | Zkontrolovat TypeScript                             | `npm run typecheck`                                |
 | Spustit testy workspaces                            | `npm test`                                         |
-| Backendové testy + coverage                         | `npm run test:coverage`                            |
+| Testy + coverage všech workspaces                   | `npm run test:coverage`                            |
+| Jen frontendové testy                               | `npm test -w @anico/frontend`                      |
 | Jen backendové unit testy                           | `npm run test:unit -w @anico/tvoje-service`        |
 | Jen HTTP integrační testy                           | `npm run test:integration -w @anico/tvoje-service` |
 | Testy infrastruktury                                | `npm test -w @anico/infrastructure`                |

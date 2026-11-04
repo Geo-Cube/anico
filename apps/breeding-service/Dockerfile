@@ -2,12 +2,13 @@
 FROM node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS manifests
 WORKDIR /app
 RUN npm install --global npm@11.6.0 --ignore-scripts --no-audit --no-fund
+# Only the workspaces this image builds and runs. A manifest of an unrelated
+# workspace (frontend, infrastructure) can make `npm ci --omit=dev` keep hoisted
+# packages they share, e.g. TypeScript from frontend test tools.
 COPY package.json package-lock.json ./
 COPY apps/breeding-service/package.json ./apps/breeding-service/
-COPY apps/frontend/package.json ./apps/frontend/
 COPY packages/shared-schemas/package.json ./packages/shared-schemas/
 COPY packages/auth/package.json ./packages/auth/
-COPY infrastructure/package.json ./infrastructure/
 
 FROM manifests AS build
 RUN --mount=type=cache,target=/root/.npm \

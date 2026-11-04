@@ -1,6 +1,13 @@
-import { Router, type Request } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { parse, serialize } from 'cookie';
 import { z } from 'zod';
+import {
+  AuthProviderSchema,
+  type ConnectionStartResponse,
+  type LoginErrorCode,
+  type ProvidersResponse,
+  type Session,
+} from '@anico/shared-schemas';
 import type { AuthService } from '../application/auth.js';
 import { equalSecret } from '../application/auth.js';
 import { AuthError, type Provider } from '../domain/auth.js';
@@ -8,7 +15,32 @@ import type { IdentitySigner } from '../infrastructure/signer.js';
 import type { DevelopmentAuthService } from '../application/development.js';
 import { developmentRouter } from './development-router.js';
 
-const providerSchema = z.enum(['google', 'microsoft', 'apple']);
+const providerSchema = AuthProviderSchema;
+/** Maps internal failures to the closed public code set placed in the URL. */
+function publicLoginError(error: unknown, cancelled: boolean): LoginErrorCode {
+  if (error instanceof z.ZodError) return 'LOGIN_EXPIRED';
+  if (!(error instanceof AuthError)) return 'LOGIN_FAILED';
+  switch (error.code) {
+    case 'LOGIN_BROWSER_MISMATCH':
+    case 'INVALID_LOGIN_ATTEMPT':
+      return 'LOGIN_EXPIRED';
+    case 'ACCOUNT_DISABLED':
+      return 'ACCOUNT_DISABLED';
+    case 'IDENTITY_ALREADY_LINKED':
+      return 'IDENTITY_ALREADY_LINKED';
+    case 'RECENT_LOGIN_REQUIRED':
+    case 'LINK_SESSION_MISMATCH':
+    case 'AUTHENTICATION_REQUIRED':
+    case 'SESSION_EXPIRED':
+      return 'RECENT_LOGIN_REQUIRED';
+    case 'PROVIDER_NOT_CONFIGURED':
+      return 'PROVIDER_UNAVAILABLE';
+    case 'PROVIDER_LOGIN_FAILED':
+      return cancelled ? 'LOGIN_CANCELLED' : 'LOGIN_FAILED';
+    default:
+      return 'LOGIN_FAILED';
+  }
+}
 export function authRouter(options: {
   service: AuthService;
   signer: IdentitySigner;
@@ -64,7 +96,7 @@ export function authRouter(options: {
       }),
     );
   router.get('/providers', (_req, res) =>
-    res.json({ providers: service.providers }),
+    res.json({ providers: service.providers } satisfies ProvidersResponse),
   );
   router.get('/.well-known/jwks.json', (_req, res) => res.json(signer.jwks));
   router.get('/login/:provider', async (req, res) => {
@@ -91,31 +123,34 @@ export function authRouter(options: {
     service.csrf(current.session, req.headers.origin, req.get('x-csrf-token'));
     const login = await service.beginLink(provider, token!);
     res.setHeader('Set-Cookie', cookie(loginName, login.browser, 600));
-    res.json({ url: login.url });
+    res.json({ url: login.url } satisfies ConnectionStartResponse);
   });
-  async function callback(req: Request, res: import('express').Response) {
-    const provider = providerSchema.parse(req.params.provider);
+  async function callback(req: Request, res: Response) {
     const fields =
       req.method === 'POST'
-        ? z.record(z.string(), z.string()).parse(req.body)
+        ? z.record(z.string(), z.string()).safeParse(req.body).data
         : req.query;
-    const state = z.string().min(20).max(256).parse(fields.state);
-    const browser = cookies(req)[loginName];
-    if (!browser) throw new AuthError(401, 'LOGIN_BROWSER_MISMATCH');
-    const url = new URL(`${publicOrigin}/api/auth/login/${provider}/callback`);
-    let response: URL | globalThis.Request;
-    if (req.method === 'POST')
-      response = new globalThis.Request(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(fields as Record<string, string>),
-      });
-    else {
-      for (const [key, value] of Object.entries(fields))
-        if (typeof value === 'string') url.searchParams.set(key, value);
-      response = url;
-    }
     try {
+      const provider = providerSchema.parse(req.params.provider);
+      if (!fields) throw new AuthError(400, 'INVALID_CALLBACK');
+      const state = z.string().min(20).max(256).parse(fields.state);
+      const browser = cookies(req)[loginName];
+      if (!browser) throw new AuthError(401, 'LOGIN_BROWSER_MISMATCH');
+      const url = new URL(
+        `${publicOrigin}/api/auth/login/${provider}/callback`,
+      );
+      let response: URL | globalThis.Request;
+      if (req.method === 'POST')
+        response = new globalThis.Request(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(fields as Record<string, string>),
+        });
+      else {
+        for (const [key, value] of Object.entries(fields))
+          if (typeof value === 'string') url.searchParams.set(key, value);
+        response = url;
+      }
       const result = await service.complete(
         provider as Provider,
         state,
@@ -131,9 +166,19 @@ export function authRouter(options: {
       ]);
       res.redirect(303, publicOrigin + result.returnTo);
     } catch (error) {
+      // The browser lands on a page, never on a JSON error. Only a fixed code
+      // reaches the URL; the internal reason stays in the service log.
+      const code = publicLoginError(error, fields?.error === 'access_denied');
+      req.log.warn(
+        { reason: error instanceof AuthError ? error.code : 'UNEXPECTED' },
+        'Login callback rejected',
+      );
+      const page =
+        error instanceof AuthError && error.flow === 'link'
+          ? '/ucet'
+          : '/prihlaseni';
       res.setHeader('Set-Cookie', cookie(loginName, '', 0));
-      if (error instanceof AuthError) throw error;
-      throw new AuthError(401, 'PROVIDER_LOGIN_FAILED');
+      res.redirect(303, `${publicOrigin}${page}?error=${code}`);
     }
   }
   router.get('/login/:provider/callback', callback);
@@ -146,7 +191,7 @@ export function authRouter(options: {
       expiresAt: result.session.expiresAt.toISOString(),
       linkedProviders: await service.linkedProviders(result.user.userId),
       canManageAccounts: !result.native,
-    });
+    } satisfies Session);
   });
   router.post('/logout', async (req, res) => {
     const result = await authenticate(req);

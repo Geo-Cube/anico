@@ -217,9 +217,15 @@ test(
       const callback = new URL(native.headers.get('location'));
       const wrong = new URL(callback);
       wrong.searchParams.set('state', random());
-      assert.equal((await fetch(wrong, { redirect: 'manual' })).status, 401);
-      assert.equal((await fetch(callback, { redirect: 'manual' })).status, 303);
-      assert.equal((await fetch(callback, { redirect: 'manual' })).status, 401);
+      const expired = 'http://127.0.0.1:5173/prihlaseni?error=LOGIN_EXPIRED';
+      const mismatch = await fetch(wrong, { redirect: 'manual' });
+      assert.equal(mismatch.status, 303);
+      assert.equal(mismatch.headers.get('location'), expired);
+      const success = await fetch(callback, { redirect: 'manual' });
+      assert.equal(success.status, 303);
+      assert.equal(success.headers.get('location'), 'http://127.0.0.1:5173/');
+      const replay = await fetch(callback, { redirect: 'manual' });
+      assert.equal(replay.headers.get('location'), expired);
       const session = await client.session();
       await Promise.all(
         Array.from({ length: 8 }, () => client.identityToken()),
@@ -350,14 +356,45 @@ test(
       );
       assert.equal((await fetch(localOrigin + '/api/animal')).status, 401);
       assert.equal(sessions.size, 0);
+      for (const unsafe of ['//attacker.example.test', '/api/auth/session'])
+        assert.equal(
+          (
+            await fetch(
+              localOrigin +
+                '/api/auth/login/google?returnTo=' +
+                encodeURIComponent(unsafe),
+              { redirect: 'manual' },
+            )
+          ).status,
+          400,
+        );
+      const returning = await fetch(
+        localOrigin +
+          '/api/auth/login/google?returnTo=' +
+          encodeURIComponent('/ucet?zalozka=1'),
+        { redirect: 'manual' },
+      );
+      assert.equal(returning.status, 303);
+      const returned = await fetch(
+        (
+          await fetch(returning.headers.get('location'), { redirect: 'manual' })
+        ).headers.get('location'),
+        { redirect: 'manual' },
+      );
+      assert.equal(
+        returned.headers.get('location'),
+        'http://127.0.0.1:5173/ucet?zalozka=1',
+      );
+      await client.logout();
       const cancel = await fetch(await client.beginLogin('google'), {
         redirect: 'manual',
       });
       await client.logout();
       assert.equal(
-        (await fetch(cancel.headers.get('location'), { redirect: 'manual' }))
-          .status,
-        401,
+        (
+          await fetch(cancel.headers.get('location'), { redirect: 'manual' })
+        ).headers.get('location'),
+        expired,
       );
       await assert.rejects(client.session(), (e) => e.status === 401);
     } finally {

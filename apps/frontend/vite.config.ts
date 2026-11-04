@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type PluginOption } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { createApiProxy, discoverLocalBackends } from './vite-proxy.mjs';
@@ -10,7 +11,7 @@ import {
 } from './dev-app-auth.mjs';
 
 export default defineConfig(async ({ command, isPreview }) => {
-  const plugins: PluginOption[] = [react()];
+  const plugins: PluginOption[] = [react(), tailwindcss()];
   let proxy = {};
   if (command === 'serve' && !isPreview) {
     const mode = process.env.ANICO_API_MODE ?? 'dev';
@@ -62,6 +63,9 @@ export default defineConfig(async ({ command, isPreview }) => {
   }
   return {
     plugins,
+    resolve: {
+      alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    },
     server: {
       host: '127.0.0.1',
       port: 5173,

@@ -1,9 +1,10 @@
 import type {
+  AuthProvider,
   Identity,
   Role,
   UserRegisteredEvent,
 } from '@anico/shared-schemas';
-export type Provider = 'google' | 'microsoft' | 'apple';
+export type Provider = AuthProvider;
 export interface ExternalIdentity {
   provider: Provider;
   issuer: string;
@@ -79,6 +80,8 @@ export class AuthError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
+    /** Callback failures of an account-linking attempt return to the account page. */
+    public readonly flow: 'login' | 'link' = 'login',
   ) {
     super(code);
   }

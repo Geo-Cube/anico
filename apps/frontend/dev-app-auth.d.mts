@@ -4,7 +4,7 @@ export const DEV_AUTH_AUDIENCE: string;
 export interface DevelopmentClient {
   session(): Promise<unknown>;
   identityToken(): Promise<string>;
-  beginLogin(provider?: string): string | Promise<string>;
+  beginLogin(provider?: string, returnTo?: string): string | Promise<string>;
   logout(): Promise<void>;
   credentials(): Promise<{
     accessToken: string;

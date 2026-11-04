@@ -91,9 +91,9 @@ backend poslouchá následující cesty bez prefixu:
 | Metoda a cesta                                  | Účel                                                               |
 | ----------------------------------------------- | ------------------------------------------------------------------ |
 | `GET /providers`                                | Skutečně nakonfigurovaní poskytovatelé                             |
-| `GET /login/google` (nebo `microsoft`, `apple`) | Zahájení OIDC                                                      |
-| `GET /login/:provider/callback`                 | Callback Google/Microsoft                                          |
-| `POST /login/apple/callback`                    | Apple `form_post` callback                                         |
+| `GET /login/google` (nebo `microsoft`, `apple`) | Zahájení OIDC; volitelný bezpečný `returnTo`                       |
+| `GET /login/:provider/callback`                 | Callback Google/Microsoft; chyba = 303 s kódem, ne JSON            |
+| `POST /login/apple/callback`                    | Apple `form_post` callback; chyby stejně jako u GET                |
 | `GET /session`                                  | Identita, CSRF token a expirace; bez relace 401                    |
 | `POST /connections/:provider`                   | Zahájení propojení Google/Microsoft; čerstvá relace, Origin a CSRF |
 | `POST /logout`                                  | Zneplatnění aktuální relace; vyžaduje Origin a CSRF                |
@@ -110,6 +110,25 @@ Nový login vyžaduje nový přihlašovací tok; poskytovatel může znovu použ
 
 Zápisové požadavky posílají `X-CSRF-Token` z `/session` a správný `Origin`.
 Po callbacku může FE znovu načíst `/api/auth/session`; callback token do URL nevkládá.
+
+### Návrat po přihlášení a chyby callbacku
+
+`GET /login/:provider?returnTo=/cesta` vrátí prohlížeč po úspěchu na danou stránku.
+Povolená je jen interní cesta podle `isSafeReturnPath` z `@anico/shared-schemas`:
+začíná jedním `/`, má nejvýš 160 znaků, neobsahuje schéma, host, `\`, `#`, `//`,
+tečkové segmenty ani kódování v cestě a nemíří do `/api`. Jinak login odpoví
+`400 INVALID_LOGIN_RETURN`; nic se „neopravuje“. Výjimkou zůstává interní
+návrat na `/api/auth/development/consent` lokálního toku. Bez `returnTo` se vrací na `/`.
+
+Neúspěšný callback nevrací JSON, ale `303` na `/prihlaseni?error=KOD`; neúspěšné
+propojení účtu na `/ucet?error=KOD`. Kód je vždy z uzavřeného výčtu
+`LoginErrorCodeSchema`: `LOGIN_CANCELLED`, `LOGIN_EXPIRED`, `LOGIN_FAILED`,
+`ACCOUNT_DISABLED`, `IDENTITY_ALREADY_LINKED`, `RECENT_LOGIN_REQUIRED`,
+`PROVIDER_UNAVAILABLE`. Text chyby ani parametry poskytovatele do URL nejdou;
+interní důvod je v logu auth-service (`Login callback rejected`). Cookies,
+CSRF, Origin a PKCE/state/nonce zůstávají beze změny.
+Kontrakty odpovědí `/session`, `/providers` a `/connections/:provider` jsou
+`SessionSchema`, `ProvidersResponseSchema` a `ConnectionStartResponseSchema`.
 
 ## Role a první vlastník
 
@@ -252,9 +271,10 @@ shodném e-mailu. Samotné přidání poskytovatele nikomu nepřidává oprávn�
 **Volitelné propojení je nasazené. Vlastník zvolil Google a Microsoft účty ponechat oddělené; tento postup není povinný.**
 
 1. Odhlas se a přihlas se přes původního poskytovatele (u prvního vlastníka Google).
-2. Do pěti minut klikni v přihlašovacím panelu na **Propojit Microsoft**.
+2. Do pěti minut otevři **Můj účet** (`/ucet`) a klikni na **Propojit Microsoft**.
 3. Vyber a ověř druhý Microsoft účet. Nejdřív jej neregistruj běžným Microsoft loginem do AniCo.
-4. Po návratu panel ukáže oba poskytovatele. Odhlas se a zkus oba loginy;
+4. Po návratu stránka **Můj účet** ukáže oba poskytovatele; chyba propojení se zobrazí tamtéž.
+   Odhlas se a zkus oba loginy;
    `/api/auth/session` musí vracet stejné `identity.userId` a role.
 
 Shoda e-mailu není důkaz vlastnictví. Propojení vyžaduje čerstvou relaci původního

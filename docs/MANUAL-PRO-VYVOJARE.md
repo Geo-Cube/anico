@@ -24,7 +24,7 @@ Docker, SSH ani cloudové API tokeny k tomu nepotřebuješ.
 6. Nech terminál běžet a otevři **http://127.0.0.1:5173**. Dokonči případný týmový
    GitHub přístup. V aplikaci zvol Google nebo Microsoft a potvrď **Povolit místní vývoj**.
    Pokud se vrátíš do UI jako přihlášený, první spuštění se povedlo.
-7. Změň drobný text v `apps/frontend/src/App.tsx`, soubor ulož a ověř změnu v prohlížeči.
+7. Změň drobný text v `apps/frontend/src/features/dashboard/DashboardPage.tsx`, soubor ulož a ověř změnu v prohlížeči.
    Před odesláním spusť kontroly z části **2. Každý pracovní den** a postupuj podle
    [GitHub Desktop návodu pro commit a PR](GIT-WORKFLOW.md#běžná-práce). PR má cílit do `dev`.
 

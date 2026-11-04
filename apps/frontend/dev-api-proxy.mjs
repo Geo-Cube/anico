@@ -1,5 +1,6 @@
 import { DEV_API_ORIGIN } from './dev-access.mjs';
 import { guardLocalRequest } from './dev-app-auth.mjs';
+import { isSafeReturnPath } from '@anico/shared-schemas';
 
 const accessHeaders = new Set([
   'cf-access-token',
@@ -126,8 +127,19 @@ export function createDevApiProxy(
                 req.method === 'GET' &&
                 /^\/api\/auth\/login\/(google|microsoft)$/.test(path)
               ) {
+                const returnTo =
+                  new URL(req.url, 'http://127.0.0.1').searchParams.get(
+                    'returnTo',
+                  ) ?? undefined;
+                if (returnTo !== undefined && !isSafeReturnPath(returnTo)) {
+                  reject(res, 400, 'Neplatná návratová adresa.');
+                  return;
+                }
                 res.writeHead(303, {
-                  Location: await appAuth.beginLogin(path.split('/').at(-1)),
+                  Location: await appAuth.beginLogin(
+                    path.split('/').at(-1),
+                    returnTo,
+                  ),
                 });
                 res.end();
                 return;
