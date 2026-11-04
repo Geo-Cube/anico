@@ -6,6 +6,7 @@ coverage/
 *.tsbuildinfo
 .husky/_/
 .cache/
+.claude
 
 # Local environment and credentials; only empty examples belong in Git
 .env
