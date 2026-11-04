@@ -1,115 +1,90 @@
-import { describe, expect, it } from 'vitest';
-import request from 'supertest';
-import express from 'express';
-import { breedersRouter } from '../../src/modules/breeders/http/breeders-router.js';
 import { MyAccountSchema } from '@anico/shared-schemas';
-import { inMemoryBreeders } from '../support/in-memory.js';
-import { getMyAccountHandler } from '../../src/modules/breeders/http/get-my-account-handler.js';
-import type { FileStorage } from '../../src/modules/breeders/domain/ports.js';
-import { Readable } from 'node:stream';
-
-const files: FileStorage = {
-  async save() {
-    return 'file-123';
-  },
-
-  async open(fileReference) {
-    if (fileReference !== 'file-123') {
-      return null;
-    }
-
-    return {
-      stream: Readable.from([]),
-      size: 0,
-      contentType: 'application/pdf',
-    };
-  },
-
-  async delete() {
-    // Doplň.
-  },
-
-  async getMetadata(fileReference) {
-    if (fileReference !== 'file-123') {
-      return null;
-    }
-    return { contentType: 'application/pdf' };
-  },
-};
+import request from 'supertest';
+import { describe, expect, it } from 'vitest';
+import {
+  breederHeaders,
+  identityHeaders,
+  takeOverAndSubmit,
+} from '../support/api.js';
+import { testApp } from '../support/app.js';
 
 describe('GET /breeders/me', () => {
-  it('returns the current breeder account', async () => {
-    const repository = inMemoryBreeders();
-    const app = express();
-
-    const resolveCurrentBreeder = async () => ({
-      breederId: 'user-123',
-      firstName: 'Jan',
-      lastName: 'Novák',
-      emailAddress: 'jan@example.com',
-    });
-
-    app.use(
-      '/breeders',
-      breedersRouter({
-        repository,
-        resolveCurrentBreeder,
-        files,
-      }),
-    );
-
+  it('returns 401 without identity headers', async () => {
+    const { app } = testApp();
     const response = await request(app).get('/breeders/me');
-    MyAccountSchema.parse(response.body);
-    expect(response.status).toBe(200);
-    expect(response.body.accountState).toBe('NOT_SUBMITTED');
-    expect(response.body.breederId).toBe('user-123');
-    expect(response.body.isVerified).toBe(false);
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: 'Unauthorized' });
   });
 
-  it('returns updated account state after verification submission', async () => {
-    const repository = inMemoryBreeders();
-    const app = express();
+  it('takes over the account from identity and returns NOT_SUBMITTED', async () => {
+    const { app, breeders } = testApp();
+    const response = await request(app)
+      .get('/breeders/me')
+      .set(breederHeaders('user-123'));
 
-    const resolveCurrentBreeder = async () => ({
+    expect(response.status).toBe(200);
+    MyAccountSchema.parse(response.body);
+    expect(response.body).toMatchObject({
+      accountState: 'NOT_SUBMITTED',
       breederId: 'user-123',
-      firstName: 'Jan',
-      lastName: 'Novák',
-      emailAddress: 'jan@example.com',
+      emailAddress: 'user-123@example.test',
+      hasBreedingStation: true,
+      isVerified: false,
+      breedingStationName: null,
+      verificationRequest: null,
     });
+    expect(await breeders.findByBreederId('user-123')).not.toBeNull();
+  });
 
-    app.use(
-      '/breeders',
-      breedersRouter({
-        repository,
-        resolveCurrentBreeder,
-        files,
-      }),
+  it('decodes URL-encoded names and ignores a breederId in the query', async () => {
+    const { app } = testApp();
+    const response = await request(app)
+      .get('/breeders/me?breederId=someone-else')
+      .set(
+        identityHeaders('user-1', { firstName: 'Žofie', lastName: 'Čápová' }),
+      );
+    expect(response.body.breederId).toBe('user-1');
+    expect(response.body.firstName).toBe('Žofie');
+  });
+
+  it('does not overwrite the stored profile when headers change', async () => {
+    const { app } = testApp();
+    await request(app).get('/breeders/me').set(breederHeaders('user-1'));
+    const second = await request(app)
+      .get('/breeders/me')
+      .set(identityHeaders('user-1', { firstName: 'Jiný' }));
+    expect(second.body.firstName).toBe('Test');
+  });
+
+  it('shows PENDING state after submission without exposing fileReference', async () => {
+    const { app } = testApp();
+    await takeOverAndSubmit(app, 'user-123');
+
+    const response = await request(app)
+      .get('/breeders/me')
+      .set(breederHeaders('user-123'));
+    expect(response.status).toBe(200);
+    MyAccountSchema.parse(response.body);
+    expect(response.body.accountState).toBe('PENDING');
+    expect(response.body.hasBreedingStation).toBe(true);
+    expect(
+      response.body.verificationRequest.breedingStationCertificate,
+    ).toEqual({ fileName: 'certifikát.pdf', contentType: 'application/pdf' });
+    expect(JSON.stringify(response.body)).not.toContain('fileReference');
+  });
+
+  it('fails with 500 and no details when the certificate file is missing', async () => {
+    const { app, breeders, files } = testApp();
+    await takeOverAndSubmit(app, 'user-123');
+    const stored = await breeders.findByBreederId('user-123');
+    await files.delete(
+      stored!.verificationRequest!.breedingStationCertificate.fileReference,
     );
 
-    const firstResponse = await request(app).get('/breeders/me');
-    expect(firstResponse.status).toBe(200);
-    expect(firstResponse.body.accountState).toBe('NOT_SUBMITTED');
-
-    const submitted = await repository.submitVerification('user-123', {
-      firstName: 'Jan',
-      lastName: 'Novák',
-      emailAddress: 'jan@example.com',
-      breedingStationName: 'Stanice U Nováků',
-      breedingStationNumber: '123456',
-      breedingStationCertificate: {
-        fileName: 'certifikat.pdf',
-        fileReference: 'file-123',
-      },
-    });
-    expect(submitted).not.toBeNull();
-
-    const secondResponse = await request(app).get('/breeders/me');
-    expect(secondResponse.status).toBe(200);
-    expect(secondResponse.body.accountState).toBe('PENDING');
-    MyAccountSchema.parse(secondResponse.body);
-
-    expect(
-      secondResponse.body.verificationRequest.breedingStationCertificate,
-    ).not.toHaveProperty('fileReference');
+    const response = await request(app)
+      .get('/breeders/me')
+      .set(breederHeaders('user-123'));
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Internal server error' });
   });
 });

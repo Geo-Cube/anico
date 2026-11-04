@@ -1,10 +1,15 @@
 import mongoose from 'mongoose';
 import { pino } from 'pino';
+import { LOG_REDACT_PATHS } from './shared/logging.js';
 import { z } from 'zod';
 import { createApp } from './app.js';
 import { migrateDatabase } from './database/engine.js';
 import { loadMigrations } from './database/registry.js';
 import { databaseTarget } from './database/policy.js';
+import { gridFsFileStorage } from './modules/breeders/infrastructure/gridfs-file-storage.js';
+import { loggingDecisionNotifier } from './modules/breeders/infrastructure/logging-decision-notifier.js';
+import { mongooseBreederRepository } from './modules/breeders/infrastructure/mongoose-breeder-repository.js';
+import { gatewayHeaderIdentity } from './shared/http/identity.js';
 
 const env = z
   .object({
@@ -21,7 +26,7 @@ const env = z
 const logger = pino({
   level: env.LOG_LEVEL,
   base: { service: 'breeder-service' },
-  redact: ['req.headers.authorization', 'req.headers.cookie'],
+  redact: LOG_REDACT_PATHS,
 });
 
 const connection = mongoose.createConnection();
@@ -44,9 +49,21 @@ try {
       );
     }
   }
+  const breeders = mongooseBreederRepository(connection);
+  // indexy (unikátní breederId apod.) musí existovat před přijetím provozu
+  await Promise.all(
+    Object.values(connection.models).map((model) => model.init()),
+  );
+  logger.warn(
+    'E-mail delivery is not configured: decision e-mails are only logged (development adapter)',
+  );
   let stopping = false;
   const app = createApp({
     logger,
+    breeders,
+    files: gridFsFileStorage(connection),
+    notifier: loggingDecisionNotifier(logger),
+    resolveIdentity: gatewayHeaderIdentity,
     isReady: () => !stopping && connection.readyState === 1,
   });
   const server = app.listen(env.PORT, env.HOST, () =>

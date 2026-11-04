@@ -52,3 +52,41 @@ Kontejner poslouchá na portu 3000. Při nasazení nastav `HOST=0.0.0.0`,
 
 Generátor nic nenasazuje. GHCR publish, Coolify, API routing, proměnné a účty DB
 musí správce explicitně přidat do infrastruktury; současný deployment se nemění.
+
+## UC-01 API (ověření chovatele)
+
+| Metoda a cesta                                      | Role     | Popis                                                                                                       |
+| --------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `GET /breeders/me`                                  | chovatel | Převzetí účtu (idempotentní) a stav ověření                                                                 |
+| `POST /breeders/me/verification-request`            | chovatel | Podání žádosti, `multipart/form-data`, soubor v poli `breedingStationCertificate` (PDF/JPEG/PNG, max. 5 MB) |
+| `GET /breeders/me/verification-request/certificate` | chovatel | Stažení vlastního certifikátu                                                                               |
+| `GET /verification-requests/summary`                | admin    | Počty žádostí podle stavu                                                                                   |
+| `GET /verification-requests?status=`                | admin    | Fronta žádostí (nejstarší první, max. 500)                                                                  |
+| `GET /verification-requests/:id`                    | admin    | Detail žádosti                                                                                              |
+| `GET /verification-requests/:id/certificate`        | admin    | Stažení certifikátu                                                                                         |
+| `POST /verification-requests/:id/decision`          | admin    | `{ decision: 'APPROVED' }` nebo `{ decision: 'REJECTED', rejectionReason }`                                 |
+
+Chyby mají tvar `{ error }`, validace `{ error: 'Validation failed', issues }`, konflikt (409) `{ error, current }`.
+Kontrakty jsou v `@anico/shared-schemas`.
+
+## Identita
+
+Dočasný kontrakt: gateway doplní hlavičky `x-user-id`, `x-user-first-name`, `x-user-last-name`,
+`x-user-email` (hodnoty URL-encoded) a `x-user-roles` (čárkou oddělené, admin = `admin`).
+Bez platných hlaviček služba vrací 401, chovatel na admin cestách 403. **Servisa smí běžet jen
+za gateway, která tyto hlavičky od klienta zahazuje a přepisuje**, jinak je identitu možné
+podvrhnout. Resolver se vkládá přes `createApp({ resolveIdentity })`, takže jej lze později
+nahradit JWT. Hlavičky s osobními údaji jsou v logu redigované.
+
+Ruční vyzkoušení:
+
+```bash
+curl -H 'x-user-id: u1' -H 'x-user-first-name: Jan' -H 'x-user-last-name: Nov%C3%A1k' \
+  -H 'x-user-email: jan%40example.test' http://127.0.0.1:3001/breeders/me
+```
+
+## E-mail
+
+Rozhodnutí admina spouští `DecisionNotifier`. Zapojený adaptér `loggingDecisionNotifier` je
+**vývojový**: e-mail nedoručuje, jen zaloguje, že rozhodnutí proběhlo (bez obsahu a adresy).
+Skutečný poskytovatel e-mailů je podmínkou produkčního nasazení. Selhání odeslání rozhodnutí nezruší.

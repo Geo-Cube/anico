@@ -1,6 +1,8 @@
 import type { Breeder, VerificationRequest } from '../domain/breeder.js';
 import { accountState } from '../domain/breeder.js';
 import type {
+  AdminVerificationRequest,
+  BreederProfile,
   CertificateFile,
   MyAccount,
   VerificationRequestDto,
@@ -25,14 +27,34 @@ export function toMyAccount(
 
   return {
     accountState: accountState(breeder),
+    ...toBreederProfile(breeder),
+    verificationRequest,
+  };
+}
+
+export function toBreederProfile(breeder: Breeder): BreederProfile {
+  return {
     breederId: breeder.breederId,
     firstName: breeder.firstName,
     lastName: breeder.lastName,
     emailAddress: breeder.emailAddress,
     breedingStationName: breeder.breedingStationName,
     breedingStationNumber: breeder.breedingStationNumber,
+    hasBreedingStation: breeder.hasBreedingStation,
     isVerified: breeder.isVerified,
-    verificationRequest,
+  };
+}
+
+export function toAdminVerificationRequest(
+  breeder: Breeder,
+  contentType: CertificateFile['contentType'],
+): AdminVerificationRequest {
+  if (!breeder.verificationRequest) {
+    throw new Error('Breeder has no verification request');
+  }
+  return {
+    ...toVerificationRequest(breeder.verificationRequest, contentType),
+    breeder: toBreederProfile(breeder),
   };
 }
 

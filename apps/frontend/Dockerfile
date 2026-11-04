@@ -4,7 +4,7 @@ WORKDIR /app
 RUN npm install --global npm@11.6.0 --ignore-scripts --no-audit --no-fund
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/frontend/package.json ./apps/frontend/
-COPY apps/breeding-service/package.json ./apps/breeding-service/
+COPY apps/breeder-service/package.json ./apps/breeder-service/
 COPY packages/shared-schemas/package.json ./packages/shared-schemas/
 COPY infrastructure/package.json ./infrastructure/
 RUN --mount=type=cache,target=/root/.npm \

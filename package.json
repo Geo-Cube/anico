@@ -20,7 +20,7 @@
     "dev:remote": "node scripts/dev-remote.mjs",
     "test:dev-remote": "node --test scripts/tests/dev-remote.test.mjs",
     "test:deployment": "node --test scripts/tests/dev-deployment.test.mjs",
-    "start": "npm run start --workspace=@anico/breeding-service",
+    "start": "npm run start --workspace=@anico/breeder-service",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:unit": "turbo run test:unit",

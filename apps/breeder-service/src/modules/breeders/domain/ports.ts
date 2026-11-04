@@ -37,3 +37,12 @@ export interface FileStorage {
     fileReference: string,
   ): Promise<{ contentType: CertificateContentType } | null>;
 }
+
+export interface DecisionNotifier {
+  notifyDecision(breeder: Breeder): Promise<void>;
+}
+
+/** Minimální logovací port pro use-cases (nezávislý na pino). */
+export interface WarnLogger {
+  warn(context: object, message: string): void;
+}

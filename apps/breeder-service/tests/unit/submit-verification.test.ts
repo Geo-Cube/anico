@@ -15,6 +15,7 @@ describe('canSubmitVerificationRequest', () => {
       emailAddress: 'jan@example.com',
       breedingStationName: null,
       breedingStationNumber: null,
+      hasBreedingStation: true,
       isVerified: false,
       verificationRequest: null,
     };
@@ -32,6 +33,7 @@ describe('canSubmitVerificationRequest', () => {
       emailAddress: 'jan@example.com',
       breedingStationName: null,
       breedingStationNumber: null,
+      hasBreedingStation: true,
       isVerified: false,
       verificationRequest: {
         requestId: 'request-123',

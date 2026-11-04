@@ -19,6 +19,7 @@ export interface Breeder {
   emailAddress: string;
   breedingStationName: string | null;
   breedingStationNumber: string | null;
+  hasBreedingStation: true;
   isVerified: boolean;
   verificationRequest: VerificationRequest | null;
 }
@@ -37,10 +38,6 @@ export interface Submission {
   breedingStationName: string;
   breedingStationNumber: string;
   breedingStationCertificate: StoredFile;
-}
-
-export interface DecisionNotifier {
-  notifyDecision(breeder: Breeder): Promise<void>;
 }
 
 //functions

@@ -10,8 +10,28 @@ import type {
   VerificationStatus,
 } from '../../src/modules/breeders/domain/internal-types.js';
 
-import type { BreederRepository } from '../../src/modules/breeders/domain/ports.js';
+import type {
+  BreederRepository,
+  FileStorage,
+} from '../../src/modules/breeders/domain/ports.js';
 import { randomBytes } from 'node:crypto';
+import { Readable } from 'node:stream';
+import type { CertificateContentType } from '../../src/modules/breeders/domain/internal-types.js';
+
+// vrací kopie, aby volající nemohl mutovat uložený stav (jako databáze)
+function copy(breeder: Breeder): Breeder {
+  return {
+    ...breeder,
+    verificationRequest: breeder.verificationRequest
+      ? {
+          ...breeder.verificationRequest,
+          breedingStationCertificate: {
+            ...breeder.verificationRequest.breedingStationCertificate,
+          },
+        }
+      : null,
+  };
+}
 
 export function inMemoryBreeders(): BreederRepository {
   const breeders = new Map<string, Breeder>();
@@ -21,7 +41,7 @@ export function inMemoryBreeders(): BreederRepository {
       const existing = breeders.get(input.breederId);
 
       if (existing) {
-        return existing;
+        return copy(existing);
       }
 
       const breeder: Breeder = {
@@ -31,17 +51,19 @@ export function inMemoryBreeders(): BreederRepository {
         emailAddress: input.emailAddress,
         breedingStationName: null,
         breedingStationNumber: null,
+        hasBreedingStation: true,
         isVerified: false,
         verificationRequest: null,
       };
 
       breeders.set(input.breederId, breeder);
 
-      return breeder;
+      return copy(breeder);
     },
 
     async findByBreederId(breederId: string): Promise<Breeder | null> {
-      return breeders.get(breederId) ?? null;
+      const breeder = breeders.get(breederId);
+      return breeder ? copy(breeder) : null;
     },
 
     async findByVerificationRequestId(
@@ -49,7 +71,7 @@ export function inMemoryBreeders(): BreederRepository {
     ): Promise<Breeder | null> {
       for (const breeder of breeders.values()) {
         if (breeder.verificationRequest?.requestId === requestId) {
-          return breeder;
+          return copy(breeder);
         }
       }
       return null;
@@ -80,18 +102,26 @@ export function inMemoryBreeders(): BreederRepository {
         rejectionReason: null,
       };
 
+      breeder.firstName = submission.firstName;
+      breeder.lastName = submission.lastName;
+      breeder.emailAddress = submission.emailAddress;
       breeder.breedingStationName = submission.breedingStationName;
       breeder.breedingStationNumber = submission.breedingStationNumber;
       breeder.verificationRequest = request;
 
-      return breeder;
+      return copy(breeder);
     },
 
     async decideVerification(
       requestId: string,
       decision: DecisionRecord,
     ): Promise<Breeder | null> {
-      const breeder = await this.findByVerificationRequestId(requestId);
+      let breeder: Breeder | undefined;
+      for (const candidate of breeders.values()) {
+        if (candidate.verificationRequest?.requestId === requestId) {
+          breeder = candidate;
+        }
+      }
 
       if (!breeder) {
         return null;
@@ -112,7 +142,7 @@ export function inMemoryBreeders(): BreederRepository {
       }
 
       breeder.isVerified = breeder.verificationRequest.status === 'APPROVED';
-      return breeder;
+      return copy(breeder);
     },
 
     async listByVerificationStatus(
@@ -124,15 +154,19 @@ export function inMemoryBreeders(): BreederRepository {
         (breeder) => breeder.verificationRequest !== null,
       );
 
+      const bySubmission = (a: Breeder, b: Breeder) =>
+        (a.verificationRequest?.submittedAt.getTime() ?? 0) -
+        (b.verificationRequest?.submittedAt.getTime() ?? 0);
+
       if (!status) {
-        return breedersWithRequest;
+        return breedersWithRequest.sort(bySubmission).map(copy);
       }
 
       const breedersWithStatus = breedersWithRequest.filter(
         (breeder) => breeder.verificationRequest?.status === status,
       );
 
-      return breedersWithStatus;
+      return breedersWithStatus.sort(bySubmission).map(copy);
     },
 
     async countByVerificationStatus(): Promise<
@@ -152,5 +186,44 @@ export function inMemoryBreeders(): BreederRepository {
 
       return counts;
     },
+  };
+}
+
+export function inMemoryFiles(): FileStorage & {
+  size(): number;
+  has(fileReference: string): boolean;
+} {
+  const files = new Map<
+    string,
+    { content: Buffer; contentType: CertificateContentType }
+  >();
+
+  return {
+    async save(file) {
+      const reference = randomBytes(12).toString('hex');
+      files.set(reference, {
+        content: Buffer.from(file.content),
+        contentType: file.contentType,
+      });
+      return reference;
+    },
+    async open(fileReference) {
+      const file = files.get(fileReference);
+      if (!file) return null;
+      return {
+        stream: Readable.from([file.content]),
+        size: file.content.length,
+        contentType: file.contentType,
+      };
+    },
+    async delete(fileReference) {
+      files.delete(fileReference);
+    },
+    async getMetadata(fileReference) {
+      const file = files.get(fileReference);
+      return file ? { contentType: file.contentType } : null;
+    },
+    size: () => files.size,
+    has: (fileReference) => files.has(fileReference),
   };
 }

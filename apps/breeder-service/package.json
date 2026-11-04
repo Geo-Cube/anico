@@ -9,7 +9,7 @@
     "start": "node --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run tests/unit",
+    "test:unit": "vitest run tests/unit tests/http",
     "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
     "db:status": "tsx --env-file-if-exists=.env src/database/cli.ts status",
@@ -23,12 +23,14 @@
     "@anico/shared-schemas": "^0.1.0",
     "express": "^5.1.0",
     "mongoose": "^8.19.0",
+    "multer": "^2.5.0",
     "pino": "^10.0.0",
     "pino-http": "^11.0.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.20.5",
     "@types/supertest": "^6.0.3",
     "@vitest/coverage-v8": "^4.0.0",

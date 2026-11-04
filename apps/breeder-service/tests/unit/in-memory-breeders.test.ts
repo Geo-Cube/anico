@@ -70,20 +70,20 @@ describe('inMemoryBreeders', () => {
       emailAddress: 'jan@example.com',
     });
 
-    breeder.verificationRequest = {
-      requestId: 'request-123',
-      status: 'PENDING',
-      submittedAt: new Date(),
+    const submitted = await repository.submitVerification(breeder.breederId, {
+      firstName: 'Jan',
+      lastName: 'Novák',
+      emailAddress: 'jan@example.com',
+      breedingStationName: 'Stanice',
+      breedingStationNumber: '123456',
       breedingStationCertificate: {
         fileName: 'certifikat.pdf',
         fileReference: 'file-123',
       },
-      reviewedBy: null,
-      reviewedAt: null,
-      rejectionReason: null,
-    };
+    });
+    const requestId = submitted?.verificationRequest?.requestId ?? '';
 
-    const found = await repository.findByVerificationRequestId('request-123');
+    const found = await repository.findByVerificationRequestId(requestId);
 
     expect(found?.breederId).toBe('user-123');
   });

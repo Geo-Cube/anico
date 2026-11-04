@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 // Download and verify once, before parallel Vitest workers start. Workers use
 // this exact binary and cannot race to download/extract their own copy.
 const require = createRequire(
-  new URL('../apps/breeding-service/package.json', import.meta.url),
+  new URL('../apps/breeder-service/package.json', import.meta.url),
 );
 const { MongoBinary } = require('mongodb-memory-server');
 const version = process.env.MONGOMS_VERSION ?? '7.0.24';

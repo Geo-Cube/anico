@@ -1,9 +1,17 @@
-import { Schema, Connection, Types, type InferSchemaType } from 'mongoose';
+import { Schema, Types, type Connection, type InferSchemaType } from 'mongoose';
 import type {
   NewBreeder,
   Breeder,
+  Submission,
   VerificationRequest,
 } from '../domain/breeder.js';
+import type {
+  DecisionRecord,
+  VerificationStatus,
+} from '../domain/internal-types.js';
+import type { BreederRepository } from '../domain/ports.js';
+
+const QUEUE_LIMIT = 500;
 
 const certificateSchema = new Schema(
   {
@@ -33,6 +41,7 @@ const breederSchema = new Schema({
   emailAddress: { type: String, required: true },
   breedingStationName: { type: String, default: null },
   breedingStationNumber: { type: String, default: null },
+  hasBreedingStation: { type: Boolean, default: true, required: true },
   isVerified: { type: Boolean, default: false, required: true },
   verificationRequest: { type: verificationRequestSchema, default: null },
 });
@@ -76,6 +85,7 @@ function toDomain(record: BreederRecord): Breeder {
     emailAddress: record.emailAddress,
     breedingStationName: record.breedingStationName ?? null,
     breedingStationNumber: record.breedingStationNumber ?? null,
+    hasBreedingStation: true,
     isVerified: record.isVerified,
     verificationRequest,
   };
@@ -107,7 +117,13 @@ function getBreederModel(connection: Connection) {
   return BreederModel;
 }
 
-export function mongooseBreederRepository(connection: Connection) {
+function isObjectId(value: string): boolean {
+  return /^[a-fA-F0-9]{24}$/.test(value);
+}
+
+export function mongooseBreederRepository(
+  connection: Connection,
+): BreederRepository {
   const mongooseBreederModel = getBreederModel(connection);
 
   return {
@@ -125,6 +141,7 @@ export function mongooseBreederRepository(connection: Connection) {
               emailAddress: input.emailAddress,
               breedingStationName: null,
               breedingStationNumber: null,
+              hasBreedingStation: true,
               isVerified: false,
               verificationRequest: null,
             },
@@ -168,7 +185,7 @@ export function mongooseBreederRepository(connection: Connection) {
     async findByVerificationRequestId(
       requestId: string,
     ): Promise<Breeder | null> {
-      if (!/^[a-fA-F0-9]{24}$/.test(requestId)) {
+      if (!isObjectId(requestId)) {
         return null;
       }
       const record = await mongooseBreederModel.findOne({
@@ -178,6 +195,108 @@ export function mongooseBreederRepository(connection: Connection) {
         return null;
       }
       return toDomain(record);
+    },
+
+    async submitVerification(
+      breederId: string,
+      submission: Submission,
+    ): Promise<Breeder | null> {
+      // jediný atomický zápis: uspěje jen, pokud žádost ještě neexistuje
+      const record = await mongooseBreederModel.findOneAndUpdate(
+        { breederId, verificationRequest: null },
+        {
+          $set: {
+            firstName: submission.firstName,
+            lastName: submission.lastName,
+            emailAddress: submission.emailAddress,
+            breedingStationName: submission.breedingStationName,
+            breedingStationNumber: submission.breedingStationNumber,
+            hasBreedingStation: true,
+            verificationRequest: {
+              _id: new Types.ObjectId(),
+              status: 'PENDING',
+              submittedAt: new Date(),
+              breedingStationCertificate: {
+                fileName: submission.breedingStationCertificate.fileName,
+                fileReference:
+                  submission.breedingStationCertificate.fileReference,
+              },
+              reviewedBy: null,
+              reviewedAt: null,
+              rejectionReason: null,
+            },
+          },
+        },
+        { returnDocument: 'after' },
+      );
+      return record ? toDomain(record) : null;
+    },
+
+    async decideVerification(
+      requestId: string,
+      decision: DecisionRecord,
+    ): Promise<Breeder | null> {
+      if (!isObjectId(requestId)) {
+        return null;
+      }
+      // stav žádosti a isVerified se mění v jednom příkazu; podmínka PENDING
+      // zaručí, že rozhodnutí je konečné i při souběhu
+      const record = await mongooseBreederModel.findOneAndUpdate(
+        {
+          'verificationRequest._id': new Types.ObjectId(requestId),
+          'verificationRequest.status': 'PENDING',
+        },
+        {
+          $set: {
+            'verificationRequest.status': decision.decision,
+            'verificationRequest.reviewedBy': decision.reviewedBy,
+            'verificationRequest.reviewedAt': decision.reviewedAt,
+            'verificationRequest.rejectionReason':
+              decision.decision === 'REJECTED'
+                ? decision.rejectionReason
+                : null,
+            isVerified: decision.decision === 'APPROVED',
+          },
+        },
+        { returnDocument: 'after' },
+      );
+      return record ? toDomain(record) : null;
+    },
+
+    async listByVerificationStatus(
+      status?: VerificationStatus,
+    ): Promise<Breeder[]> {
+      const filter = status
+        ? { 'verificationRequest.status': status }
+        : { verificationRequest: { $ne: null } };
+      const records = await mongooseBreederModel
+        .find(filter)
+        .sort({ 'verificationRequest.submittedAt': 1 })
+        .limit(QUEUE_LIMIT);
+      return records.map(toDomain);
+    },
+
+    async countByVerificationStatus(): Promise<
+      Record<VerificationStatus, number>
+    > {
+      const groups = await mongooseBreederModel.aggregate<{
+        _id: VerificationStatus;
+        count: number;
+      }>([
+        { $match: { verificationRequest: { $ne: null } } },
+        { $group: { _id: '$verificationRequest.status', count: { $sum: 1 } } },
+      ]);
+      const counts: Record<VerificationStatus, number> = {
+        PENDING: 0,
+        APPROVED: 0,
+        REJECTED: 0,
+      };
+      for (const group of groups) {
+        if (group._id in counts) {
+          counts[group._id] = group.count;
+        }
+      }
+      return counts;
     },
   };
 }

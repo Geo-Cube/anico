@@ -34,3 +34,10 @@ export class InvalidCertificateError extends Error {
     this.name = 'InvalidCertificateError';
   }
 }
+
+export class InvalidDecisionError extends Error {
+  constructor(message = 'Rejection reason is required') {
+    super(message);
+    this.name = 'InvalidDecisionError';
+  }
+}
