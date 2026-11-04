@@ -1,6 +1,6 @@
 # Dokončení profilu po prvním přihlášení
 
-**Domluvené chování, zatím neimplementované ve frontendu ani breeder-service.**
+**Domluvené chování, zatím neimplementované v breeder-service; frontend má jen připravené místo.**
 Tento dokument uchovává rozhodnutí pro další práci; nevytváří nový registrační formulář s heslem.
 
 ## Cesta uživatele
@@ -21,7 +21,11 @@ formulář při dalším přihlášení nabídne znovu. Výpadek API nesmí být
 - **Auth-service:** přihlášení, automatické založení účtu, identita a role.
 - **Breeder-service:** doplňující údaje, validace a stav dokončení profilu. Profil váže
   na ověřené AniCo `userId` a může ho založit při prvním přístupu; opakování nesmí vytvořit duplicitu.
-- **Frontend:** podle skutečného stavu zobrazí formulář nebo dashboard.
+- **Frontend:** podle skutečného stavu zobrazí formulář nebo dashboard. Místo zapojení je
+  `apps/frontend/src/features/profile/ProfileGate.tsx`: leží v chráněném toku před
+  dashboardem i před bezpečným `returnTo`, takže se uplatní na každý návrat po přihlášení.
+  Dokud API neexistuje, propouští dál a nic nepředstírá; po zapojení přesměruje nedokončený
+  profil na formulář se zachováním `returnTo` a při výpadku API nabídne opakování.
 - **Doménové backendy:** u operací, které dokončený nebo schválený profil vyžadují,
   stav ověří také na serveru. Samotné přesměrování v UI není kontrola oprávnění.
 

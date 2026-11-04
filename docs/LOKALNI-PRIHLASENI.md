@@ -25,6 +25,9 @@ npm run dev:fullstack -- --service tvoje-service
 Otevři **http://127.0.0.1:5173**, vyber Google nebo Microsoft a v prohlížeči
 potvrď **Povolit místní vývoj**. Při prvním přístupu dokonči také týmový GitHub Access
 podle pokynů terminálu. Po návratu už UI používá tvou skutečnou identitu a role.
+Pokud jsi otevřel chráněnou stránku, například `/ucet`, vrátíš se po přihlášení
+přímo na ni. Zrušené nebo neplatné přihlášení skončí na `/prihlaseni` s vysvětlením;
+lokální most předává stejné kódy chyb jako nasazená aplikace.
 
 Ve fullstack režimu jde vybrané API do lokální služby a osobní DB;
 ostatní API dál do společného devu. Přihlášení nesynchronizuje databáze.

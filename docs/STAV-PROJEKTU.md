@@ -25,11 +25,11 @@ Připravený kód nebo uložené credentials nejsou totéž jako ověřené nasa
 
 ## Ještě zbývá
 
-- Základ `animal-service` je připravený v aktuální pracovní větvi: vlastní DB připojení, CRUD vlastních zvířat a sdílená validace druhů/plemen. Není nasazený na cloudovém devu a neobsahuje meziservisní komunikaci.
-- [Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md): nedokončený profil → formulář dalších údajů, dokončený → dashboard. Dohodnuté, zatím neimplementované; povinná pole včetně IČO je potřeba upřesnit.
+- Základ `animal-service` je v `dev` od PR #27: vlastní DB připojení, CRUD vlastních zvířat a sdílená validace druhů/plemen. Není nasazený na cloudovém devu a neobsahuje meziservisní komunikaci.
+- [Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md): nedokončený profil → formulář dalších údajů, dokončený → dashboard. Dohodnuté, zatím neimplementované; frontend má připravené místo `ProfileGate` v chráněném toku. Povinná pole včetně IČO je potřeba upřesnit.
 
 - Apple je odložený dle domluvy; není součástí aktuálního dokončení auth.
-- Business obrazovky: nahradit simulace skutečným API a daty. Přihlašovací panel už skutečný je.
+- Business obrazovky: nahradit simulace skutečným API a daty. Přihlašovací stránka, chráněné routy a stránka účtu už skutečné jsou; administrace chovatelů je simulace na vlastních URL.
 - Předání registrace: kontrakt v1, outbox, migrace, privátní NATS JetStream a publisher jsou nasazené a ověřené po PR #25/#26. Obě existující registrace jsou uložené v brokeru, payloady odpovídají outboxu, pending/failed je nula. Animal consumer a celý business tok zůstávají na později; published zatím neznamená business zpracování. [Provoz a předání](REGISTRACNI-UDALOSTI.md).
 - Ověřit první spuštění a potřebná DB oprávnění u každého člena týmu; předání všem není potvrzené.
 - Produkce je nyní odložená. Veřejná `anico.online`, samostatné DB/secrets a schvalované nasazení zatím nejsou hotové.
