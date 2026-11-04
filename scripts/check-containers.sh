@@ -74,6 +74,15 @@ docker exec "$backend" sh -c '
     && test ! -e /app/node_modules/tsx \
     && test ! -e /app/node_modules/@pulumi
 '
+docker exec "$auth" sh -c '
+  test ! -e /app/.env && test ! -e /app/infrastructure && test ! -e /app/apps/frontend \
+    && test ! -e /app/apps/auth-service/src \
+    && test ! -e /app/node_modules/typescript \
+    && test ! -e /app/node_modules/vitest \
+    && test ! -e /app/node_modules/tsx \
+    && test ! -e /app/node_modules/msw \
+    && test ! -e /app/node_modules/@pulumi
+'
 docker exec "$frontend" sh -c 'test ! -e /app && test ! -e /usr/share/nginx/html/.env'
 docker exec "$backend" node --input-type=module -e '
   import dogs from "@anico/shared-schemas/catalogs/dog-breeds.json" with { type: "json" };

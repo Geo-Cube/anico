@@ -96,7 +96,10 @@ Build context je vždy kořen monorepa. Smoke test vytváří a uklidí vlastní
 projekt a volume; běžná data nepoužívá. Stejné kontroly běží v CI na amd64 i arm64.
 
 Backend běží jako non-root Node s produkčními závislostmi, frontend jako Nginx
-s Vite bundlem. Dockerfiles používají připnuté base images; `.env` a IaC state
+s Vite bundlem. Produkční instalace backendu vidí jen manifesty vlastní služby,
+`shared-schemas` a `auth`; manifesty frontendu a infrastruktury by jinak mohly do image
+propašovat sdílené vývojové balíčky (např. TypeScript). `check-containers.sh` to u
+backendu i auth ověřuje. Dockerfiles používají připnuté base images; `.env` a IaC state
 do build contextu nepatří. Backend `/health` ověřuje HTTP, `/ready` také spojení k DB.
 Healthcheck sám nezdravý kontejner nerestartuje; restart policy řeší ukončený proces.
 

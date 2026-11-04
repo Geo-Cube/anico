@@ -14,6 +14,11 @@ RUN npm run build --workspace=@anico/shared-schemas \
     && npm run build --workspace=@anico/auth-service
 
 FROM source AS production-dependencies
+# Keep only the workspaces this image runs: with unrelated manifests present,
+# `npm ci --omit=dev` can keep hoisted packages they share (e.g. TypeScript).
+RUN rm -rf infrastructure && find apps packages -mindepth 1 -maxdepth 1 -type d \
+    ! -path apps/auth-service ! -path packages/shared-schemas ! -path packages/auth \
+    -exec rm -rf {} +
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
     --workspace=@anico/shared-schemas --workspace=@anico/auth --workspace=@anico/auth-service
