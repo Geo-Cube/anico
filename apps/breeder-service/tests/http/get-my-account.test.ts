@@ -5,6 +5,37 @@ import { breedersRouter } from '../../src/modules/breeders/http/breeders-router.
 import { MyAccountSchema } from '@anico/shared-schemas';
 import { inMemoryBreeders } from '../support/in-memory.js';
 import { getMyAccountHandler } from '../../src/modules/breeders/http/get-my-account-handler.js';
+import type { FileStorage } from '../../src/modules/breeders/domain/ports.js';
+import { Readable } from 'node:stream';
+
+const files: FileStorage = {
+  async save() {
+    return 'file-123';
+  },
+
+  async open(fileReference) {
+    if (fileReference !== 'file-123') {
+      return null;
+    }
+
+    return {
+      stream: Readable.from([]),
+      size: 0,
+      contentType: 'application/pdf',
+    };
+  },
+
+  async delete() {
+    // Doplň.
+  },
+
+  async getMetadata(fileReference) {
+    if (fileReference !== 'file-123') {
+      return null;
+    }
+    return { contentType: 'application/pdf' };
+  },
+};
 
 describe('GET /breeders/me', () => {
   it('returns the current breeder account', async () => {
@@ -18,9 +49,13 @@ describe('GET /breeders/me', () => {
       emailAddress: 'jan@example.com',
     });
 
-    app.get(
-      '/breeders/me',
-      getMyAccountHandler(repository, resolveCurrentBreeder),
+    app.use(
+      '/breeders',
+      breedersRouter({
+        repository,
+        resolveCurrentBreeder,
+        files,
+      }),
     );
 
     const response = await request(app).get('/breeders/me');
@@ -47,6 +82,7 @@ describe('GET /breeders/me', () => {
       breedersRouter({
         repository,
         resolveCurrentBreeder,
+        files,
       }),
     );
 
@@ -70,5 +106,10 @@ describe('GET /breeders/me', () => {
     const secondResponse = await request(app).get('/breeders/me');
     expect(secondResponse.status).toBe(200);
     expect(secondResponse.body.accountState).toBe('PENDING');
+    MyAccountSchema.parse(secondResponse.body);
+
+    expect(
+      secondResponse.body.verificationRequest.breedingStationCertificate,
+    ).not.toHaveProperty('fileReference');
   });
 });

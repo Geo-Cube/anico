@@ -27,12 +27,13 @@ export interface FileStorage {
     fileName: string;
     contentType: CertificateContentType;
   }): Promise<string>;
-  open(
-    fileReference: string,
-  ): Promise<{
+  open(fileReference: string): Promise<{
     stream: NodeJS.ReadableStream;
     size: number;
     contentType: CertificateContentType;
   } | null>;
   delete(fileReference: string): Promise<void>;
+  getMetadata(
+    fileReference: string,
+  ): Promise<{ contentType: CertificateContentType } | null>;
 }
