@@ -112,31 +112,46 @@ export function mongooseBreederRepository(connection: Connection) {
 
   return {
     async provision(input: NewBreeder) {
-      const record = await mongooseBreederModel.findOneAndUpdate(
-        {
-          breederId: input.breederId,
-        },
-        {
-          $setOnInsert: {
+      try {
+        const record = await mongooseBreederModel.findOneAndUpdate(
+          {
             breederId: input.breederId,
-            firstName: input.firstName,
-            lastName: input.lastName,
-            emailAddress: input.emailAddress,
-            breedingStationName: null,
-            breedingStationNumber: null,
-            isVerified: false,
-            verificationRequest: null,
           },
-        },
-        {
-          upsert: true,
-          returnDocument: 'after',
-        },
-      );
-      if (!record) {
-        throw new Error('Failed to provision breeder');
+          {
+            $setOnInsert: {
+              breederId: input.breederId,
+              firstName: input.firstName,
+              lastName: input.lastName,
+              emailAddress: input.emailAddress,
+              breedingStationName: null,
+              breedingStationNumber: null,
+              isVerified: false,
+              verificationRequest: null,
+            },
+          },
+          {
+            upsert: true,
+            returnDocument: 'after',
+          },
+        );
+        if (!record) {
+          throw new Error('Failed to provision breeder');
+        }
+        return toDomain(record);
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) {
+          throw error;
+        }
+
+        const existing = await mongooseBreederModel.findOne({
+          breederId: input.breederId,
+        });
+        if (!existing) {
+          throw error;
+        } else {
+          return toDomain(existing);
+        }
       }
-      return toDomain(record);
     },
 
     async findByBreederId(breederId: string): Promise<Breeder | null> {
@@ -165,4 +180,13 @@ export function mongooseBreederRepository(connection: Connection) {
       return toDomain(record);
     },
   };
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 11000
+  );
 }
