@@ -7,7 +7,6 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router';
 import { fetchProviders, fetchSession, logout } from './api';
 
 export const sessionQueryKey = ['session'] as const;
@@ -58,9 +57,18 @@ export function useSessionExpiryCheck(session: Session) {
 
 export type LoginPageState = { loggedOut?: boolean; sessionEnded?: boolean };
 
+const logoutMarker = ['auth', 'logged-out'] as const;
+
+/**
+ * True after an explicit logout in this page load. The session guard reads it
+ * in the same render that sees the session gone, so a logout is never shown
+ * as an expired session. A new login is a full page load, which resets it.
+ */
+export const endedByLogout = (client: QueryClient) =>
+  client.getQueryData<boolean>(logoutMarker) === true;
+
 export function useLogout() {
   const client = useQueryClient();
-  const navigate = useNavigate();
   return useMutation({
     mutationFn: async () => {
       const session = client.getQueryData(sessionQuery.queryKey);
@@ -69,10 +77,8 @@ export function useLogout() {
     onSuccess: async () => {
       await client.cancelQueries();
       forgetUser(client);
-      void navigate('/prihlaseni', {
-        replace: true,
-        state: { loggedOut: true } satisfies LoginPageState,
-      });
+      // Synchronously after forgetUser: observers are notified only later.
+      client.setQueryData(logoutMarker, true);
     },
   });
 }

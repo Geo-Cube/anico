@@ -3,10 +3,12 @@ import {
   type Role,
   type Session,
 } from '@anico/shared-schemas';
+import { useQueryClient } from '@tanstack/react-query';
 import { createContext, use, useRef, type ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { ForbiddenState, UnavailableState } from '@/shared/ui/state-panel';
 import {
+  endedByLogout,
   useSession,
   useSessionExpiryCheck,
   type LoginPageState,
@@ -28,6 +30,7 @@ function SessionExpiryCheck({ session }: { session: Session }) {
 export function RequireSession({ loading }: { loading: ReactNode }) {
   const session = useSession();
   const location = useLocation();
+  const client = useQueryClient();
   const hadSession = useRef(false);
   if (session.data) {
     hadSession.current = true;
@@ -39,6 +42,14 @@ export function RequireSession({ loading }: { loading: ReactNode }) {
     );
   }
   if (session.data === null) {
+    if (endedByLogout(client))
+      return (
+        <Navigate
+          to="/prihlaseni"
+          replace
+          state={{ loggedOut: true } satisfies LoginPageState}
+        />
+      );
     const current = location.pathname + location.search;
     const search =
       current !== '/' && isSafeReturnPath(current)
