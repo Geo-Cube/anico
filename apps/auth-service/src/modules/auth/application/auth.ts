@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { type Identity } from '@anico/shared-schemas';
+import { isSafeReturnPath, type Identity } from '@anico/shared-schemas';
 import {
   AuthError,
   type AuthRepository,
@@ -56,7 +56,8 @@ export function createAuthService(options: {
     returnTo?: string,
   ) {
     if (
-      returnTo &&
+      returnTo !== undefined &&
+      !isSafeReturnPath(returnTo) &&
       !/^\/api\/auth\/development\/consent\?request=[A-Za-z0-9_-]{43}$/.test(
         returnTo,
       )
@@ -88,8 +89,58 @@ export function createAuthService(options: {
     });
     return { url, browser };
   }
+  async function finish(
+    client: ProviderClient,
+    attempt: LoginAttempt,
+    response: URL | Request,
+    currentToken: string | undefined,
+  ) {
+    const { provider } = attempt;
+    if (attempt.link) {
+      if (
+        !currentToken ||
+        !equalSecret(hash(currentToken), attempt.link.sessionHash)
+      )
+        throw new AuthError(401, 'LINK_SESSION_MISMATCH');
+      const current = await authenticate(currentToken);
+      if (current.user.userId !== attempt.link.userId)
+        throw new AuthError(401, 'LINK_SESSION_MISMATCH');
+      requireRecentLogin(current.session);
+    }
+    const identity = await client.exchange({
+      ...attempt,
+      callback: `${options.publicOrigin}/api/auth/login/${provider}/callback`,
+      response,
+    });
+    if (identity.provider !== provider)
+      throw new AuthError(401, 'INVALID_PROVIDER');
+    // Never merge accounts by email or move an identity owned by another user.
+    if (attempt.link) {
+      const current = await authenticate(currentToken);
+      requireRecentLogin(current.session);
+    }
+    const user = attempt.link
+      ? await repository.linkIdentity(attempt.link.userId, identity)
+      : await repository.register(identity);
+    if (user.status !== 'active' || user.fixture)
+      throw new AuthError(403, 'ACCOUNT_DISABLED');
+    const token = random();
+    const session = {
+      userId: user.userId,
+      csrfToken: random(),
+      expiresAt: new Date(now().getTime() + options.sessionSeconds * 1000),
+      authenticatedAt: now(),
+    };
+    await repository.createSession(hash(token), session);
+    return {
+      token,
+      session,
+      user: publicIdentity(user),
+      returnTo: attempt.returnTo ?? '/',
+    };
+  }
   return {
-    providers: Object.keys(providers),
+    providers: Object.keys(providers) as Provider[],
     begin: (provider: Provider, returnTo?: string) =>
       begin(provider, undefined, returnTo),
     linkedProviders: (userId: string) => repository.linkedProviders(userId),
@@ -125,48 +176,17 @@ export function createAuthService(options: {
       );
       if (!attempt || attempt.provider !== provider)
         throw new AuthError(401, 'INVALID_LOGIN_ATTEMPT');
-      if (attempt.link) {
-        if (
-          !currentToken ||
-          !equalSecret(hash(currentToken), attempt.link.sessionHash)
-        )
-          throw new AuthError(401, 'LINK_SESSION_MISMATCH');
-        const current = await authenticate(currentToken);
-        if (current.user.userId !== attempt.link.userId)
-          throw new AuthError(401, 'LINK_SESSION_MISMATCH');
-        requireRecentLogin(current.session);
+      try {
+        return await finish(client, attempt, response, currentToken);
+      } catch (error) {
+        const failure =
+          error instanceof AuthError
+            ? error
+            : new AuthError(401, 'PROVIDER_LOGIN_FAILED');
+        throw attempt.link
+          ? new AuthError(failure.status, failure.code, 'link')
+          : failure;
       }
-      const identity = await client.exchange({
-        ...attempt,
-        callback: `${options.publicOrigin}/api/auth/login/${provider}/callback`,
-        response,
-      });
-      if (identity.provider !== provider)
-        throw new AuthError(401, 'INVALID_PROVIDER');
-      // Never merge accounts by email or move an identity owned by another user.
-      if (attempt.link) {
-        const current = await authenticate(currentToken);
-        requireRecentLogin(current.session);
-      }
-      const user = attempt.link
-        ? await repository.linkIdentity(attempt.link.userId, identity)
-        : await repository.register(identity);
-      if (user.status !== 'active' || user.fixture)
-        throw new AuthError(403, 'ACCOUNT_DISABLED');
-      const token = random();
-      const session = {
-        userId: user.userId,
-        csrfToken: random(),
-        expiresAt: new Date(now().getTime() + options.sessionSeconds * 1000),
-        authenticatedAt: now(),
-      };
-      await repository.createSession(hash(token), session);
-      return {
-        token,
-        session,
-        user: publicIdentity(user),
-        returnTo: attempt.returnTo ?? '/',
-      };
     },
     authenticate,
     csrf(

@@ -42,6 +42,22 @@ export {
 } from './identity.js';
 
 export {
+  AuthProviderSchema,
+  ProvidersResponseSchema,
+  SessionSchema,
+  ConnectionStartResponseSchema,
+  SafeReturnPathSchema,
+  LoginErrorCodeSchema,
+  isSafeReturnPath,
+  type AuthProvider,
+  type ProvidersResponse,
+  type Session,
+  type ConnectionStartResponse,
+  type SafeReturnPath,
+  type LoginErrorCode,
+} from './auth.js';
+
+export {
   UserRegisteredDataSchema,
   UserRegisteredEventSchema,
   type UserRegisteredData,

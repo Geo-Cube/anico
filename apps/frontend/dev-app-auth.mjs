@@ -3,6 +3,7 @@ import { createServer, request as httpRequest } from 'node:http';
 import { once } from 'node:events';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { DEV_API_ORIGIN } from './dev-access.mjs';
+import { isSafeReturnPath } from '@anico/shared-schemas';
 
 export const DEV_AUTH_ISSUER = DEV_API_ORIGIN + '/api/auth';
 export const DEV_AUTH_AUDIENCE = 'anico-api-dev';
@@ -23,8 +24,8 @@ const privateHeaders = new Set([
   'transfer-encoding',
   'upgrade',
 ]);
-function failure(status, message) {
-  return Object.assign(new Error(message), { status });
+function failure(status, message, loginError) {
+  return Object.assign(new Error(message), { status, loginError });
 }
 function loopback(value) {
   const u = new URL(value);
@@ -221,14 +222,20 @@ export async function startDevelopmentRelay({
     pending = undefined;
     await clearSession();
   }
-  function beginLogin(provider) {
+  function beginLogin(provider, returnTo) {
     if (provider !== undefined && !['google', 'microsoft'].includes(provider))
       throw failure(400, 'Neplatný poskytovatel.');
+    if (
+      returnTo !== undefined &&
+      (typeof returnTo !== 'string' || !isSafeReturnPath(returnTo))
+    )
+      throw failure(400, 'Neplatná návratová adresa.');
     const verifier = random(),
       state = random();
     pending = {
       verifier,
       state,
+      returnTo,
       generation: ++generation,
       expiresAt: now() + 300000,
     };
@@ -269,6 +276,60 @@ export async function startDevelopmentRelay({
       throw new Error('Invalid public identity keys');
     return keys;
   }
+  async function completeLogin(url) {
+    const state = url.searchParams.get('state');
+    if (!pending || pending.expiresAt <= now() || state !== pending.state)
+      throw failure(
+        401,
+        'Návrat přihlášení neodpovídá tomuto spuštění.',
+        'LOGIN_EXPIRED',
+      );
+    const attempt = pending;
+    pending = undefined;
+    if (url.searchParams.has('error'))
+      throw failure(
+        401,
+        'Připojení místního vývoje bylo zrušeno.',
+        url.searchParams.get('error') === 'access_denied'
+          ? 'LOGIN_CANCELLED'
+          : 'LOGIN_FAILED',
+      );
+    const code = url.searchParams.get('code');
+    if (!code || !opaque.test(code))
+      throw failure(401, 'Neplatný návrat přihlášení.');
+    const grant = await api('/development/token', {
+      method: 'POST',
+      authenticated: false,
+      data: {
+        client_id: 'anico-local-development',
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: attempt.verifier,
+        redirect_uri: origin + '/callback',
+      },
+    });
+    const until = Date.parse(grant?.expires_at);
+    if (
+      !opaque.test(grant?.access_token ?? '') ||
+      grant.token_type !== 'Bearer' ||
+      !Number.isFinite(until) ||
+      until <= now()
+    )
+      throw failure(401, 'Neplatná vývojová relace.');
+    const cancelled = async () => {
+      await api('/development/logout', {
+        method: 'POST',
+        bearer: grant.access_token,
+      }).catch(() => {});
+      return failure(401, 'Přihlášení bylo zrušeno.', 'LOGIN_EXPIRED');
+    };
+    if (generation !== attempt.generation) throw await cancelled();
+    await clearSession().catch(() => {});
+    if (generation !== attempt.generation) throw await cancelled();
+    token = grant.access_token;
+    expires = until;
+    return attempt.returnTo;
+  }
   const client = {
     session,
     identityToken,
@@ -290,53 +351,18 @@ export async function startDevelopmentRelay({
         throw failure(403, 'Invalid local host');
       const url = new URL(req.url, origin);
       if (url.pathname === '/callback' && req.method === 'GET') {
-        const state = url.searchParams.get('state');
-        if (!pending || pending.expiresAt <= now() || state !== pending.state)
-          throw failure(401, 'Návrat přihlášení neodpovídá tomuto spuštění.');
-        const attempt = pending;
-        pending = undefined;
-        if (url.searchParams.has('error'))
-          throw failure(401, 'Připojení místního vývoje bylo zrušeno.');
-        const code = url.searchParams.get('code');
-        if (!code || !opaque.test(code))
-          throw failure(401, 'Neplatný návrat přihlášení.');
-        const grant = await api('/development/token', {
-          method: 'POST',
-          authenticated: false,
-          data: {
-            client_id: 'anico-local-development',
-            grant_type: 'authorization_code',
-            code,
-            code_verifier: attempt.verifier,
-            redirect_uri: origin + '/callback',
-          },
-        });
-        const until = Date.parse(grant?.expires_at);
-        if (
-          !opaque.test(grant?.access_token ?? '') ||
-          grant.token_type !== 'Bearer' ||
-          !Number.isFinite(until) ||
-          until <= now()
-        )
-          throw failure(401, 'Neplatná vývojová relace.');
-        if (generation !== attempt.generation) {
-          await api('/development/logout', {
-            method: 'POST',
-            bearer: grant.access_token,
-          }).catch(() => {});
-          throw failure(401, 'Přihlášení bylo zrušeno.');
+        try {
+          const target = await completeLogin(url);
+          res.writeHead(303, {
+            Location: appOrigin ? appOrigin + (target ?? '/') : origin,
+          });
+        } catch (error) {
+          // The UI shows a fixed code; the standalone backend page keeps JSON.
+          if (!appOrigin) throw error;
+          res.writeHead(303, {
+            Location: `${appOrigin}/prihlaseni?error=${error.loginError ?? 'LOGIN_FAILED'}`,
+          });
         }
-        await clearSession().catch(() => {});
-        if (generation !== attempt.generation) {
-          await api('/development/logout', {
-            method: 'POST',
-            bearer: grant.access_token,
-          }).catch(() => {});
-          throw failure(401, 'Přihlášení bylo zrušeno.');
-        }
-        token = grant.access_token;
-        expires = until;
-        res.writeHead(303, { Location: appOrigin ?? origin });
         res.end();
         return;
       }
@@ -357,7 +383,7 @@ export async function startDevelopmentRelay({
           '/rpc/credentials': credentials,
           '/rpc/keys': publicKeys,
           '/rpc/logout': logout,
-          '/rpc/login': () => beginLogin(input.provider),
+          '/rpc/login': () => beginLogin(input.provider, input.returnTo),
         };
         const method = methods[url.pathname];
         if (!method) throw failure(404, 'Not found');
@@ -495,6 +521,10 @@ export function developmentRelayClient(
     credentials: () => rpc('credentials'),
     publicKeys: () => rpc('keys'),
     logout: () => rpc('logout'),
-    beginLogin: (provider) => rpc('login', { provider }),
+    beginLogin: (provider, returnTo) =>
+      rpc(
+        'login',
+        returnTo === undefined ? { provider } : { provider, returnTo },
+      ),
   };
 }
