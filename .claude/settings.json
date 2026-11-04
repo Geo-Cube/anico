@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm run typecheck*)",
+      "Bash(npm run test*)",
+      "Bash(npm test*)",
+      "Bash(npm run build*)",
+      "Bash(npm run format*)",
+      "Bash(npm run secrets:check)",
+      "Bash(npm run db:new*)",
+      "Bash(npm run db:status*)",
+      "Bash(npm run db:migrate -w @anico/breeder-service*)",
+      "Bash(npx vitest*)",
+      "Bash(npx tsc*)",
+      "Bash(npx prettier*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./.secrets/**)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin main*)",
+      "Bash(git push origin dev*)",
+      "Bash(npm run db:remote:*)",
+      "Bash(npm run db:reset*)",
+      "Bash(npm run db:unlock*)",
+      "Bash(rm -rf*)"
+    ]
+  }
+}

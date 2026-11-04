@@ -6,7 +6,8 @@ coverage/
 *.tsbuildinfo
 .husky/_/
 .cache/
-.claude
+.claude/settings.local.json
+.claude/worktrees/
 
 # Local environment and credentials; only empty examples belong in Git
 .env

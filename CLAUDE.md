@@ -1,0 +1,34 @@
+# AniCo – pokyny pro Claude Code
+
+Platforma pro bezpečné propojování ověřených chovatelů (psi, koně). MVP = US-01–US-03 (ověření chovatele, zvíře, doklady). Komunikace a dokumentace česky, identifikátory anglicky.
+
+**Doménový zdroj pravdy:** [docs/anico-domain.md](docs/anico-domain.md) (invarianty, otevřené otázky). Při rozporu s analýzou (`docs/business/`) vyhrává analýza.
+
+## Stack (zjištěno z repozitáře)
+
+- npm workspaces + Turborepo, Node ≥ 22.19, TypeScript (ESM, importy s `.js` příponou).
+- `apps/breeder-service` – Express 5, **Mongoose 8 / MongoDB**, Zod 4, Pino, Vitest 4, Supertest, `mongodb-memory-server`.
+- `apps/frontend` – React + Vite. `packages/shared-schemas` – Zod kontrakty (`@anico/shared-schemas`) + katalogy plemen (`catalogs/*.json`).
+- Doménový modul: `src/modules/<domena>/{domain,application,infrastructure,http}`. Doména a use cases **nezávisí** na Expressu, Mongoose ani Zodu; `server.ts` vkládá implementace portů (`domain/ports.ts`).
+- Přeložení pojmů z analýzy: tabulka → kolekce, FK → reference (`*Id`), DB constraint → unique/partial index + schema validace, podmíněný UPDATE → `findOneAndUpdate` s filtrem na stav, migrace → `.mjs` v `apps/breeder-service/migrations/` (`npm run db:new`).
+
+## Příkazy (z kořene)
+
+- `npm run typecheck` · `npm run test:unit` · `npm run test:integration` · `npm test` · `npm run test:coverage` (limity 80/80/80/75)
+- `npm run format:check` / `npm run format` (Prettier, lint-staged v pre-commitu)
+- Jedna služba: `npm run test -w @anico/breeder-service`
+- `npm run service:new|module:new|feature:new -- --args …` – generátory
+- Změna balíčku → `npm run changeset` (commitni vygenerovaný soubor)
+
+## Pravidla práce
+
+- Větev `feature/*` → PR do `dev`; nikdy push do `main`/`dev`, žádný force push. Commity nedělej, pokud o to uživatel nepožádá.
+- Tajemství nikdy do gitu (`npm run secrets:check`). `.env*` nečti ani needituj. Žádné `db:remote:*`/reset/unlock bez výslovného pokynu.
+- Úspěšně provedené migrace neupravuj, přidej novou.
+- Bezpečnost: identita z přihlášení (`current-breeder.ts`), nikdy `breeder_id`/`is_verified`/`reviewed_by` z těla požadavku; autorizace při každém čtení i zápisu včetně souborů.
+- Nerozšiřuj rozsah o US-04–US-10.
+
+## Tým agentů (`.claude/agents`)
+
+`architect` (návrh → `docs/design/`, ADR → `docs/adr/`) → `backend-engineer` (kód + vlastní testy) → `qa-engineer` (testy z analýzy → `docs/qa/`) → `reviewer` (nezávislé review, needituje).
+Orchestrace celého UC: skill `/implement-uc`. Skills: `mongo-invariants`, `verify-changes`, `new-module-hexagonal`.
