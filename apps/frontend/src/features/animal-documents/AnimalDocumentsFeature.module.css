@@ -1,0 +1,215 @@
+/* Jen prvky, které v globálním styles.css chybí. Palety se drží UC-01. */
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.photo {
+  display: flex;
+  align-items: flex-end;
+  min-height: 200px;
+  padding: 1rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.tabs :disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sectionHeader,
+.cardHeader,
+.cardActions,
+.historyFile {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sectionHeader {
+  margin-bottom: 1.5rem;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.summaryEmpty {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.documentList {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+.fileAction {
+  margin-left: auto;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pageActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.pageActions p {
+  margin: 0;
+}
+
+.linkButton,
+.crumbButton {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.linkButton {
+  color: #4f46e5;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.crumbButton {
+  color: inherit;
+}
+
+.historyList {
+  margin-bottom: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.historyItem + .historyItem {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.uploadRows {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.uploadRow {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+  gap: 1.25rem;
+  padding: 1.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.rowFooter {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.rowFooter p {
+  margin: 0;
+}
+
+.rowStatus {
+  color: #475569;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+.select {
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 1rem;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.select:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.fileDrop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.fileInput:focus + .fileDrop,
+.fileDropActive {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.fileInput:disabled + .fileDrop {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fileDropName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #475569;
+}
+
+.linkButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
