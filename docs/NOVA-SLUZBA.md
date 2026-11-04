@@ -31,7 +31,6 @@ apps/animal-service/src/
 
 apps/frontend/src/features/animal-list/
   AnimalListFeature.tsx
-  AnimalListFeature.module.css
   index.ts
   README.md
 ```
@@ -46,8 +45,8 @@ Unit test ověřuje use case bez MongoDB; integrace HTTP, validaci a uložení d
 Další modul se automaticky připojí v `src/modules/index.ts`, pokud zůstaly
 značky `anico:module-imports` a `anico:module-routes`. Bez značek dostaneš
 upozornění k ručnímu připojení. Existující soubory se nepřepisují.
-Frontendová funkce se **nevloží automaticky do App nebo navigace**; konkrétní
-import je v jejím README. Existující administrace zůstává nedotčená.
+Frontendová funkce se **nevloží automaticky do rout ani navigace**; připojení
+v `src/app/routes.tsx` popisuje její README. Existující administrace zůstává nedotčená.
 
 ## Lokální API
 

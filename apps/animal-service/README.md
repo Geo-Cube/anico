@@ -121,7 +121,7 @@ npm run feature:new -- --args animal-list
 Nový modul se připojí na `/feeding`, tedy lokálně `/api/animal/feeding`.
 Generátor používá značky v `src/modules/index.ts`. Pokud si registry přepíšeš
 ručně a značky odstraníš, pouze vygeneruje soubory a upozorní na ruční připojení.
-Frontendovou komponentu si vlož do požadované stránky; `App.tsx` se nepřepisuje.
+Frontendovou komponentu připoj jako routu v `apps/frontend/src/app/routes.tsx` nebo ji vlož do stránky; generátor routy nemění.
 
 ## DB a image
 
