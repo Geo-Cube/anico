@@ -69,6 +69,7 @@ apps/frontend/src/
     profile/          # ProfileGate – místo pro kontrolu dokončení profilu
     dashboard/        # úvodní přehled
     breeders/         # administrace ověření chovatelů (simulace bez API)
+    animals/          # UC-02: seznam, profil, fotografie; skutečné animal API
   shared/
     lib/http.ts       # apiRequest: same-origin, CSRF, Zod, rozlišení 401/403/výpadku
     ui/               # Button, Card, Alert, StatePanel, Logo
@@ -95,8 +96,12 @@ připojí UI a ostatní API ponechá na společném devu. Příkazy sestaví sd�
 závislosti a sledují jejich změny.
 Číselníky plemen: [použití a stabilní ID](../packages/shared-schemas/catalogs/README.md).
 
-Frontend má nasazené přihlášení Google/Microsoft a práci s relací; business obrazovky
-zůstávají simulací (administrace chovatelů na `/administrace/chovatele`). Auth backend, kontrakt identity a gateway jsou nasazené na devu;
+Frontend má nasazené přihlášení Google/Microsoft a práci s relací. Správa zvířat UC-02
+na `/zvirata`, `/zvirata/nove`, `/zvirata/:animalId` a `/zvirata/:animalId/upravit`
+volá skutečné `/api/animal` (Zod odpovědi, kurzorové stránkování, JSON/multipart
+profilu a fotografií jedním zápisem, CSRF, ověření chovatele a nevratné smazání).
+Administrace chovatelů na `/administrace/chovatele` zůstává simulací.
+Auth backend, kontrakt identity a gateway jsou nasazené na devu;
 Google i Microsoft login/logout jsou uživatelsky ověřené. Volitelné propojení účtů je nasazené,
 vlastník ponechává své účty oddělené. [Lokální přihlášení](LOKALNI-PRIHLASENI.md) je také
 nasazené a ověřené pro Google/Microsoft, lokální i sdílené API a logout. Apple a produkce jsou odložené. [Postup a aktuální stav](AUTENTIZACE.md).
@@ -107,7 +112,7 @@ Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí 
 - Unit: use case s náhradním repository, bez databáze.
 - Integrace: Supertest + skutečná dočasná MongoDB přes `mongodb-memory-server`.
 - Frontend: Vitest + Testing Library + MSW v `apps/frontend/tests/` pro chování
-  uživatele (přihlášení, relace, role, odhlášení); typecheck, build a kontrola v prohlížeči.
+  uživatele (přihlášení, relace, role, odhlášení, seznam a CRUD zvířat včetně fotografií); typecheck, build a kontrola v prohlížeči.
 
 Vitest používá V8 coverage. Limity jsou v `apps/tvoje-service/vitest.config.ts`;
 React aplikace coverage jen reportuje, limity nemá. Příkazy: [tahák](PRIKAZY.md).
