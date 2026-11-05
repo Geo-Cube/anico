@@ -23,7 +23,9 @@ try {
         if ($service) {
             $previous = parseDockerComposeYaml($service->docker_compose_raw);
             if (isset($previous['services']['auth']) && !isset($compose['services']['auth'])) throw new RuntimeException('Auth downgrade refused');
-            foreach (['frontend' => 'frontend', 'backend' => 'breeding-service', 'auth' => 'auth-service'] as $name => $repository) {
+            // Doménové služby z CI releasu nesmí zmizet starším bootstrapem; zaregistruj pětisložkový release.
+            foreach (['animal', 'breeder'] as $name) if (isset($previous['services'][$name]) && !isset($compose['services'][$name])) throw new RuntimeException('Domain service downgrade refused');
+            foreach (['frontend' => 'frontend', 'backend' => 'breeding-service', 'auth' => 'auth-service', 'animal' => 'animal-service', 'breeder' => 'breeder-service'] as $name => $repository) {
                 if (!isset($compose['services'][$name]) || !isset($previous['services'][$name])) continue;
                 $image = $previous['services'][$name]['image'] ?? '';
                 if (!preg_match('#^ghcr\.io/geo-cube/anico-'.$repository.'@sha256:[a-f0-9]{64}$#', $image)) throw new RuntimeException('Unmanaged image');
@@ -35,6 +37,8 @@ try {
             $compose['services']['frontend']['volumes'][0]['target'] = '/usr/share/nginx/html/anico-release-'.$revision.'.json';
             $releaseImages=['frontend'=>$compose['services']['frontend']['image'],'breeding-service'=>$compose['services']['backend']['image']];
             if (isset($compose['services']['auth'])) $releaseImages['auth-service']=$compose['services']['auth']['image'];
+            if (isset($compose['services']['animal'])) $releaseImages['animal-service']=$compose['services']['animal']['image'];
+            if (isset($compose['services']['breeder'])) $releaseImages['breeder-service']=$compose['services']['breeder']['image'];
             $compose['services']['frontend']['volumes'][0]['content'] = json_encode([
                 'revision' => $revision,
                 'images' => $releaseImages,

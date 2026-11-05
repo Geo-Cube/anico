@@ -15,9 +15,13 @@ def inspect(name):
     return json.loads(result.stdout)[0] if result.returncode == 0 else None
 
 
+REPOSITORIES = {'backend': 'breeding-service', 'frontend': 'frontend', 'auth': 'auth-service',
+                'animal': 'animal-service', 'breeder': 'breeder-service'}
+# Doménové služby jsou součástí jen pětisložkového releasu; ověřují se, pokud existují.
+names = ['backend', 'frontend', 'auth'] + [name for name in ['animal', 'breeder'] if inspect(name + '-' + identity)]
 containers = None
 for attempt in range(40):
-    containers = {name: inspect(name + '-' + identity) for name in ['backend', 'frontend', 'auth']}
+    containers = {name: inspect(name + '-' + identity) for name in names}
     if all(value and value['State'].get('Health', {}).get('Status') == 'healthy' for value in containers.values()):
         break
     time.sleep(3)
@@ -35,7 +39,7 @@ for name, container in containers.items():
     revision = container['Config']['Labels']['com.anico.revision']
     assert re.fullmatch('[a-f0-9]{40}', revision)
     revisions.add(revision)
-    repository = {'backend':'breeding-service','frontend':'frontend','auth':'auth-service'}[name]
+    repository = REPOSITORIES[name]
     assert re.fullmatch('ghcr.io/geo-cube/anico-' + repository + '@sha256:[a-f0-9]{64}', container['Config']['Image'])
     networks = set(container['NetworkSettings']['Networks'])
     assert 'anico-dev-app' in networks
@@ -57,6 +61,16 @@ for name, container in containers.items():
         assert uri.hostname == 'anico-dev-mongodb'
         assert uri.username == 'anico_dev_app'
         assert uri.path == '/anico_breeding'
+    elif name in ('animal', 'breeder'):
+        assert 'anico-dev-events' not in networks
+        assert 'anico-dev-data' in networks
+        assert not any(value.startswith('MONGODB_URI=') for value in container['Config']['Env'])
+        secret = '/run/secrets/' + name + '-mongodb-uri'
+        assert any(mount['Destination'] == secret and not mount['RW'] for mount in container['Mounts'])
+        uri = urlsplit(subprocess.check_output(['docker', 'exec', name + '-' + identity, 'cat', secret], text=True).strip())
+        assert uri.hostname == 'anico-dev-mongodb'
+        assert uri.username == 'anico_' + name + '_dev_app'
+        assert uri.path == '/anico_' + name
     else:
         assert 'anico-dev-data' in networks
         assert not any(value.startswith(('MONGODB_URI=', 'GOOGLE_CLIENT_SECRET=')) for value in container['Config']['Env'])
@@ -80,4 +94,8 @@ assert release['revision'] in revisions
 assert release['images']['frontend'] == containers['frontend']['Config']['Image']
 assert release['images']['breeding-service'] == containers['backend']['Config']['Image']
 assert release['images']['auth-service'] == containers['auth']['Config']['Image']
-print('Verified healthy matching dev images, frontend and /api/ready routing, non-root/read-only containers, private ports and separate DB credentials/networks.')
+for name in ('animal', 'breeder'):
+    if name in containers:
+        assert json.loads(request('/api/' + name + '/ready'))['status'] == 'ok'
+        assert release['images'][REPOSITORIES[name]] == containers[name]['Config']['Image']
+print('Verified healthy matching dev images, frontend and API readiness routing, non-root/read-only containers, private ports and separate DB credentials/networks.')

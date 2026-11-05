@@ -5,7 +5,13 @@
   pre_tasks:
     - name: Prepare private deployment inputs
       ansible.builtin.command:
-        argv: [node, '{{ playbook_dir }}/../scripts/prepare-dev-deployment.mjs']
+        argv:
+          [
+            node,
+            --import,
+            tsx,
+            '{{ playbook_dir }}/../scripts/prepare-dev-deployment.mjs',
+          ]
         chdir: '{{ playbook_dir }}/..'
       delegate_to: localhost
       become: false
@@ -43,6 +49,15 @@
         owner: '1000'
         group: '1000'
         mode: '0400'
+      no_log: true
+    - name: Install own database URIs for animal-service and breeder-service
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/dev-deployment/{{ item }}-mongodb-uri'
+        dest: '/srv/anico/dev/applications/secrets/{{ item }}-mongodb-uri'
+        owner: '1000'
+        group: '1000'
+        mode: '0400'
+      loop: [animal, breeder]
       no_log: true
     - name: Install the development service configurator
       ansible.builtin.copy:

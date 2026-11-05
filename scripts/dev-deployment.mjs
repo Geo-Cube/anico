@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export const deployment = {
@@ -8,10 +8,23 @@ export const deployment = {
   description: 'Managed by AniCo IaC: development applications',
 };
 
+/** Doménové služby nasazované jen společně a jen s auth (identita z gateway). */
+export const DOMAIN_SERVICES = ['animal-service', 'breeder-service'];
+export const RELEASE_SERVICES = [
+  'frontend',
+  'breeding-service',
+  'auth-service',
+  ...DOMAIN_SERVICES,
+];
+
 export function validateRelease(references, revision, { legacy = false } = {}) {
+  // Starší třísložkový release (bootstrap před doménovými službami) zůstává platný.
   const services = legacy
     ? ['frontend', 'breeding-service']
-    : ['frontend', 'breeding-service', 'auth-service'];
+    : Array.isArray(references) &&
+        references.some((item) => DOMAIN_SERVICES.includes(item?.service))
+      ? RELEASE_SERVICES
+      : ['frontend', 'breeding-service', 'auth-service'];
   if (!/^[a-f0-9]{40}$/.test(revision))
     throw new Error('Invalid release revision');
   if (!Array.isArray(references) || references.length !== services.length)
@@ -189,12 +202,89 @@ export function composeForRelease(references, revision, options = {}) {
     compose.services.frontend.depends_on.auth = {
       condition: 'service_healthy',
     };
+    if (images['animal-service']) addDomainServices(compose, images, common);
   }
   return compose;
 }
 
-export function readReleaseFiles(directory, revision) {
-  return ['frontend', 'breeding-service', 'auth-service'].map((service) =>
+/**
+ * animal-service a breeder-service: vlastní DB účet a secret, identita z gateway
+ * (`anico-session`), veřejné jen health/ready. animal-service volá breeder-service
+ * interně (`GET /breeders/me`) s přeposlanou identitou.
+ */
+function addDomainServices(compose, images, common) {
+  const revision = compose.services.frontend.labels['com.anico.revision'];
+  const domain = (name, workspace, environment = {}) => {
+    const router = `anico-dev-${name}`;
+    const prefix = `/api/${name}`;
+    const middleware = `anico-dev-${name}-prefix`;
+    compose.secrets[`${name}-mongodb-uri`] = {
+      file: `/srv/anico/dev/applications/secrets/${name}-mongodb-uri`,
+    };
+    return {
+      ...common,
+      image: images[workspace],
+      environment: {
+        NODE_ENV: 'production',
+        APP_ENV: 'dev',
+        MIGRATE_ON_START: 'true',
+        HOST: '0.0.0.0',
+        PORT: '3000',
+        LOG_LEVEL: '${LOG_LEVEL:-debug}',
+        AUTH_JWKS_URL: 'http://auth:3000/.well-known/jwks.json',
+        AUTH_ISSUER: 'https://dev.anico.online/api/auth',
+        AUTH_AUDIENCE: 'anico-api-dev',
+        ...environment,
+      },
+      networks: ['app', 'data'],
+      secrets: [
+        { source: `${name}-mongodb-uri`, target: `${name}-mongodb-uri` },
+      ],
+      command: [
+        'sh',
+        '-c',
+        `export MONGODB_URI="$$(cat /run/secrets/${name}-mongodb-uri)"; exec node apps/${workspace}/dist/server.js`,
+      ],
+      depends_on: { auth: { condition: 'service_healthy' } },
+      labels: {
+        'traefik.enable': 'true',
+        'traefik.docker.network': 'anico-dev-app',
+        [`traefik.http.routers.${router}.entrypoints`]: 'http',
+        [`traefik.http.routers.${router}.rule`]: `Host(\`${deployment.hostname}\`) && (Path(\`${prefix}\`) || PathPrefix(\`${prefix}/\`))`,
+        [`traefik.http.routers.${router}.priority`]: '180',
+        [`traefik.http.routers.${router}.service`]: router,
+        [`traefik.http.routers.${router}.middlewares`]: `anico-session@file,${middleware}`,
+        [`traefik.http.routers.${router}-health.entrypoints`]: 'http',
+        [`traefik.http.routers.${router}-health.rule`]: `Host(\`${deployment.hostname}\`) && (Path(\`${prefix}/health\`) || Path(\`${prefix}/ready\`))`,
+        [`traefik.http.routers.${router}-health.priority`]: '190',
+        [`traefik.http.routers.${router}-health.service`]: router,
+        [`traefik.http.routers.${router}-health.middlewares`]: middleware,
+        [`traefik.http.middlewares.${middleware}.stripprefix.prefixes`]: prefix,
+        [`traefik.http.services.${router}.loadbalancer.server.port`]: '3000',
+        'com.anico.environment': 'dev',
+        'com.anico.managed-by': 'coolify',
+        'com.anico.revision': revision,
+      },
+    };
+  };
+  compose.services.breeder = domain('breeder', 'breeder-service');
+  compose.services.animal = domain('animal', 'animal-service', {
+    BREEDER_SERVICE_URL: 'http://breeder:3000',
+  });
+  compose.services.animal.depends_on.breeder = { condition: 'service_healthy' };
+}
+
+/**
+ * CI vyžaduje všech pět artifacts. Ruční rollback (`optionalDomain`) smí použít i starší
+ * třísložkový release; animal-service a breeder-service se tím z dev sestavy odeberou (data zůstávají).
+ */
+export function readReleaseFiles(directory, { optionalDomain = false } = {}) {
+  return RELEASE_SERVICES.filter(
+    (service) =>
+      !optionalDomain ||
+      !DOMAIN_SERVICES.includes(service) ||
+      existsSync(`${directory}/${service}`),
+  ).map((service) =>
     JSON.parse(
       readFileSync(`${directory}/${service}/image-reference.json`, 'utf8'),
     ),
@@ -312,7 +402,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const revision = process.env.GITHUB_SHA;
     await deployRelease({
-      references: readReleaseFiles(process.argv[2], revision),
+      references: readReleaseFiles(process.argv[2]),
       revision,
       serviceId: process.env.COOLIFY_DEV_SERVICE_UUID,
       token: process.env.COOLIFY_DEV_TOKEN,

@@ -7,7 +7,7 @@ import {
 
 try {
   const [revision, directory] = process.argv.slice(2);
-  const references = readReleaseFiles(directory);
+  const references = readReleaseFiles(directory, { optionalDomain: true });
   const outputs = JSON.parse(
     pulumi([
       'stack',

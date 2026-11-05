@@ -21,11 +21,36 @@ export function remoteServiceMetadata(name, manifest, example) {
   const port = Number(parseEnv(example).PORT);
   if (!Number.isInteger(port) || port < 1024 || port > 65535)
     throw new Error('Set a valid PORT in the selected service .env.example');
-  return { name, workspace: manifest.name, port };
+  const developmentDependencies =
+    manifest.anicoDevDependencies === undefined
+      ? {}
+      : manifest.anicoDevDependencies;
+  if (
+    typeof developmentDependencies !== 'object' ||
+    developmentDependencies === null ||
+    Array.isArray(developmentDependencies) ||
+    Object.entries(developmentDependencies).some(
+      ([variable, dependency]) =>
+        !/^[A-Z][A-Z0-9_]*_URL$/.test(variable) ||
+        typeof dependency !== 'string' ||
+        remoteServiceName(dependency) !== dependency ||
+        dependency === name,
+    )
+  )
+    throw new Error('Invalid anicoDevDependencies: use ENV_URL: service-name');
+  return {
+    name,
+    workspace: manifest.name,
+    port,
+    developmentDependencies,
+  };
 }
 
 export function remoteDevelopmentConfig(text, settings, service) {
-  const env = parseEnv(text);
+  return remoteEnvironmentConfig(parseEnv(text), settings, service);
+}
+
+function remoteEnvironmentConfig(env, settings, service) {
   if (
     !Number.isInteger(settings.localPort) ||
     settings.localPort < 1024 ||
@@ -94,6 +119,35 @@ export function remoteDevelopmentConfig(text, settings, service) {
       LOG_LEVEL: env.LOG_LEVEL ?? 'debug',
     },
   };
+}
+
+export function remoteDevelopmentServices(text, settings, services) {
+  const selected = remoteDevelopmentConfig(text, settings, services[0]);
+  // Personal files may already target the selected service database. Dependencies
+  // reuse its credentials, but start from the original authentication database.
+  const uri = new URL(selected.env.MONGODB_URI);
+  uri.pathname = `/${uri.searchParams.get('authSource')}`;
+  const configs = services.map((service, index) => ({
+    service,
+    ...(index === 0
+      ? selected
+      : remoteEnvironmentConfig(
+          { ...selected.env, MONGODB_URI: uri.href },
+          settings,
+          service,
+        )),
+  }));
+  if (new Set(configs.map(({ port }) => port)).size !== configs.length)
+    throw new Error('Local service ports must be distinct');
+  for (const config of configs)
+    for (const [variable, name] of Object.entries(
+      config.service.developmentDependencies ?? {},
+    )) {
+      const dependency = configs.find(({ service }) => service.name === name);
+      if (!dependency) throw new Error(`Missing local dependency ${name}`);
+      config.env[variable] = `http://127.0.0.1:${dependency.port}`;
+    }
+  return configs;
 }
 
 export function redactRemoteLog(line) {

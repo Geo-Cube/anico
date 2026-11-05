@@ -201,6 +201,94 @@ test('auth release guards API access and mounts provider secrets only into auth'
   );
 });
 
+test('domain release routes animal and breeder behind the session gateway with own DB secrets', () => {
+  const full = [
+    ...references,
+    ...['animal-service', 'breeder-service'].map((service, i) => ({
+      service,
+      image: `ghcr.io/geo-cube/anico-${service}`,
+      digest: `sha256:${String(i + 5).repeat(64)}`,
+      revision,
+    })),
+  ];
+  assert.equal(Object.keys(validateRelease(full, revision)).length, 5);
+  // Jen jedna doménová služba, nebo doménové služby bez auth, release odmítne.
+  assert.throws(() => validateRelease(full.slice(0, 4), revision));
+  assert.throws(() =>
+    validateRelease(
+      full.filter((item) => item.service !== 'auth-service'),
+      revision,
+    ),
+  );
+  // Starší třísložkový release se nemění (bootstrap a obnova).
+  assert.equal(
+    composeForRelease(references, revision).services.animal,
+    undefined,
+  );
+
+  const compose = composeForRelease(full, revision);
+  for (const name of ['animal', 'breeder']) {
+    const service = compose.services[name];
+    const router = `traefik.http.routers.anico-dev-${name}`;
+    assert.equal(
+      service.image,
+      full.find((item) => item.service === `${name}-service`).image +
+        '@' +
+        full.find((item) => item.service === `${name}-service`).digest,
+    );
+    assert.deepEqual(service.networks, ['app', 'data']);
+    assert.deepEqual(service.secrets, [
+      { source: `${name}-mongodb-uri`, target: `${name}-mongodb-uri` },
+    ]);
+    assert.equal(
+      compose.secrets[`${name}-mongodb-uri`].file,
+      `/srv/anico/dev/applications/secrets/${name}-mongodb-uri`,
+    );
+    assert.equal(service.environment.MONGODB_URI, undefined);
+    assert.equal(service.environment.AUTH_AUDIENCE, 'anico-api-dev');
+    assert.equal(service.environment.APP_ENV, 'dev');
+    assert.equal(service.environment.MIGRATE_ON_START, 'true');
+    // Chráněné API jen přes ověřenou relaci; health/ready bez ní, ale nad přísnějším prefixem.
+    assert.equal(
+      service.labels[`${router}.middlewares`],
+      `anico-session@file,anico-dev-${name}-prefix`,
+    );
+    assert.match(service.labels[`${router}.rule`], new RegExp(`/api/${name}/`));
+    assert.equal(
+      service.labels[`${router}-health.middlewares`],
+      `anico-dev-${name}-prefix`,
+    );
+    assert.doesNotMatch(service.labels[`${router}-health.rule`], /PathPrefix/);
+    assert.ok(
+      Number(service.labels[`${router}.priority`]) >
+        Number(
+          compose.services.backend.labels[
+            'traefik.http.routers.anico-dev-backend.priority'
+          ],
+        ),
+    );
+    assert.equal(
+      service.labels['com.anico.revision'],
+      compose.services.frontend.labels['com.anico.revision'],
+    );
+  }
+  assert.equal(
+    compose.services.animal.environment.BREEDER_SERVICE_URL,
+    'http://breeder:3000',
+  );
+  assert.equal(
+    compose.services.breeder.environment.BREEDER_SERVICE_URL,
+    undefined,
+  );
+  assert.deepEqual(compose.services.backend.secrets, [
+    { source: 'mongodb-uri', target: 'dev-mongodb-uri' },
+  ]);
+  assert.match(
+    compose.services.frontend.volumes[0].content,
+    /anico-animal-service@sha256/,
+  );
+});
+
 test('deployment refuses legacy gateway runtime before any API mutation', async () => {
   const requests = [];
   await assert.rejects(

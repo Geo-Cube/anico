@@ -13,11 +13,12 @@ import {
 } from '../apps/frontend/dev-app-auth.mjs';
 import {
   loadRemoteWorkspace,
+  loadRemoteWorkspaces,
   loadPersonalEnvironment,
   assertAvailablePort,
 } from './dev-workspace.mjs';
 import {
-  remoteDevelopmentConfig,
+  remoteDevelopmentServices,
   redactRemoteLog,
   remoteArguments,
 } from './remote-dev-config.mjs';
@@ -113,16 +114,22 @@ try {
   databaseTask = command !== undefined;
   const name = selectedService ?? 'breeding-service';
   const serviceDirectory = join(root, 'apps', name);
-  const service = loadRemoteWorkspace(root, name);
-  if (!check && !command && name !== 'auth-service') {
-    const manifest = JSON.parse(
-      readFileSync(join(serviceDirectory, 'package.json'), 'utf8'),
-    );
-    if (!manifest.dependencies?.['@anico/auth'])
-      throw new Error(
-        'Service must integrate @anico/auth before remote development. See docs/AUTENTIZACE.md; existing services need the authenticated app/server setup from the current template.',
+  const services =
+    !check && !command
+      ? loadRemoteWorkspaces(root, name)
+      : [loadRemoteWorkspace(root, name)];
+  const [service] = services;
+  if (!check && !command)
+    for (const backend of services) {
+      if (backend.name === 'auth-service') continue;
+      const manifest = JSON.parse(
+        readFileSync(join(backend.directory, 'package.json'), 'utf8'),
       );
-  }
+      if (!manifest.dependencies?.['@anico/auth'])
+        throw new Error(
+          'Service must integrate @anico/auth before remote development. See docs/AUTENTIZACE.md; existing services need the authenticated app/server setup from the current template.',
+        );
+    }
   const settings = JSON.parse(
     readFileSync(
       new URL('../infrastructure/dev-database.json', import.meta.url),
@@ -130,7 +137,13 @@ try {
     ),
   );
   const text = loadPersonalEnvironment(root, serviceDirectory);
-  const config = remoteDevelopmentConfig(text, settings, service);
+  const configs = remoteDevelopmentServices(
+    text,
+    settings,
+    // Checks and database commands operate on the selected service only.
+    check || command ? [{ ...service, developmentDependencies: {} }] : services,
+  );
+  const [config] = configs;
   if (
     !reuse &&
     spawnSync('cloudflared', ['version'], { stdio: 'ignore' }).status !== 0
@@ -140,7 +153,9 @@ try {
     );
   for (const port of [
     ...(!reuse ? [settings.localPort] : []),
-    ...(!check && !command ? [config.port, ...(frontend ? [5173] : [])] : []),
+    ...(!check && !command
+      ? [...configs.map(({ port }) => port), ...(frontend ? [5173] : [])]
+      : []),
   ])
     await assertAvailablePort(port);
   const tunnel = reuse
@@ -172,32 +187,38 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 750));
   if (tunnel && tunnel.exitCode !== null)
     throw new Error('Cloudflare client stopped before connecting');
-  const backendRequire = createRequire(join(serviceDirectory, 'package.json'));
-  const mongoose = backendRequire('mongoose');
-  const connection = mongoose.createConnection();
-  try {
-    await connection.openUri(config.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 120_000,
-      connectTimeoutMS: 120_000,
-      autoIndex: false,
-    });
-    await connection.db.command({ ping: 1 });
-    const authentication = await connection.db.command({ connectionStatus: 1 });
-    if (
-      !authentication.authInfo.authenticatedUserRoles.some(
-        (role) => role.role === 'readWrite' && role.db === config.database,
-      )
-    )
-      throw new Error('Missing scoped role');
-  } catch {
-    throw new Error(
-      'Database connection or service permission check failed. Ask the administrator to apply dev database provisioning for this service; also check GitHub login and private configuration. Credentials hidden.',
+  for (const backend of configs) {
+    const backendRequire = createRequire(
+      join(backend.service.directory, 'package.json'),
     );
-  } finally {
-    await connection.close().catch(() => {});
+    const mongoose = backendRequire('mongoose');
+    const connection = mongoose.createConnection();
+    try {
+      await connection.openUri(backend.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 120_000,
+        connectTimeoutMS: 120_000,
+        autoIndex: false,
+      });
+      await connection.db.command({ ping: 1 });
+      const authentication = await connection.db.command({
+        connectionStatus: 1,
+      });
+      if (
+        !authentication.authInfo.authenticatedUserRoles.some(
+          (role) => role.role === 'readWrite' && role.db === backend.database,
+        )
+      )
+        throw new Error('Missing scoped role');
+    } catch {
+      throw new Error(
+        `Database connection or service permission check failed (${backend.service.name}). Ask the administrator to apply dev database provisioning for this service; also check GitHub login and private configuration. Credentials hidden.`,
+      );
+    } finally {
+      await connection.close().catch(() => {});
+    }
+    if (stopping) throw new Error('Remote development stopped');
+    console.log(`Connected to your workspace ${backend.database}.`);
   }
-  if (stopping) throw new Error('Remote development stopped');
-  console.log(`Connected to your workspace ${config.database}.`);
   if (!check) {
     let identityEnvironment = {};
     if (!command && (service.name !== 'auth-service' || frontend)) {
@@ -257,8 +278,35 @@ try {
         },
       },
     );
+    const dependencies = command
+      ? []
+      : configs.slice(1).map((backend) => {
+          const task = [
+            'run',
+            'dev',
+            '--',
+            `--filter=${backend.service.workspace}`,
+          ];
+          return launch(
+            process.env.npm_execpath ? process.execPath : 'npm',
+            process.env.npm_execpath
+              ? [process.env.npm_execpath, ...task]
+              : task,
+            {
+              stdio: 'inherit',
+              env: {
+                ...process.env,
+                ...backend.env,
+                ...identityEnvironment,
+              },
+            },
+          );
+        });
     const result = await Promise.race([
       once(app, 'exit').then(([code]) => code ?? 1),
+      ...dependencies.map((dependency) =>
+        once(dependency, 'exit').then(([code]) => code ?? 1),
+      ),
       ...(tunnel
         ? [
             once(tunnel, 'exit').then(() => {

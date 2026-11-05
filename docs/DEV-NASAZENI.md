@@ -7,11 +7,12 @@ images z větve `dev`. Když některý předchozí krok selže, nová verze se n
 
 ## Jak nasazení funguje
 
-Zelené CI → tři GHCR artifacts ze stejného commitu → ověření repository/revize/digestu
-→ Coolify API → zdravý backend, auth a frontend s odpovídajícím release manifestem.
+Zelené CI → pět GHCR artifacts ze stejného commitu → ověření repository/revize/digestu
+→ Coolify API → zdravý backend, auth, animal, breeder a frontend s odpovídajícím release manifestem.
 Nasazení jsou postupná; čekající starší commit se přeskočí, pokud není hlavou `dev`.
-Aktuálně workflow publikuje a nasazuje frontend, breeding-service a auth-service; další
-workspace je potřeba do publish/deploy konfigurace a API routování doplnit výslovně.
+Aktuálně workflow publikuje a nasazuje frontend, breeding-service, auth-service,
+animal-service a breeder-service; další workspace je potřeba do publish/deploy
+konfigurace a API routování doplnit výslovně.
 VPS stahuje hotové images. PR ani `main` dev nenasazují.
 Při výměně může nastat krátký výpadek; automatický rollback dat/migrací není zavedený.
 
@@ -46,6 +47,10 @@ npm run configure:dev-deployment -w @anico/infrastructure -- --extra-vars anico_
 Běžná konfigurace zachová aktuálně nasazené digesty/revizi; sama aplikace nerestartuje.
 Nová služba začíná ověřeným releasem `50a85b8`. Po obnově nastav požadovaný release
 příkazem níže. Celý bootstrap není import databázových záloh.
+Jakmile CI nasadí animal-service a breeder-service, `configure:dev-deployment` s třísložkovým
+bootstrapem skončí chybou `Domain service downgrade refused`, aby je neodebral. Zaregistruj
+pětisložkový release: `npm run init:dev-auth -w @anico/infrastructure -- --release-directory DIR --revision COMMIT_SHA`
+(složka s pěti artifacts).
 
 ## Kde měnit proměnné a credentials
 
@@ -68,8 +73,16 @@ npm run configure:dev-deployment -w @anico/infrastructure
 
 Runtime změna vyžaduje další deployment. DB URI dostává jen backend přes read-only
 soubor `/srv/anico/dev/applications/secrets/mongodb-uri` pro UID 1000.
-Frontend jej nemá; do společného service `.env` ani do image URI nevkládej.
+animal-service a breeder-service mají vlastní DB (`anico_animal`, `anico_breeder`), účty
+(`anico_animal_dev_app`, `anico_breeder_dev_app` v šifrovaném `devDatabaseCredentials.services`)
+a soubory `animal-mongodb-uri` / `breeder-mongodb-uri` ve stejném adresáři. Vytvoří je
+`init:dev-database` (zachová ostatní hesla), `deploy:dev-database` a `configure:dev-deployment`.
+Frontend je nemá; do společného service `.env` ani do image URI nevkládej.
 Coolify totiž společný `.env` přidává všem komponentám.
+
+Gateway: `/api/animal/*` a `/api/breeder/*` vedou přes ověření relace (`anico-session`)
+na příslušnou službu, veřejné jsou jen jejich `/health` a `/ready`. animal-service volá
+breeder-service interně (`BREEDER_SERVICE_URL=http://breeder:3000`) s přeposlanou identitou.
 
 CI vstup `deploy-dev.anico.online` přijme jen Service Auth a GET/PATCH určené služby
 plus kontrolu manifestu. Lidský dev a admin vyžadují jiné Access audience.
@@ -83,10 +96,11 @@ CI nepotřebuje SSH klíč, cloudové správní tokeny, Pulumi state ani DB hesl
 
 ## Rollback aplikací
 
-Stáhni tři artifacts ze známého zeleného CI do společné složky:
-`frontend/image-reference.json`, `breeding-service/image-reference.json` a
-`auth-service/image-reference.json`. Návrat k dvoukomponentové verzi bez auth
-není podporovaný.
+Stáhni artifacts ze známého zeleného CI do společné složky:
+`frontend/`, `breeding-service/`, `auth-service/` a u novějších releasů také
+`animal-service/` a `breeder-service/` (každý s `image-reference.json`). Rollback na
+starší třísložkový release animal a breeder z dev sestavy odebere; jejich data zůstávají.
+Návrat k dvoukomponentové verzi bez auth není podporovaný.
 Nahraď `COMMIT_SHA` a cestu skutečnými hodnotami:
 
 ```bash
