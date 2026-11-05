@@ -61,6 +61,41 @@ test('duplicates and moving a workspace to another database are rejected', () =>
   first.developers[0]!.database = 'anico_breeding_production';
   assert.throws(() => databaseCredentialsSchema.parse(first));
 });
+test('existing credentials gain separate deployed service accounts without rotating others', () => {
+  const first = reconcileDatabaseCredentials(members, undefined, passwords());
+  const { services: _services, ...legacy } = first;
+  let counter = 0x100;
+  const next = reconcileDatabaseCredentials(members, legacy, () =>
+    (++counter).toString(16).padStart(64, '0'),
+  );
+  assert.deepEqual(
+    { root: next.root, app: next.app, developers: next.developers },
+    { root: legacy.root, app: legacy.app, developers: legacy.developers },
+  );
+  assert.equal(next.services?.['animal-service']?.database, 'anico_animal');
+  assert.equal(
+    next.services?.['breeder-service']?.username,
+    'anico_breeder_dev_app',
+  );
+  const accounts = databaseProvisioningAccounts(next, [
+    'animal-service',
+    'breeder-service',
+    'breeding-service',
+  ]);
+  const animal = accounts.find(
+    (item) => item.username === 'anico_animal_dev_app',
+  );
+  assert.deepEqual(animal?.databases, ['anico_animal']);
+  // osobní DB vývojáře se se sdílenou DB služby nepřekrývají
+  assert.ok(
+    accounts
+      .filter((item) => 'login' in item)
+      .every((item) => !item.databases.includes('anico_animal')),
+  );
+  const moved = structuredClone(next);
+  moved.services!['animal-service']!.database = 'anico_breeder';
+  assert.throws(() => databaseCredentialsSchema.parse(moved));
+});
 
 test('one stable account receives only its own service databases; app permissions stay unchanged', () => {
   const credentials = reconcileDatabaseCredentials(

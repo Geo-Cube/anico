@@ -9,6 +9,10 @@ import {
   composeForRelease,
   deployment,
 } from '../../scripts/dev-deployment.mjs';
+import {
+  databaseCredentialsSchema,
+  DEPLOYED_SERVICE_ACCOUNTS,
+} from '../src/dev-database.ts';
 
 try {
   if (
@@ -63,6 +67,22 @@ try {
     new URL('../../.pulumi/dev-deployment/mongodb-uri', import.meta.url),
     uri + '\n',
   );
+  // Vlastní DB účty animal-service a breeder-service (pětisložkový release z CI).
+  const services =
+    databaseCredentialsSchema.parse(secret('devDatabaseCredentials'))
+      .services ?? {};
+  for (const name of Object.keys(DEPLOYED_SERVICE_ACCOUNTS)) {
+    const account = services[name];
+    if (!account)
+      throw new Error('Run init:dev-database for deployed service accounts');
+    privateFile(
+      new URL(
+        `../../.pulumi/dev-deployment/${name.replace(/-service$/, '')}-mongodb-uri`,
+        import.meta.url,
+      ),
+      `mongodb://${account.username}:${account.password}@anico-dev-mongodb:27017/${account.database}?authSource=${account.database}\n`,
+    );
+  }
   console.log(JSON.stringify({ enabled: true }));
 } catch {
   console.error(

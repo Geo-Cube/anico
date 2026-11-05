@@ -3,10 +3,12 @@
 **Vývojáři používají [krátký postup](../docs/VZDALENY-VYVOJ.md).**
 Jedna neprodukční instance má samostatné DB pro služby. Každý vývojář má jeden účet:
 
-| Účet            | Databáze               | Použití               |
-| --------------- | ---------------------- | --------------------- |
-| `anico_dev_app` | `anico_breeding`       | Nasazená dev aplikace |
-| `dev_LOGIN`     | `anico_breeding_LOGIN` | Osobní lokální vývoj  |
+| Účet                    | Databáze               | Použití                          |
+| ----------------------- | ---------------------- | -------------------------------- |
+| `anico_dev_app`         | `anico_breeding`       | Nasazená dev aplikace (breeding) |
+| `anico_animal_dev_app`  | `anico_animal`         | Nasazená animal-service          |
+| `anico_breeder_dev_app` | `anico_breeder`        | Nasazená breeder-service         |
+| `dev_LOGIN`             | `anico_breeding_LOGIN` | Osobní lokální vývoj             |
 
 Osobní účet zůstává v `anico_breeding_LOGIN` jako autentizační DB.
 Má `readWrite` na vlastních DB podle registrovaných služeb, například

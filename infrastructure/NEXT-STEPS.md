@@ -28,7 +28,8 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
 - [x] Review auth-service a sdíleného kontraktu identity (PR #17), oprava gateway (PR #19).
 - [ ] Zapojit ověřování identity do každé další doménové služby.
 - [ ] Každou další službu samostatně zahrnout do publish, Coolify a API routování;
-      šablona a DB registr samy nasazení nevytvářejí.
+      šablona a DB registr samy nasazení nevytvářejí. Hotovo pro animal-service
+      a breeder-service (vlastní DB účty, `/api/animal`, `/api/breeder`).
 - [ ] Případné kopírování dat dev → osobní DB; nyní není implementované.
 
 ## Odložené: Apple a produkce

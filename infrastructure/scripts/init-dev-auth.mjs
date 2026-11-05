@@ -1,8 +1,11 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { parseEnv, parseArgs } from 'node:util';
 import { secret, setSecret } from './private-config.mjs';
-import { validateRelease } from '../../scripts/dev-deployment.mjs';
+import {
+  RELEASE_SERVICES,
+  validateRelease,
+} from '../../scripts/dev-deployment.mjs';
 import { reconcileAuthProviders } from '../src/dev-auth.ts';
 try {
   const { values } = parseArgs({
@@ -44,14 +47,16 @@ try {
   if (values['release-directory'] || values.revision) {
     if (!values['release-directory'] || !values.revision)
       throw new Error('Both release arguments required');
-    const references = ['frontend', 'breeding-service', 'auth-service'].map(
-      (name) =>
-        JSON.parse(
-          readFileSync(
-            `${values['release-directory']}/${name}/image-reference.json`,
-            'utf8',
-          ),
+    // Třísložkový release, nebo pětisložkový včetně animal-service a breeder-service.
+    const references = RELEASE_SERVICES.filter((name) =>
+      existsSync(`${values['release-directory']}/${name}`),
+    ).map((name) =>
+      JSON.parse(
+        readFileSync(
+          `${values['release-directory']}/${name}/image-reference.json`,
+          'utf8',
         ),
+      ),
     );
     validateRelease(references, values.revision);
     config.bootstrapRelease = { revision: values.revision, references };

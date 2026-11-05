@@ -28,6 +28,24 @@ export function loadRemoteWorkspace(root, name) {
   return { ...remoteServiceMetadata(name, manifest, example), directory };
 }
 
+export function loadRemoteWorkspaces(root, name) {
+  const services = new Map();
+  const visiting = new Set();
+  function load(name) {
+    if (visiting.has(name))
+      throw new Error(`Circular local service dependency: ${name}`);
+    if (services.has(name)) return;
+    visiting.add(name);
+    const service = loadRemoteWorkspace(root, name);
+    services.set(name, service);
+    for (const dependency of Object.values(service.developmentDependencies))
+      load(dependency);
+    visiting.delete(name);
+  }
+  load(name);
+  return [...services.values()];
+}
+
 export function loadPersonalEnvironment(root, directory) {
   for (const file of new Set([
     join(root, '.env.remote.local'),

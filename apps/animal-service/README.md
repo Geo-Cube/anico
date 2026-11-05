@@ -17,12 +17,21 @@ Vzdálený vývoj vyžaduje `cloudflared`, tvůj stávající osobní `.env.remo
 a provisioning DB oprávnění správcem. Generátor přidal službu do registru,
 ale nemění server ani hesla. [Přístupy a více služeb](../../docs/VZDALENY-VYVOJ.md).
 
-Samotný frontend proti týmovému API: `npm run dev:frontend`. Jen tento backend s osobní DB:
-`npm run dev:backend -- --service animal-service`. Pro backend s místní DB
-`npm run dev -w @anico/animal-service`. Tento přímý start bez identity zpřístupní
-jen health; pro přihlášené API použij běžný fullstack launcher. Místní výchozí `.env` používá
-`anico_animal_local` na portu MongoDB 27017. `npm run setup` vytvoří pouze
-chybějící `.env` z veřejných příkladů, existující soubory nepřepisuje.
+Samotný frontend proti týmovému API: `npm run dev:frontend`. Backend s osobní DB:
+`npm run dev:backend -- --service animal-service`. Launcher zároveň spustí
+`breeder-service` na portu 3003 s vlastní osobní DB, stejnou konfigurací ověření
+identity a nastaví `BREEDER_SERVICE_URL`. Vyžaduje DB oprávnění pro obě služby;
+Ctrl+C je ukončí společně. Frontendové `/api/breeder` zůstává na společném devu.
+
+Pro backend s místní DB spusť v druhém terminálu nejprve
+`npm run dev -w @anico/breeder-service` a potom
+`npm run dev -w @anico/animal-service`. Nastav
+`BREEDER_SERVICE_URL=http://127.0.0.1:3003` podle veřejného `.env.example`;
+bez běžící breeder-service operace chovatele vracejí 503.
+Tento přímý start bez identity zpřístupní jen health; pro přihlášené API použij
+běžný fullstack launcher. Místní výchozí `.env` používá `anico_animal_local`
+na portu MongoDB 27017. `npm run setup` vytvoří pouze chybějící `.env`
+z veřejných příkladů, existující soubory nepřepisuje.
 
 ## Vlastní modul a health check
 

@@ -15,14 +15,30 @@ def inspect(name):
     return json.loads(result.stdout)[0] if result.returncode == 0 else None
 
 
-containers = None
-for attempt in range(40):
-    containers = {name: inspect(name + '-' + identity) for name in ['backend', 'frontend', 'auth']}
-    if all(value and value['State'].get('Health', {}).get('Status') == 'healthy' for value in containers.values()):
-        break
-    time.sleep(3)
-else:
+REPOSITORIES = {'backend': 'breeding-service', 'frontend': 'frontend', 'auth': 'auth-service',
+                'animal': 'animal-service', 'breeder': 'breeder-service'}
+
+
+def request(path):
+    return subprocess.check_output(['docker', 'exec', 'coolify-proxy', 'wget', '-qO-',
+                                    '--header=Host: dev.anico.online', 'http://127.0.0.1' + path], text=True)
+
+
+def wait_healthy(names):
+    for attempt in range(40):
+        found = {name: inspect(name + '-' + identity) for name in names}
+        if all(value and value['State'].get('Health', {}).get('Status') == 'healthy' for value in found.values()):
+            return found
+        time.sleep(3)
     raise RuntimeError('Development containers did not become healthy; inspect Coolify')
+
+
+# Povinné komponenty určuje release manifest požadované revize, ne existence kontejnerů.
+frontend = wait_healthy(['frontend'])['frontend']
+release = json.loads(request('/anico-release-' + frontend['Config']['Labels']['com.anico.revision'] + '.json'))
+names = [name for name, repository in REPOSITORIES.items() if repository in release['images']]
+assert {'backend', 'frontend', 'auth'} <= set(names), 'Release manifest misses a required component'
+containers = wait_healthy(names)
 
 revisions = set()
 for name, container in containers.items():
@@ -35,7 +51,7 @@ for name, container in containers.items():
     revision = container['Config']['Labels']['com.anico.revision']
     assert re.fullmatch('[a-f0-9]{40}', revision)
     revisions.add(revision)
-    repository = {'backend':'breeding-service','frontend':'frontend','auth':'auth-service'}[name]
+    repository = REPOSITORIES[name]
     assert re.fullmatch('ghcr.io/geo-cube/anico-' + repository + '@sha256:[a-f0-9]{64}', container['Config']['Image'])
     networks = set(container['NetworkSettings']['Networks'])
     assert 'anico-dev-app' in networks
@@ -57,6 +73,16 @@ for name, container in containers.items():
         assert uri.hostname == 'anico-dev-mongodb'
         assert uri.username == 'anico_dev_app'
         assert uri.path == '/anico_breeding'
+    elif name in ('animal', 'breeder'):
+        assert 'anico-dev-events' not in networks
+        assert 'anico-dev-data' in networks
+        assert not any(value.startswith('MONGODB_URI=') for value in container['Config']['Env'])
+        secret = '/run/secrets/' + name + '-mongodb-uri'
+        assert any(mount['Destination'] == secret and not mount['RW'] for mount in container['Mounts'])
+        uri = urlsplit(subprocess.check_output(['docker', 'exec', name + '-' + identity, 'cat', secret], text=True).strip())
+        assert uri.hostname == 'anico-dev-mongodb'
+        assert uri.username == 'anico_' + name + '_dev_app'
+        assert uri.path == '/anico_' + name
     else:
         assert 'anico-dev-data' in networks
         assert not any(value.startswith(('MONGODB_URI=', 'GOOGLE_CLIENT_SECRET=')) for value in container['Config']['Env'])
@@ -67,17 +93,12 @@ for name, container in containers.items():
         assert not any(value.startswith(('NATS_PASSWORD=', 'NATS_URL=')) for value in container['Config']['Env'])
 assert len(revisions) == 1, 'Mixed release revisions'
 
-
-def request(path):
-    return subprocess.check_output(['docker', 'exec', 'coolify-proxy', 'wget', '-qO-',
-                                    '--header=Host: dev.anico.online', 'http://127.0.0.1' + path], text=True)
-
-
 assert '<html' in request('/').lower()
 assert json.loads(request('/api/ready'))['status'] == 'ok'
-release = json.loads(request('/anico-release-' + next(iter(revisions)) + '.json'))
 assert release['revision'] in revisions
-assert release['images']['frontend'] == containers['frontend']['Config']['Image']
-assert release['images']['breeding-service'] == containers['backend']['Config']['Image']
-assert release['images']['auth-service'] == containers['auth']['Config']['Image']
-print('Verified healthy matching dev images, frontend and /api/ready routing, non-root/read-only containers, private ports and separate DB credentials/networks.')
+for name, container in containers.items():
+    assert release['images'][REPOSITORIES[name]] == container['Config']['Image']
+for name in ('animal', 'breeder'):
+    if name in containers:
+        assert json.loads(request('/api/' + name + '/ready'))['status'] == 'ok'
+print('Verified healthy matching dev images, frontend and API readiness routing, non-root/read-only containers, private ports and separate DB credentials/networks.')

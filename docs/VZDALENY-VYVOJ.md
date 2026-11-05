@@ -42,8 +42,9 @@ npm run db:remote:status -- --service auth
 npm run db:remote:migrate -- --service auth
 ```
 
-`auth` i `auth-service` znamená workspace `@anico/auth-service`. Spustí se jen
-vybraná služba. `dev:fullstack` navíc spustí UI a proxy pro tuto lokální službu.
+`auth` i `auth-service` znamená workspace `@anico/auth-service`. Bez deklarovaných
+závislostí se spustí jen vybraná služba. `dev:fullstack` navíc spustí UI a proxy
+pro tuto lokální službu.
 Frontend může běžet také zvlášť přes `npm run dev:frontend`.
 Bez `--service` se běžný backend/fullstack nespustí. Samostatný frontend
 používá společné dev API a společná data; nepřipojí se automaticky k tvému backendu.
@@ -88,7 +89,28 @@ Běžný backendový `.env` se nepřepisuje; režim používá jeden osobní `.e
 Z kořene `npm run dev:backend -- --service animal` vybere `anico_animal_tom_606`.
 Tom použije svůj dosavadní osobní soubor. Parametr `authSource` má hodnotu
 `anico_breeding_tom_606`, protože označuje místo ověření účtu, nikoli pracovní DB služby.
-Před prvním použitím správce aplikuje provisioning pro registrovanou animal-service.
+Launcher zároveň spustí `breeder-service` na portu 3003 s DB `anico_breeder_tom_606`
+a nastaví animalu `BREEDER_SERVICE_URL=http://127.0.0.1:3003`. Obě služby používají
+stejný osobní účet, tunel, `authSource`, runtime `AUTH_JWKS_JSON`, issuer a audience.
+Nastavení `MIGRATE_ON_START` se předává stejně jako vybrané službě; automaticky se
+nezapíná. Před prvním použitím správce aplikuje provisioning pro **obě** služby.
+Lokální ověření chovatele vyžaduje data v osobní breeder DB; společná dev data se
+nekopírují. Frontend přesměruje pouze `/api/animal`, nikoli `/api/breeder`.
+Obsazené porty obou backendů se kontrolují před spuštěním a oba se ukončí společně.
+
+Závislost deklaruje `apps/animal-service/package.json`:
+
+```json
+"anicoDevDependencies": {
+  "BREEDER_SERVICE_URL": "breeder-service"
+}
+```
+
+Klíč je runtime proměnná končící `_URL`, hodnota úplný název workspace adresáře.
+Launcher načte port každé služby z jejího `.env.example`, spustí ji jako samostatný
+proces a do volající služby vloží její lokální URL. Sdílené závislosti spustí jen
+jednou; cykly i shodné porty odmítne. `--check` a `--db` nadále pracují pouze
+s vybranou službou, nikoli s jejími závislostmi.
 Ve starší šabloně nemusí existovat wrapper `dev:remote` uvnitř služby;
 rootový příkaz s `--service animal` funguje s aktualizovaným launcherem.
 

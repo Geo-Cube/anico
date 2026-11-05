@@ -100,6 +100,10 @@ image bez zdrojů a dev nástrojů, non-root a read-only, dočasná MongoDB na i
 migrace při startu, `/ready` 200, 401 bez identity, `/docs` a `/openapi.json` mimo produkci, odmítnutí `db:reset`
 mimo osobní databázi a čisté ukončení po SIGTERM.
 
+Runtime `animal-service` obdobně ověřuje `bash scripts/check-animal-container.sh`: image bez zdrojů
+a cizích služeb, přibalené číselníky plemen, non-root a read-only, migrace při startu, `/ready` 200,
+401 bez identity, odmítnutí `db:reset` mimo osobní databázi a čisté ukončení po SIGTERM.
+
 Backend běží jako non-root Node s produkčními závislostmi, frontend jako Nginx
 s Vite bundlem. Produkční instalace backendu vidí jen manifesty vlastní služby,
 `shared-schemas` a `auth`; manifesty frontendu a infrastruktury by jinak mohly do image
