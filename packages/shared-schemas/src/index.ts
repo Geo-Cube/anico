@@ -64,9 +64,14 @@ export const ReviewDecisionSchema = z.enum([
 ]);
 export type ReviewDecision = z.infer<typeof ReviewDecisionSchema>;
 
+/** Submission revision: 1 for the first submission, +1 for every correction. */
+export const SubmissionRevisionSchema = z.number().int().min(1);
+
 /** One administrator decision; returned requests keep every round. */
 export const VerificationReviewSchema = z.strictObject({
   decision: ReviewDecisionSchema,
+  /** Submission revision the administrator decided about. */
+  revision: SubmissionRevisionSchema,
   reviewedBy: z.string(),
   reviewedAt: z.iso.datetime(),
   reason: z.string().nullable(),
@@ -80,6 +85,8 @@ export const VerificationRequestSchema = z.strictObject({
   submittedAt: z.iso.datetime(),
   /** Latest entry into PENDING (first submission or a corrected resubmission). */
   lastSubmittedAt: z.iso.datetime(),
+  /** Current submission revision; a decision must quote it to prove what was reviewed. */
+  revision: SubmissionRevisionSchema,
   breedingStationCertificate: CertificateFileSchema,
   /** Latest review; null while PENDING. */
   reviewedBy: z.string().nullable(),
@@ -128,17 +135,23 @@ export type SubmitVerificationRequestInput = z.infer<
   typeof SubmitVerificationRequestSchema
 >;
 
-// Admin decision
+// Admin decision. `revision` must equal the revision the administrator reviewed;
+// a newer correction makes the decision stale (409).
 export const DecideVerificationRequestSchema = z.discriminatedUnion(
   'decision',
   [
-    z.strictObject({ decision: z.literal('APPROVED') }),
+    z.strictObject({
+      decision: z.literal('APPROVED'),
+      revision: SubmissionRevisionSchema,
+    }),
     z.strictObject({
       decision: z.literal('REJECTED'),
+      revision: SubmissionRevisionSchema,
       rejectionReason: z.string().trim().min(1).max(500),
     }),
     z.strictObject({
       decision: z.literal('RETURNED'),
+      revision: SubmissionRevisionSchema,
       returnReason: z.string().trim().min(1).max(500),
     }),
   ],

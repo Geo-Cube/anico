@@ -99,6 +99,7 @@ export function inMemoryBreeders(): BreederRepository {
         status: 'PENDING',
         submittedAt: now,
         lastSubmittedAt: now,
+        revision: 1,
         breedingStationCertificate: {
           ...submission.breedingStationCertificate,
         },
@@ -145,6 +146,7 @@ export function inMemoryBreeders(): BreederRepository {
       breeder.breedingStationNumber = resubmission.breedingStationNumber;
       request.status = 'PENDING';
       request.lastSubmittedAt = new Date();
+      request.revision += 1;
       request.reviewedBy = null;
       request.reviewedAt = null;
       request.rejectionReason = null;
@@ -170,7 +172,11 @@ export function inMemoryBreeders(): BreederRepository {
       }
 
       const request = breeder?.verificationRequest;
-      if (!breeder || request?.status !== 'PENDING') {
+      if (
+        !breeder ||
+        request?.status !== 'PENDING' ||
+        request.revision !== decision.revision
+      ) {
         return null;
       }
 
@@ -189,6 +195,7 @@ export function inMemoryBreeders(): BreederRepository {
       request.returnReason = decision.decision === 'RETURNED' ? reason : null;
       request.reviewHistory.push({
         decision: decision.decision,
+        revision: decision.revision,
         reviewedBy: decision.reviewedBy,
         reviewedAt: decision.reviewedAt,
         reason,

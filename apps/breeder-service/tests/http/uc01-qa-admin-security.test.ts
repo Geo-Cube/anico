@@ -30,15 +30,21 @@ const detail = (app: Parameters<typeof request>[0], id: string) =>
 
 describe('UC01-REJ-02 / A3: důvod zamítnutí', () => {
   const badBodies: Array<[string, unknown]> = [
-    ['chybí', { decision: 'REJECTED' }],
-    ['prázdný', { decision: 'REJECTED', rejectionReason: '' }],
-    ['mezery', { decision: 'REJECTED', rejectionReason: '     ' }],
-    ['\\n\\t', { decision: 'REJECTED', rejectionReason: '\n\t \r\n' }],
-    ['NBSP', { decision: 'REJECTED', rejectionReason: '  ' }],
-    ['null', { decision: 'REJECTED', rejectionReason: null }],
-    ['číslo', { decision: 'REJECTED', rejectionReason: 5 }],
-    ['pole', { decision: 'REJECTED', rejectionReason: ['x'] }],
-    ['objekt', { decision: 'REJECTED', rejectionReason: { $ne: '' } }],
+    ['chybí', { decision: 'REJECTED', revision: 1 }],
+    ['prázdný', { decision: 'REJECTED', revision: 1, rejectionReason: '' }],
+    ['mezery', { decision: 'REJECTED', revision: 1, rejectionReason: '     ' }],
+    [
+      '\\n\\t',
+      { decision: 'REJECTED', revision: 1, rejectionReason: '\n\t \r\n' },
+    ],
+    ['NBSP', { decision: 'REJECTED', revision: 1, rejectionReason: '  ' }],
+    ['null', { decision: 'REJECTED', revision: 1, rejectionReason: null }],
+    ['číslo', { decision: 'REJECTED', revision: 1, rejectionReason: 5 }],
+    ['pole', { decision: 'REJECTED', revision: 1, rejectionReason: ['x'] }],
+    [
+      'objekt',
+      { decision: 'REJECTED', revision: 1, rejectionReason: { $ne: '' } },
+    ],
   ];
 
   it.each(badBodies)(
@@ -64,10 +70,12 @@ describe('UC01-REJ-02 / A3: důvod zamítnutí', () => {
     const id = await takeOverAndSubmit(app, 'breeder-1');
     await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'x'.repeat(501),
     }).expect(400);
     const ok = await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: `  ${'x'.repeat(500)}  `,
     });
     expect(ok.status).toBe(200);
@@ -81,6 +89,7 @@ describe('UC01-REJ-02 / A3: důvod zamítnutí', () => {
       'Číslo stanice <script>alert(1)</script> nesedí 🐴 & "uvozovky"';
     await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: reason,
     }).expect(200);
     expect((await me(app)).body.verificationRequest.rejectionReason).toBe(
@@ -101,11 +110,14 @@ describe('UC01-APR-18 podvržení v těle rozhodnutí', () => {
   it.each(extras)('APPROVED + %j -> 400 a nic se nezmění', async (extra) => {
     const { app, notifyDecision } = testApp();
     const id = await takeOverAndSubmit(app, 'breeder-1');
-    await decideRequest(app, id, { decision: 'APPROVED', ...extra }).expect(
-      400,
-    );
+    await decideRequest(app, id, {
+      decision: 'APPROVED',
+      revision: 1,
+      ...extra,
+    }).expect(400);
     await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'důvod',
       ...extra,
     }).expect(400);
@@ -120,7 +132,7 @@ describe('UC01-APR-18 podvržení v těle rozhodnutí', () => {
     const response = await request(app)
       .post(`/verification-requests/${id}/decision?reviewedBy=evil`)
       .set(adminHeaders('admin-42'))
-      .send({ decision: 'APPROVED' });
+      .send({ decision: 'APPROVED', revision: 1 });
     expect(response.status).toBe(200);
     expect(response.body.reviewedBy).toBe('admin-42');
   });
@@ -129,29 +141,33 @@ describe('UC01-APR-18 podvržení v těle rozhodnutí', () => {
 describe('UC01-A4 / APR-16 druhé rozhodnutí', () => {
   it.each([
     [
-      { decision: 'APPROVED' },
-      { decision: 'REJECTED', rejectionReason: 'pozdě' },
+      { decision: 'APPROVED', revision: 1 },
+      { decision: 'REJECTED', revision: 1, rejectionReason: 'pozdě' },
       'APPROVED',
     ],
     [
-      { decision: 'REJECTED', rejectionReason: 'původní důvod' },
-      { decision: 'APPROVED' },
+      { decision: 'REJECTED', revision: 1, rejectionReason: 'původní důvod' },
+      { decision: 'APPROVED', revision: 1 },
       'REJECTED',
     ],
-    [{ decision: 'APPROVED' }, { decision: 'APPROVED' }, 'APPROVED'],
     [
-      { decision: 'RETURNED', returnReason: 'doplňte' },
-      { decision: 'APPROVED' },
+      { decision: 'APPROVED', revision: 1 },
+      { decision: 'APPROVED', revision: 1 },
+      'APPROVED',
+    ],
+    [
+      { decision: 'RETURNED', revision: 1, returnReason: 'doplňte' },
+      { decision: 'APPROVED', revision: 1 },
       'RETURNED',
     ],
     [
-      { decision: 'APPROVED' },
-      { decision: 'RETURNED', returnReason: 'pozdě' },
+      { decision: 'APPROVED', revision: 1 },
+      { decision: 'RETURNED', revision: 1, returnReason: 'pozdě' },
       'APPROVED',
     ],
     [
-      { decision: 'REJECTED', rejectionReason: 'konečné' },
-      { decision: 'RETURNED', returnReason: 'pozdě' },
+      { decision: 'REJECTED', revision: 1, rejectionReason: 'konečné' },
+      { decision: 'RETURNED', revision: 1, returnReason: 'pozdě' },
       'REJECTED',
     ],
   ] as const)(
@@ -194,7 +210,9 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
     const id = await takeOverAndSubmit(app, 'breeder-1', {
       fields: { ...validFields(), emailAddress: 'z.podani@example.test' },
     });
-    await decideRequest(app, id, { decision: 'APPROVED' }).expect(200);
+    await decideRequest(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+      200,
+    );
     expect(seen).toEqual([{ status: 'APPROVED', to: 'z.podani@example.test' }]);
   });
 
@@ -203,6 +221,7 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
     const id = await takeOverAndSubmit(app, 'breeder-1');
     await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'Název stanice nesedí',
     }).expect(200);
     const email = decisionEmail(notifyDecision.mock.calls[0]![0]);
@@ -214,7 +233,9 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
   it('APR-13: e-mail při schválení neobsahuje důvod ani větu o zamítnutí', async () => {
     const { app, notifyDecision } = testApp();
     const id = await takeOverAndSubmit(app, 'breeder-1');
-    await decideRequest(app, id, { decision: 'APPROVED' }).expect(200);
+    await decideRequest(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+      200,
+    );
     const email = decisionEmail(notifyDecision.mock.calls[0]![0]);
     expect(email.text).toMatch(/schválen/);
     expect(email.text).not.toMatch(/konečné|Důvod/);
@@ -236,6 +257,7 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
       const id = await takeOverAndSubmit(app, 'breeder-1');
       const response = await decideRequest(app, id, {
         decision: 'REJECTED',
+        revision: 1,
         rejectionReason: 'Důvod',
       });
       expect(response.status).toBe(200);
@@ -256,6 +278,7 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
     });
     await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'Tajný důvod XYZ',
     }).expect(200);
     expect(log.text()).toContain('Decision notification failed');
@@ -266,15 +289,23 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
   it('A4-02/APR-19: e-mail se nevolá při 400, 404 ani 409', async () => {
     const { app, notifyDecision } = testApp();
     const id = await takeOverAndSubmit(app, 'breeder-1');
-    await decideRequest(app, id, { decision: 'MAYBE' }).expect(400);
-    await decideRequest(app, 'a'.repeat(24), { decision: 'APPROVED' }).expect(
-      404,
+    await decideRequest(app, id, { decision: 'MAYBE', revision: 1 }).expect(
+      400,
     );
+    await decideRequest(app, 'a'.repeat(24), {
+      decision: 'APPROVED',
+      revision: 1,
+    }).expect(404);
     expect(notifyDecision).not.toHaveBeenCalled();
-    await decideRequest(app, id, { decision: 'APPROVED' }).expect(200);
-    await decideRequest(app, id, { decision: 'APPROVED' }, 'admin-2').expect(
-      409,
+    await decideRequest(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+      200,
     );
+    await decideRequest(
+      app,
+      id,
+      { decision: 'APPROVED', revision: 1 },
+      'admin-2',
+    ).expect(409);
     expect(notifyDecision).toHaveBeenCalledTimes(1);
   });
 });
@@ -292,7 +323,10 @@ describe('UC01-APR-20 selhání uložení rozhodnutí', () => {
       }),
     });
     const id = await takeOverAndSubmit(app, 'breeder-1');
-    const response = await decideRequest(app, id, { decision: 'APPROVED' });
+    const response = await decideRequest(app, id, {
+      decision: 'APPROVED',
+      revision: 1,
+    });
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ error: 'Internal server error' });
     expect(response.text).not.toContain('secret');
@@ -302,7 +336,9 @@ describe('UC01-APR-20 selhání uložení rozhodnutí', () => {
       breeder: { isVerified: false },
     });
     fail = false;
-    await decideRequest(app, id, { decision: 'APPROVED' }).expect(200);
+    await decideRequest(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+      200,
+    );
   });
 });
 
@@ -387,7 +423,7 @@ describe('UC01-SEC-03/04 role admin', () => {
         request(app)
           .post(`/verification-requests/${id}/decision`)
           .set(headers)
-          .send({ decision: 'APPROVED' }),
+          .send({ decision: 'APPROVED', revision: 1 }),
       ];
       for (const response of await Promise.all(calls)) {
         expect(response.status).toBe(403);
@@ -414,7 +450,7 @@ describe('UC01-SEC-03/04 role admin', () => {
     await request(app)
       .post(`/verification-requests/${id}/decision`)
       .set(breederHeaders('breeder-1'))
-      .send({ decision: 'APPROVED' })
+      .send({ decision: 'APPROVED', revision: 1 })
       .expect(403);
     expect((await me(app)).body.isVerified).toBe(false);
   });
@@ -494,7 +530,9 @@ describe('UC01-APR-06 id žádosti: nevalidní / neexistující -> 404 bez 500',
       const response = await request(app).get(path).set(adminHeaders());
       expect(response.status, path).toBe(404);
     }
-    await decideRequest(app, bad, { decision: 'APPROVED' }).expect(404);
+    await decideRequest(app, bad, { decision: 'APPROVED', revision: 1 }).expect(
+      404,
+    );
     expect(notifyDecision).not.toHaveBeenCalled();
   });
 
@@ -576,7 +614,11 @@ describe('UC01-SEC-10/11 chyby', () => {
     const big = await request(app)
       .post(url)
       .set(adminHeaders())
-      .send({ decision: 'REJECTED', rejectionReason: 'x'.repeat(40_000) });
+      .send({
+        decision: 'REJECTED',
+        revision: 1,
+        rejectionReason: 'x'.repeat(40_000),
+      });
     expect(big.status).toBe(413);
     expect((await detail(app, id)).body.status).toBe('PENDING');
   });
@@ -598,17 +640,22 @@ describe('UC01-ACC-05 GET /breeders/me ve všech stavech', () => {
     const approvedId = await takeOverAndSubmit(app, 'b-approved');
     const rejectedId = await takeOverAndSubmit(app, 'b-rejected');
     const returnedId = await takeOverAndSubmit(app, 'b-returned');
-    await decideRequest(app, approvedId, { decision: 'APPROVED' }, 'admin-1');
+    await decideRequest(
+      app,
+      approvedId,
+      { decision: 'APPROVED', revision: 1 },
+      'admin-1',
+    );
     await decideRequest(
       app,
       rejectedId,
-      { decision: 'REJECTED', rejectionReason: 'Nesedí' },
+      { decision: 'REJECTED', revision: 1, rejectionReason: 'Nesedí' },
       'admin-2',
     );
     await decideRequest(
       app,
       returnedId,
-      { decision: 'RETURNED', returnReason: 'Doplňte' },
+      { decision: 'RETURNED', revision: 1, returnReason: 'Doplňte' },
       'admin-3',
     );
 
@@ -644,7 +691,12 @@ describe('UC01-ACC-05 GET /breeders/me ve všech stavech', () => {
         rejectionReason: null,
         returnReason: 'Doplňte',
         reviewHistory: [
-          { decision: 'RETURNED', reviewedBy: 'admin-3', reason: 'Doplňte' },
+          {
+            decision: 'RETURNED',
+            revision: 1,
+            reviewedBy: 'admin-3',
+            reason: 'Doplňte',
+          },
         ],
       },
     });
@@ -707,13 +759,18 @@ describe('UC01-APR-03/04/15 fronta, filtr, počty', () => {
     });
     expect(await list()).toEqual(['b1', 'b2', 'b3', 'b5']);
 
-    await decideRequest(app, ids[1]!, { decision: 'APPROVED' }).expect(200);
+    await decideRequest(app, ids[1]!, {
+      decision: 'APPROVED',
+      revision: 1,
+    }).expect(200);
     await decideRequest(app, ids[0]!, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'x',
     }).expect(200);
     await decideRequest(app, ids[3]!, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'y',
     }).expect(200);
 
@@ -771,11 +828,13 @@ describe('UC01-SEC-12 logy nesmí obsahovat data z formulářů, soubor ani dův
     await submit(app, breederHeaders(), { file: null }).expect(400);
     await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'Tajný důvod XYZ',
     }).expect(200);
     const second = await takeOverAndSubmit(app, 'breeder-2');
     await decideRequest(app, second, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Tajná poznámka ABC',
     }).expect(200);
     await submit(app, breederHeaders('breeder-2'), {

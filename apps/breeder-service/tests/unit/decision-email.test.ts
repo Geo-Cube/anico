@@ -22,6 +22,7 @@ function breeder(
           status,
           submittedAt: new Date('2026-01-01T00:00:00Z'),
           lastSubmittedAt: new Date('2026-01-01T00:00:00Z'),
+          revision: 1,
           breedingStationCertificate: { fileName: 'c.pdf', fileReference: 'f' },
           reviewedBy: 'admin',
           reviewedAt: new Date('2026-01-02T00:00:00Z'),

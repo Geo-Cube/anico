@@ -29,6 +29,7 @@ const reviewSchema = new Schema(
       enum: ['RETURNED', 'APPROVED', 'REJECTED'],
       required: true,
     },
+    revision: { type: Number, required: true, min: 1 },
     reviewedBy: { type: String, required: true },
     reviewedAt: { type: Date, required: true },
     reason: { type: String, default: null },
@@ -44,6 +45,7 @@ const verificationRequestSchema = new Schema({
   },
   submittedAt: { type: Date, required: true },
   lastSubmittedAt: { type: Date, required: true },
+  revision: { type: Number, required: true, min: 1 },
   breedingStationCertificate: { type: certificateSchema, required: true },
   reviewedBy: { type: String, default: null },
   reviewedAt: { type: Date, default: null },
@@ -120,6 +122,7 @@ function toDomainVerificationRequest(
     status: request.status,
     submittedAt: request.submittedAt,
     lastSubmittedAt: request.lastSubmittedAt,
+    revision: request.revision,
     breedingStationCertificate: {
       fileName: request.breedingStationCertificate.fileName,
       fileReference: request.breedingStationCertificate.fileReference,
@@ -130,6 +133,7 @@ function toDomainVerificationRequest(
     returnReason: request.returnReason ?? null,
     reviewHistory: request.reviewHistory.map((review) => ({
       decision: review.decision,
+      revision: review.revision,
       reviewedBy: review.reviewedBy,
       reviewedAt: review.reviewedAt,
       reason: review.reason ?? null,
@@ -245,6 +249,7 @@ export function mongooseBreederRepository(
               status: 'PENDING',
               submittedAt: now,
               lastSubmittedAt: now,
+              revision: 1,
               breedingStationCertificate: {
                 fileName: submission.breedingStationCertificate.fileName,
                 fileReference:
@@ -273,8 +278,9 @@ export function mongooseBreederRepository(
       }
       const certificate = resubmission.breedingStationCertificate;
       // jediný atomický zápis: uspěje jen, pokud je právě tato žádost vrácená
-      // a má certifikát, ze kterého oprava vychází; submittedAt a reviewHistory
-      // zůstávají
+      // a má certifikát, ze kterého oprava vychází; revize se zvýší, takže
+      // rozhodnutí o předchozí revizi už nic nezmění; submittedAt
+      // a reviewHistory zůstávají
       const record = await mongooseBreederModel.findOneAndUpdate(
         {
           breederId,
@@ -305,6 +311,7 @@ export function mongooseBreederRepository(
                 }
               : {}),
           },
+          $inc: { 'verificationRequest.revision': 1 },
         },
         { returnDocument: 'after' },
       );
@@ -325,11 +332,13 @@ export function mongooseBreederRepository(
             ? decision.returnReason
             : null;
       // stav, historie a isVerified se mění v jednom příkazu; podmínka PENDING
-      // zaručí, že o každém kole rozhodne nejvýše jeden administrátor
+      // a revize zaručí, že o každém kole rozhodne nejvýše jeden administrátor
+      // a jen o té verzi podání, kterou posoudil
       const record = await mongooseBreederModel.findOneAndUpdate(
         {
           'verificationRequest._id': new Types.ObjectId(requestId),
           'verificationRequest.status': 'PENDING',
+          'verificationRequest.revision': decision.revision,
         },
         {
           $set: {
@@ -345,6 +354,7 @@ export function mongooseBreederRepository(
           $push: {
             'verificationRequest.reviewHistory': {
               decision: decision.decision,
+              revision: decision.revision,
               reviewedBy: decision.reviewedBy,
               reviewedAt: decision.reviewedAt,
               reason,

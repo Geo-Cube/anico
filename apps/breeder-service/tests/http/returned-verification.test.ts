@@ -37,7 +37,11 @@ async function returnedRequest(options: Parameters<typeof testApp>[0] = {}) {
   const returned = await decideRequest(
     context.app,
     id,
-    { decision: 'RETURNED', returnReason: '  Doplňte čitelný certifikát  ' },
+    {
+      decision: 'RETURNED',
+      revision: 1,
+      returnReason: '  Doplňte čitelný certifikát  ',
+    },
     'admin-1',
   );
   expect(returned.status).toBe(200);
@@ -59,6 +63,7 @@ describe('RETURNED: vrácení žádosti k doplnění', () => {
       reviewHistory: [
         {
           decision: 'RETURNED',
+          revision: 1,
           reviewedBy: 'admin-1',
           reviewedAt: returned.body.reviewedAt,
           reason: 'Doplňte čitelný certifikát',
@@ -86,9 +91,9 @@ describe('RETURNED: vrácení žádosti k doplnění', () => {
   it('vrácená žádost nejde znovu rozhodnout (409 s uloženým stavem), e-mail jen jednou', async () => {
     const { app, id, notifyDecision } = await returnedRequest();
     for (const body of [
-      { decision: 'APPROVED' },
-      { decision: 'REJECTED', rejectionReason: 'x' },
-      { decision: 'RETURNED', returnReason: 'znovu' },
+      { decision: 'APPROVED', revision: 1 },
+      { decision: 'REJECTED', revision: 1, rejectionReason: 'x' },
+      { decision: 'RETURNED', revision: 1, returnReason: 'znovu' },
     ]) {
       const response = await decideRequest(app, id, body, 'admin-2');
       expect(response.status).toBe(409);
@@ -106,8 +111,8 @@ describe('RETURNED: vrácení žádosti k doplnění', () => {
     const { app, notifyDecision } = testApp();
     const id = await takeOverAndSubmit(app, 'breeder-1');
     for (const body of [
-      { decision: 'RETURNED' },
-      { decision: 'RETURNED', returnReason: '   ' },
+      { decision: 'RETURNED', revision: 1 },
+      { decision: 'RETURNED', revision: 1, returnReason: '   ' },
     ]) {
       const response = await decideRequest(app, id, body);
       expect(response.status).toBe(400);
@@ -225,8 +230,11 @@ describe('RETURNED: oprava a nové podání', () => {
 
   it.each([
     ['PENDING', null],
-    ['APPROVED', { decision: 'APPROVED' }],
-    ['REJECTED', { decision: 'REJECTED', rejectionReason: 'Konečné' }],
+    ['APPROVED', { decision: 'APPROVED', revision: 1 }],
+    [
+      'REJECTED',
+      { decision: 'REJECTED', revision: 1, rejectionReason: 'Konečné' },
+    ],
   ] as const)(
     'oprava ve stavu %s -> 409 s aktuálním stavem; bez souboru 400 (validace má přednost)',
     async (status, body) => {
@@ -275,7 +283,7 @@ describe('RETURNED: oprava a nové podání', () => {
     await decideRequest(
       app,
       id,
-      { decision: 'RETURNED', returnReason: 'Druhé kolo' },
+      { decision: 'RETURNED', revision: 2, returnReason: 'Druhé kolo' },
       'admin-2',
     ).expect(200);
     await submit(app, breederHeaders(), {
@@ -284,7 +292,7 @@ describe('RETURNED: oprava a nové podání', () => {
     const approved = await decideRequest(
       app,
       id,
-      { decision: 'APPROVED' },
+      { decision: 'APPROVED', revision: 3 },
       'admin-3',
     );
 
@@ -298,18 +306,21 @@ describe('RETURNED: oprava a nové podání', () => {
       reviewHistory: [
         {
           decision: 'RETURNED',
+          revision: 1,
           reviewedBy: 'admin-1',
           reviewedAt: '2026-03-01T08:01:00.000Z',
           reason: 'Doplňte čitelný certifikát',
         },
         {
           decision: 'RETURNED',
+          revision: 2,
           reviewedBy: 'admin-2',
           reviewedAt: '2026-03-01T08:02:00.000Z',
           reason: 'Druhé kolo',
         },
         {
           decision: 'APPROVED',
+          revision: 3,
           reviewedBy: 'admin-3',
           reviewedAt: '2026-03-01T08:03:00.000Z',
           reason: null,

@@ -39,10 +39,16 @@ stateDiagram-v2
   přišlo 409) < 409 (stav neumožňuje podání) < 415 (obsah souboru není PDF/JPEG/PNG). 413 a 400 `Invalid upload`
   vrací už parser multipartu.
 - **Rozhodnutí** `POST /verification-requests/:id/decision` (role `admin` nebo `owner`): `APPROVED`,
-  `REJECTED` + `rejectionReason`, `RETURNED` + `returnReason` (oba po trim 1–500). Jen ze `PENDING` jedním
-  podmíněným `findOneAndUpdate`; druhé rozhodnutí → 409 `{ error: 'Verification already decided', current }`.
-  Každé rozhodnutí se připíše do `reviewHistory` (`decision`, `reviewedBy`, `reviewedAt`, `reason`);
+  `REJECTED` + `rejectionReason`, `RETURNED` + `returnReason` (oba po trim 1–500); každé rozhodnutí povinně nese
+  `revision` – revizi podání, kterou admin posoudil (bez ní 400 `Validation failed`). Jen ze `PENDING` v téže
+  revizi jedním podmíněným `findOneAndUpdate`; rozhodnutá žádost → 409
+  `{ error: 'Verification already decided', current }`, `PENDING` v jiné revizi (mezitím vrácena a opravena) →
+  409 `{ error: 'Verification revision mismatch', current }`; v obou případech bez e-mailu. Každé rozhodnutí se
+  připíše do `reviewHistory` (`decision`, `revision`, `reviewedBy`, `reviewedAt`, `reason`);
   `reviewedBy`/`reviewedAt` nesou poslední rozhodnutí a po opětovném podání jsou v `PENDING` opět `null`.
+- **Revize podání** (ADR-0004 bod 9): `revision` = 1 při prvním podání, oprava `RETURNED` → `PENDING` ji ve
+  stejném zápisu zvýší o 1 (`$inc`), vrácení ji nemění. Optimistická kontrola: rozhodnutí načtené před vrácením
+  a opravou nikdy neschválí novou, dosud neposouzenou verzi podání, přestože `requestId` zůstává.
 - **Časy:** `submittedAt` = první podání (neměnné), `lastSubmittedAt` = poslední vstup do `PENDING`.
 - **Fronta** `GET /verification-requests` bez `?status` vrací jen `PENDING`, s `?status=` žádosti v daném stavu;
   řazení `lastSubmittedAt` vzestupně, limit 500. `GET /verification-requests/summary` →
@@ -57,6 +63,11 @@ stateDiagram-v2
   `lastSubmittedAt` (= `submittedAt`), `returnReason: null` a `reviewHistory` (z dosavadního rozhodnutí), vytvoří
   index `{ verificationRequest.status: 1, verificationRequest.lastSubmittedAt: 1 }` a odstraní starý index nad
   `submittedAt`. Je idempotentní a **musí proběhnout před nasazením** (`db:migrate` nebo `MIGRATE_ON_START=true`).
+- **Migrace** `migrations/20261105160000-verification-submission-revision.mjs` doplní žádostem bez `revision`
+  revizi a položkám historie bez `revision` revizi, o které se rozhodlo: položka na indexu _i_ = 1 + počet
+  `RETURNED` před ní; žádost = 1 + počet `RETURNED` v historii, ve stavu `RETURNED` jen počet `RETURNED` (poslední
+  vrácení ještě nebylo opraveno), nejméně 1. Uložené hodnoty nepřepisuje (idempotentní), **musí proběhnout před
+  nasazením**.
 - **OpenAPI:** dokument se generuje ze Zod schémat (`src/openapi/document.ts`, artefakt `openapi.json`,
   `npm run openapi -w @anico/breeder-service`, drift hlídá `tests/unit/openapi-document.test.ts`). Swagger UI
   `GET /docs` a `GET /openapi.json` jsou veřejné jen mimo produkci; postup v [README služby](../../apps/breeder-service/README.md).
@@ -90,6 +101,7 @@ Mimo rozsah: frontend (K17), WF 04 „Čekající doklady“ (UC-03), US-02+.
 | A1 Zamítnutí, WF 08                     | `decision: REJECTED`                                      | důvod uložen, `isVerified: false`; e-mail s důvodem a „zamítnutí je konečné“             |
 | A3 Chybí důvod                          | tamtéž                                                    | chybí / `""` / `"   "` → 400, dokument beze změny                                        |
 | A4 Jiný admin už rozhodl                | tamtéž                                                    | 409 + `current`; 2 souběžná → `[200, 409]` (int)                                         |
+| Zastaralé rozhodnutí (ADR-0004 bod 9)   | tamtéž, `revision`                                        | po vrácení a opravě rozhodnutí o staré revizi → 409 `revision mismatch`, nic se nezmění  |
 | Zobrazení výsledku, WF 10, 11           | `GET /breeders/me`                                        | všech 5 stavů, důvod u REJECTED/RETURNED, datum rozhodnutí                               |
 | CAF – přístup při každém čtení a zápisu | všechny                                                   | 401 bez identity, 403 bez role, 404 neexistující/cizí                                    |
 
@@ -111,11 +123,12 @@ breeders {
     status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'RETURNED'
     submittedAt: Date               první podání, neměnné; nastavuje adaptér (K4)
     lastSubmittedAt: Date           poslední vstup do PENDING (podání nebo oprava RETURNED)
+    revision: number                1 při podání, +1 při každé opravě RETURNED (ADR-0004 bod 9)
     breedingStationCertificate: { fileName, fileReference }   _id: false
     reviewedBy: string | null, reviewedAt: Date | null      poslední rozhodnutí; v PENDING null
     rejectionReason: string | null  jen u REJECTED
     returnReason: string | null     jen u RETURNED
-    reviewHistory: [{ decision, reviewedBy, reviewedAt, reason }]   všechna kola, nejstarší první
+    reviewHistory: [{ decision, revision, reviewedBy, reviewedAt, reason }]   všechna kola, nejstarší první
   }
 }
 ```
@@ -135,7 +148,7 @@ Adaptér generuje `_id` žádosti explicitně (`new Types.ObjectId()`) v `$set` 
 | Max. 1 žádost za život (R5, A3)           | vnoření + unique `breederId`; filtr `verificationRequest: null` | –                                 | `canSubmitVerificationRequest` (levná 409 předem)     | `null` = neuloženo                         |
 | Oprava jen z RETURNED (ADR-0004)          | filtr `status: 'RETURNED'` + `requestId` + aktuální certifikát  | –                                 | `canSubmitVerificationRequest`, `requiresCertificate` | `null` = neuloženo → 409                   |
 | Profil + žádost společně (R6)             | jeden `findOneAndUpdate`                                        | –                                 | pořadí soubor → DB → kompenzace (§4)                  | –                                          |
-| Rozhodnutí jen z PENDING (R10, ADR-0004)  | filtr `'verificationRequest.status': 'PENDING'`                 | –                                 | `null` → znovu načíst → 404 / 409                     | `$set` + `$push` do `reviewHistory`        |
+| Rozhodnutí jen z PENDING (R10, ADR-0004)  | filtr `status: 'PENDING'` + `revision` z rozhodnutí             | `revision` povinná, int ≥ 1       | `null` → znovu načíst → 404 / 409 (decided/mismatch)  | `$set` + `$push` do `reviewHistory`        |
 | APPROVED ⇔ `isVerified: true` (R8, R9)    | stejný `$set`                                                   | –                                 | –                                                     | `isVerified = decision === 'APPROVED'`     |
 | Důvod povinný u REJECTED a RETURNED       | – (viz §7 ř. 7)                                                 | `trim().min(1).max(500)`, strict  | prázdný po trim → `InvalidDecisionError`              | ukládá jen u daného výsledku, jinak `null` |
 | `hasBreedingStation` vždy `true` (R1)     | default + `$setOnInsert` + `$set` při podání (HDS 5)            | `z.literal(true)`                 | typ `true`                                            | `toDomain` vždy `true`                     |
@@ -144,9 +157,10 @@ Adaptér generuje `_id` žádosti explicitně (`new Types.ObjectId()`) v `$set` 
 | `breederId`, `reviewedBy` jen z identity  | –                                                               | `strictObject` odmítne cizí pole  | vstup use-case je z identity                          | –                                          |
 | Po podání beze změn (R7) – kromě RETURNED | jediná další zapisovací cesta je oprava vrácené žádosti         | –                                 | –                                                     | `provision` jen `$setOnInsert`             |
 
-Původní verze nepotřebovala migraci (servisa nebyla nasazena). Vrácení žádosti (ADR-0004) přidalo migraci
-`20261105110409-verification-return-history.mjs`, která musí proběhnout před nasazením. `init()` vytvoří chybějící
-indexy, ale nezmění existující – pozdější změna definice indexu = nová migrace.
+Původní verze nepotřebovala migraci (servisa nebyla nasazena). Vrácení žádosti (ADR-0004) přidalo migrace
+`20261105110409-verification-return-history.mjs` a `20261105160000-verification-submission-revision.mjs`, které
+musí proběhnout před nasazením. `init()` vytvoří chybějící indexy, ale nezmění existující – pozdější změna
+definice indexu = nová migrace.
 
 ## 3. API kontrakt
 
@@ -180,9 +194,10 @@ Schémata v `@anico/shared-schemas` (K15, existující exporty beze změny názv
   `/verification-requests/%E0`) → 400, ne 500; 500 `{ error: 'Internal server error' }` bez detailů.
   Texty `error` jsou konstanty na jednom místě.
 - Mapování doménových chyb jen v jednom helperu modulu (`http/domain-errors.ts`, K7): `BreederNotFoundError` a
-  `VerificationRequestNotFoundError` → 404, `VerificationAlreadySubmittedError` a
-  `VerificationAlreadyDecidedError` → 409 + `current`, `CertificateRequiredError` → 400 `Validation failed`,
-  `InvalidCertificateError` → 415, `InvalidDecisionError` → 400. Ostatní → `next(err)` → centrální 500.
+  `VerificationRequestNotFoundError` → 404, `VerificationAlreadySubmittedError`,
+  `VerificationAlreadyDecidedError` a `VerificationRevisionMismatchError` → 409 + `current`,
+  `CertificateRequiredError` → 400 `Validation failed`, `InvalidCertificateError` → 415, `InvalidDecisionError`
+  → 400. Ostatní → `next(err)` → centrální 500.
 - `current` i úspěšné odpovědi staví „presentery“ v `http/` (mapper + `files.getMetadata` + `Schema.parse`).
   Chybějící metadata = chyba konzistence → 500 + `logger.error` s `fileReference` (K3).
 - Fronta (K16, ADR-0004): bez `status` jen `PENDING`, s `status` žádosti v daném stavu; řazení `lastSubmittedAt`
@@ -228,11 +243,14 @@ Každá „společná“ změna je jeden atomický zápis do jednoho dokumentu (
 - **Rozhodnutí** (`application/decide-verification-request.ts`): REJECTED/RETURNED s prázdným důvodem po trim →
   `InvalidDecisionError`; jinak `decideVerification(requestId, record)`, kde `record` = rozhodnutí +
   `reviewedBy: admin.id` + `reviewedAt: now()`, s filtrem `'verificationRequest._id'` +
-  `'verificationRequest.status': 'PENDING'`, jedním `$set` (status, `reviewed*`, `rejectionReason` jen u REJECTED,
-  `returnReason` jen u RETURNED, `isVerified`) a `$push` do `reviewHistory`. Nevalidní ObjectId → `null` bez
-  `CastError`. `null` → `findByVerificationRequestId` → 404 / 409 (A4). Druhý admin tedy nikdy nepřepíše výsledek
-  a dostane uložený stav. Podmíněný zápis zvolen místo zámku: Mongo nemá explicitní zámek dokumentu
-  (obdobu `SELECT … FOR UPDATE`) mimo transakce a podmínka ve filtru je jednodušší i bez replica setu.
+  `'verificationRequest.status': 'PENDING'` + `'verificationRequest.revision': revision`, jedním `$set` (status,
+  `reviewed*`, `rejectionReason` jen u REJECTED, `returnReason` jen u RETURNED, `isVerified`) a `$push` do
+  `reviewHistory` (i s revizí). Nevalidní ObjectId → `null` bez `CastError`. `null` →
+  `findByVerificationRequestId` → 404, není `PENDING` → 409 `VerificationAlreadyDecidedError` (A4), `PENDING`
+  v jiné revizi → 409 `VerificationRevisionMismatchError`. Druhý admin tedy nikdy nepřepíše výsledek ani
+  neschválí opravu, kterou neviděl, a dostane uložený stav. Podmíněný zápis zvolen místo zámku: Mongo nemá
+  explicitní zámek dokumentu (obdobu `SELECT … FOR UPDATE`) mimo transakce a podmínka ve filtru je jednodušší
+  i bez replica setu.
 - **E-mail** (K12, ADR-0003): jen vítězný požadavek, až po vrácení uloženého dokumentu; `try/catch` →
   `logger.warn({ err, breederId }, …)`, odpověď 200 se nemění. Při 409/404 se nic neposílá.
 - **In-memory adaptéry** musí mít stejné podmínky i sémantiku: vracet kopie (`structuredClone`), ne sdílené

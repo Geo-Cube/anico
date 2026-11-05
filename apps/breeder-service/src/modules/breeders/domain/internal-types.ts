@@ -4,10 +4,12 @@ export type VerificationStatus =
 
 export type AccountState = 'NOT_SUBMITTED' | VerificationStatus;
 
-export type Decision =
+/** `revision` = revize podání, o které administrátor rozhodl (optimistická kontrola). */
+export type Decision = { revision: number } & (
   | { decision: 'APPROVED' }
   | { decision: 'REJECTED'; rejectionReason: string }
-  | { decision: 'RETURNED'; returnReason: string };
+  | { decision: 'RETURNED'; returnReason: string }
+);
 
 export type ReviewDecision = Decision['decision'];
 

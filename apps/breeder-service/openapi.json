@@ -354,7 +354,7 @@
         "tags": ["verification-admin"],
         "operationId": "decideVerificationRequest",
         "summary": "Rozhodnout o žádosti",
-        "description": "Vyžaduje roli `admin` nebo `owner`. Rozhodnout lze jen žádost ve stavu `PENDING` (atomicky). `APPROVED` ověří chovatele; `REJECTED` je konečné a vyžaduje `rejectionReason`; `RETURNED` vrátí žádost k doplnění s `returnReason` a chovatel ji může opravit a znovu odeslat. Rozhodnutí se zapíše do `reviewHistory` a chovatel dostane e-mail (selhání e-mailu rozhodnutí nevrací). Data chovatele administrátor needituje.",
+        "description": "Vyžaduje roli `admin` nebo `owner`. Rozhodnout lze jen žádost ve stavu `PENDING` (atomicky). `APPROVED` ověří chovatele; `REJECTED` je konečné a vyžaduje `rejectionReason`; `RETURNED` vrátí žádost k doplnění s `returnReason` a chovatel ji může opravit a znovu odeslat. Každé rozhodnutí musí uvést `revision` – revizi podání, kterou administrátor posoudil (`revision` z detailu nebo fronty); uloží se jen, pokud je žádost stále v této revizi, takže rozhodnutí načtené před opravou chovatele nikdy neschválí novou, dosud neposouzenou verzi. Rozhodnutí se zapíše do `reviewHistory` i s revizí a chovatel dostane e-mail (selhání e-mailu rozhodnutí nevrací). Data chovatele administrátor needituje.",
         "security": [{ "identity": [] }],
         "parameters": [
           {
@@ -387,7 +387,7 @@
             }
           },
           "400": {
-            "description": "Neplatné rozhodnutí nebo chybějící/prázdný důvod; nevalidní JSON vrací `{\"error\":\"Invalid JSON\"}`.",
+            "description": "Neplatné rozhodnutí, chybějící `revision` nebo chybějící/prázdný důvod; nevalidní JSON vrací `{\"error\":\"Invalid JSON\"}`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -403,7 +403,7 @@
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": {
-            "description": "Žádost už není ve stavu `PENDING`; `current` je její aktuální stav.",
+            "description": "Rozhodnutí se neuložilo, `current` je aktuální stav žádosti: `Verification already decided`, pokud žádost už není `PENDING`; `Verification revision mismatch`, pokud je `PENDING` v jiné revizi, než uvádí `revision` (mezitím vrácena a opravena). E-mail se neodešle.",
             "content": {
               "application/json": {
                 "schema": {
@@ -433,15 +433,28 @@
         "type": "string",
         "enum": ["RETURNED", "APPROVED", "REJECTED"]
       },
+      "SubmissionRevision": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "description": "Revize podání: 1 při prvním podání, +1 při každé opravě vrácené žádosti (`RETURNED` -> `PENDING`). Rozhodnutí ji musí uvést (optimistická kontrola): o jiné revizi se nerozhodne."
+      },
       "VerificationReview": {
         "type": "object",
         "properties": {
           "decision": { "$ref": "#/components/schemas/ReviewDecision" },
+          "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
           "reviewedBy": { "type": "string" },
           "reviewedAt": { "type": "string", "format": "date-time" },
           "reason": { "type": ["string", "null"] }
         },
-        "required": ["decision", "reviewedBy", "reviewedAt", "reason"],
+        "required": [
+          "decision",
+          "revision",
+          "reviewedBy",
+          "reviewedAt",
+          "reason"
+        ],
         "additionalProperties": false
       },
       "CertificateFile": {
@@ -463,6 +476,7 @@
           "status": { "$ref": "#/components/schemas/VerificationStatus" },
           "submittedAt": { "type": "string", "format": "date-time" },
           "lastSubmittedAt": { "type": "string", "format": "date-time" },
+          "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
           "breedingStationCertificate": {
             "$ref": "#/components/schemas/CertificateFile"
           },
@@ -485,6 +499,7 @@
           "status",
           "submittedAt",
           "lastSubmittedAt",
+          "revision",
           "breedingStationCertificate",
           "reviewedBy",
           "reviewedAt",
@@ -609,35 +624,38 @@
           {
             "type": "object",
             "properties": {
-              "decision": { "type": "string", "const": "APPROVED" }
+              "decision": { "type": "string", "const": "APPROVED" },
+              "revision": { "$ref": "#/components/schemas/SubmissionRevision" }
             },
-            "required": ["decision"],
+            "required": ["decision", "revision"],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
               "decision": { "type": "string", "const": "REJECTED" },
+              "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
               "rejectionReason": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 500
               }
             },
-            "required": ["decision", "rejectionReason"],
+            "required": ["decision", "revision", "rejectionReason"],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
               "decision": { "type": "string", "const": "RETURNED" },
+              "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
               "returnReason": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 500
               }
             },
-            "required": ["decision", "returnReason"],
+            "required": ["decision", "revision", "returnReason"],
             "additionalProperties": false
           }
         ]
@@ -682,6 +700,7 @@
           "status": { "$ref": "#/components/schemas/VerificationStatus" },
           "submittedAt": { "type": "string", "format": "date-time" },
           "lastSubmittedAt": { "type": "string", "format": "date-time" },
+          "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
           "breedingStationCertificate": {
             "$ref": "#/components/schemas/CertificateFile"
           },
@@ -705,6 +724,7 @@
           "status",
           "submittedAt",
           "lastSubmittedAt",
+          "revision",
           "breedingStationCertificate",
           "reviewedBy",
           "reviewedAt",
@@ -807,7 +827,14 @@
       "AdminVerificationRequestConflict": {
         "type": "object",
         "properties": {
-          "error": { "type": "string" },
+          "error": {
+            "type": "string",
+            "enum": [
+              "Verification already decided",
+              "Verification revision mismatch"
+            ],
+            "description": "`Verification already decided`: žádost už není `PENDING`. `Verification revision mismatch`: žádost je `PENDING`, ale v jiné revizi, než o které administrátor rozhodl (mezitím byla vrácena a opravena) – je třeba posoudit `current`."
+          },
           "current": { "$ref": "#/components/schemas/AdminVerificationRequest" }
         },
         "required": ["error", "current"],

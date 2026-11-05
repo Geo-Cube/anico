@@ -49,10 +49,13 @@ doplň vlastní opakovatelné ukázkové záznamy. Pravidla zámků, retry a nem
 [databázový postup](../../docs/DATABAZE.md). DB příkazy zde spouštěj s `-w @anico/breeder-service`; vzdálené účty
 a přístup pro tuto službu nejsou samotným přidáním workspace zřízené.
 
-**Povinná migrace před nasazením:** `20261105110409-verification-return-history.mjs` doplní existujícím žádostem
+**Povinné migrace před nasazením:** `20261105110409-verification-return-history.mjs` doplní existujícím žádostem
 `lastSubmittedAt`, `returnReason` a `reviewHistory` a nahradí index fronty indexem
-`{ verificationRequest.status, verificationRequest.lastSubmittedAt }`. Je idempotentní. Spusť ji `db:migrate`, nebo
-ji provede start s `MIGRATE_ON_START=true` (služba bez úspěšné migrace nenastartuje).
+`{ verificationRequest.status, verificationRequest.lastSubmittedAt }`;
+`20261105160000-verification-submission-revision.mjs` doplní `revision` žádostem i položkám historie (položka na
+indexu _i_ = 1 + počet `RETURNED` před ní, žádost = 1 + počet `RETURNED`, ve stavu `RETURNED` jen počet
+`RETURNED`). Obě jsou idempotentní. Spusť je `db:migrate`, nebo je provede start s `MIGRATE_ON_START=true` (služba
+bez úspěšné migrace nenastartuje).
 
 Správce musí před vzdáleným vývojem založit účty omezené na databázi této služby.
 Konvence pro osobní DB je `anico_breeder_LOGIN`, účet `dev_LOGIN` a vlastní
@@ -83,16 +86,16 @@ Stavy: `NOT_SUBMITTED` → `PENDING` → `APPROVED` | `REJECTED` (konečné) | `
 `PENDING`. Podrobnosti a diagram: [návrh UC-01 §0](../../docs/design/uc-01-overeni-chovatele.md),
 rozhodnutí o vrácení: [ADR-0004](../../docs/adr/0004-vraceni-zadosti-k-doplneni.md).
 
-| Metoda a cesta                                      | Role         | Popis                                                                                                                                       |
-| --------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /breeders/me`                                  | přihlášený   | Převzetí účtu (idempotentní) a stav ověření                                                                                                 |
-| `POST /breeders/me/verification-request`            | přihlášený   | Podání nebo oprava vrácené žádosti, `multipart/form-data`, soubor v poli `breedingStationCertificate` (PDF/JPEG/PNG, max. 5 MB)             |
-| `GET /breeders/me/verification-request/certificate` | přihlášený   | Stažení vlastního certifikátu                                                                                                               |
-| `GET /verification-requests/summary`                | admin, owner | Počty `{ pending, returned, approved, rejected }`                                                                                           |
-| `GET /verification-requests?status=`                | admin, owner | Fronta: bez `status` jen `PENDING`, jinak daný stav; řazení `lastSubmittedAt` vzestupně, max. 500                                           |
-| `GET /verification-requests/:id`                    | admin, owner | Detail žádosti vč. `reviewHistory`                                                                                                          |
-| `GET /verification-requests/:id/certificate`        | admin, owner | Stažení certifikátu                                                                                                                         |
-| `POST /verification-requests/:id/decision`          | admin, owner | `{ decision: 'APPROVED' }`, `{ decision: 'REJECTED', rejectionReason }` nebo `{ decision: 'RETURNED', returnReason }` (důvod po trim 1–500) |
+| Metoda a cesta                                      | Role         | Popis                                                                                                                                                                     |
+| --------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /breeders/me`                                  | přihlášený   | Převzetí účtu (idempotentní) a stav ověření                                                                                                                               |
+| `POST /breeders/me/verification-request`            | přihlášený   | Podání nebo oprava vrácené žádosti, `multipart/form-data`, soubor v poli `breedingStationCertificate` (PDF/JPEG/PNG, max. 5 MB)                                           |
+| `GET /breeders/me/verification-request/certificate` | přihlášený   | Stažení vlastního certifikátu                                                                                                                                             |
+| `GET /verification-requests/summary`                | admin, owner | Počty `{ pending, returned, approved, rejected }`                                                                                                                         |
+| `GET /verification-requests?status=`                | admin, owner | Fronta: bez `status` jen `PENDING`, jinak daný stav; řazení `lastSubmittedAt` vzestupně, max. 500                                                                         |
+| `GET /verification-requests/:id`                    | admin, owner | Detail žádosti vč. `reviewHistory`                                                                                                                                        |
+| `GET /verification-requests/:id/certificate`        | admin, owner | Stažení certifikátu                                                                                                                                                       |
+| `POST /verification-requests/:id/decision`          | admin, owner | `{ decision: 'APPROVED', revision }`, `{ decision: 'REJECTED', revision, rejectionReason }` nebo `{ decision: 'RETURNED', revision, returnReason }` (důvod po trim 1–500) |
 
 Pravidla:
 
@@ -101,9 +104,13 @@ Pravidla:
 - Certifikát je povinný kromě opravy `RETURNED`: bez souboru zůstává původní, nový soubor nahradí starý a starý se
   smaže až po úspěšném zápisu.
 - Pořadí chyb podání: 400 (nevalidní pole nebo chybějící povinný soubor) < 409 (stav) < 415 (obsah souboru).
-- Rozhodnutí jen z `PENDING`, atomicky; druhé rozhodnutí → 409 `{ error, current: AdminVerificationRequest }`.
-  Každé rozhodnutí se připíše do `reviewHistory`; `reviewedBy`/`reviewedAt` jsou poslední rozhodnutí.
-  `submittedAt` je první podání, `lastSubmittedAt` poslední.
+- Rozhodnutí jen z `PENDING`, atomicky; druhé rozhodnutí → 409 `{ error: 'Verification already decided', current }`.
+  Každé rozhodnutí se připíše do `reviewHistory` (i s `revision`); `reviewedBy`/`reviewedAt` jsou poslední
+  rozhodnutí. `submittedAt` je první podání, `lastSubmittedAt` poslední.
+- Optimistická kontrola revize: žádost nese `revision` (1 při podání, +1 při každé opravě `RETURNED` → `PENDING`)
+  a rozhodnutí musí uvést revizi, kterou admin posoudil (bez ní 400). Pokud byla žádost mezitím vrácena a opravena,
+  rozhodnutí o staré revizi vrací 409 `{ error: 'Verification revision mismatch', current }` a nic nezmění –
+  admin posoudí `current` a rozhodne znovu s jeho `revision`.
 
 Chyby mají tvar `{ error }`, validace `{ error: 'Validation failed', issues }`, konflikt (409) `{ error, current }`.
 Kontrakty jsou v `@anico/shared-schemas`.

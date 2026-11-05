@@ -207,6 +207,21 @@ describe('OpenAPI document', () => {
     ).toEqual({
       $ref: '#/components/schemas/AdminVerificationRequestConflict',
     });
+    expect(
+      document.components.schemas.AdminVerificationRequestConflict.properties
+        .error.enum,
+    ).toEqual([
+      'Verification already decided',
+      'Verification revision mismatch',
+    ]);
+    // každá varianta rozhodnutí vyžaduje revizi podání
+    for (const variant of document.components.schemas.DecideVerificationRequest
+      .oneOf) {
+      expect(variant.required).toContain('revision');
+    }
+    expect(document.components.schemas.VerificationRequest.required).toContain(
+      'revision',
+    );
 
     for (const path of [
       '/breeders/me/verification-request/certificate',

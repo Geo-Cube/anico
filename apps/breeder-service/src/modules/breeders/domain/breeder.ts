@@ -9,6 +9,8 @@ import type {
 /** Jedno rozhodnutí administrátora; vrácená žádost si drží všechna kola. */
 export interface VerificationReview {
   decision: ReviewDecision;
+  /** Revize podání, o které administrátor rozhodl. */
+  revision: number;
   reviewedBy: string;
   reviewedAt: Date;
   reason: string | null;
@@ -21,6 +23,11 @@ export interface VerificationRequest {
   submittedAt: Date;
   /** Poslední vstup do PENDING (první podání nebo oprava vrácené žádosti). */
   lastSubmittedAt: Date;
+  /**
+   * Revize podání: 1 při prvním podání, +1 při každé opravě RETURNED -> PENDING.
+   * Rozhodnutí ji musí uvést, takže staré rozhodnutí neschválí novou opravu.
+   */
+  revision: number;
   breedingStationCertificate: StoredFile;
   /** Poslední rozhodnutí; null ve stavu PENDING. */
   reviewedBy: string | null;

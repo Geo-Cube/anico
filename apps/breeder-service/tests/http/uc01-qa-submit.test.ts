@@ -135,6 +135,7 @@ describe('UC01-A3 a pořadí kontrol (koordinátor: 400 < 409 < 415)', () => {
     const id = await takeOverAndSubmit(app, 'breeder-1');
     await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'Název stanice nesedí s certifikátem',
     }).expect(200);
     const before = await profileOf(breeders);
@@ -158,7 +159,9 @@ describe('UC01-A3 a pořadí kontrol (koordinátor: 400 < 409 < 415)', () => {
   it('UC01-A3-03: po APPROVED -> 409, isVerified zůstane true, data stanice nepřepsána', async () => {
     const { app, breeders } = testApp();
     const id = await takeOverAndSubmit(app, 'breeder-1');
-    await decideRequest(app, id, { decision: 'APPROVED' }).expect(200);
+    await decideRequest(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+      200,
+    );
     const response = await submit(app, breederHeaders(), {
       fields: { ...validFields(), breedingStationName: 'Jiná stanice' },
     });

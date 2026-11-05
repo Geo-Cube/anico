@@ -5,6 +5,7 @@ import {
   InvalidDecisionError,
   VerificationAlreadyDecidedError,
   VerificationRequestNotFoundError,
+  VerificationRevisionMismatchError,
 } from '../../src/modules/breeders/domain/errors.js';
 import { PDF } from '../support/api.js';
 import { inMemoryBreeders, inMemoryFiles } from '../support/in-memory.js';
@@ -56,7 +57,7 @@ describe('decideVerificationRequest', () => {
     const { decide, requestId, notifier, events } = await setup();
     const result = await decide(
       requestId,
-      { decision: 'APPROVED' },
+      { decision: 'APPROVED', revision: 1 },
       { id: 'admin-1' },
     );
 
@@ -70,6 +71,7 @@ describe('decideVerificationRequest', () => {
       reviewHistory: [
         {
           decision: 'APPROVED',
+          revision: 1,
           reviewedBy: 'admin-1',
           reviewedAt: NOW,
           reason: null,
@@ -84,7 +86,11 @@ describe('decideVerificationRequest', () => {
     const { decide, requestId } = await setup();
     const result = await decide(
       requestId,
-      { decision: 'REJECTED', rejectionReason: '  Nesedí název  ' },
+      {
+        decision: 'REJECTED',
+        revision: 1,
+        rejectionReason: '  Nesedí název  ',
+      },
       { id: 'admin-2' },
     );
     expect(result.isVerified).toBe(false);
@@ -96,6 +102,7 @@ describe('decideVerificationRequest', () => {
       reviewHistory: [
         {
           decision: 'REJECTED',
+          revision: 1,
           reviewedBy: 'admin-2',
           reviewedAt: NOW,
           reason: 'Nesedí název',
@@ -108,7 +115,11 @@ describe('decideVerificationRequest', () => {
     const { decide, requestId, events } = await setup();
     const result = await decide(
       requestId,
-      { decision: 'RETURNED', returnReason: '  Doplňte číslo stanice  ' },
+      {
+        decision: 'RETURNED',
+        revision: 1,
+        returnReason: '  Doplňte číslo stanice  ',
+      },
       { id: 'admin-2' },
     );
     expect(result.isVerified).toBe(false);
@@ -121,6 +132,7 @@ describe('decideVerificationRequest', () => {
       reviewHistory: [
         {
           decision: 'RETURNED',
+          revision: 1,
           reviewedBy: 'admin-2',
           reviewedAt: NOW,
           reason: 'Doplňte číslo stanice',
@@ -134,19 +146,19 @@ describe('decideVerificationRequest', () => {
     const { decide, requestId, resubmit } = await setup();
     await decide(
       requestId,
-      { decision: 'RETURNED', returnReason: 'první' },
+      { decision: 'RETURNED', revision: 1, returnReason: 'první' },
       { id: 'admin-1' },
     );
     await resubmit();
     await decide(
       requestId,
-      { decision: 'RETURNED', returnReason: 'druhý' },
+      { decision: 'RETURNED', revision: 2, returnReason: 'druhý' },
       { id: 'admin-2' },
     );
     await resubmit();
     const result = await decide(
       requestId,
-      { decision: 'APPROVED' },
+      { decision: 'APPROVED', revision: 3 },
       { id: 'admin-3' },
     );
 
@@ -155,19 +167,61 @@ describe('decideVerificationRequest', () => {
       requestId,
       status: 'APPROVED',
       reviewedBy: 'admin-3',
+      revision: 3,
       returnReason: null,
     });
     expect(
       result.verificationRequest!.reviewHistory.map((review) => [
         review.decision,
+        review.revision,
         review.reviewedBy,
         review.reason,
       ]),
     ).toEqual([
-      ['RETURNED', 'admin-1', 'první'],
-      ['RETURNED', 'admin-2', 'druhý'],
-      ['APPROVED', 'admin-3', null],
+      ['RETURNED', 1, 'admin-1', 'první'],
+      ['RETURNED', 2, 'admin-2', 'druhý'],
+      ['APPROVED', 3, 'admin-3', null],
     ]);
+  });
+
+  it('refuses a decision about an older revision after a correction, without notifying', async () => {
+    const { decide, requestId, resubmit, breeders, notifier } = await setup();
+    await decide(
+      requestId,
+      { decision: 'RETURNED', revision: 1, returnReason: 'Doplňte' },
+      { id: 'admin-2' },
+    );
+    await resubmit();
+
+    const error = await decide(
+      requestId,
+      { decision: 'APPROVED', revision: 1 },
+      { id: 'admin-1' },
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(VerificationRevisionMismatchError);
+    expect(
+      (error as VerificationRevisionMismatchError).breeder.verificationRequest,
+    ).toMatchObject({ status: 'PENDING', revision: 2 });
+    const stored = await breeders.findByBreederId('breeder-1');
+    expect(stored?.isVerified).toBe(false);
+    expect(stored?.verificationRequest?.reviewHistory).toHaveLength(1);
+    expect(notifier.notifyDecision).toHaveBeenCalledOnce(); // jen vrácení
+  });
+
+  it('refuses an unknown higher revision as a revision mismatch', async () => {
+    const { decide, requestId, breeders, notifier } = await setup();
+    await expect(
+      decide(
+        requestId,
+        { decision: 'APPROVED', revision: 2 },
+        { id: 'admin-1' },
+      ),
+    ).rejects.toThrow(VerificationRevisionMismatchError);
+    expect(
+      (await breeders.findByBreederId('breeder-1'))?.verificationRequest,
+    ).toMatchObject({ status: 'PENDING', revision: 1, reviewHistory: [] });
+    expect(notifier.notifyDecision).not.toHaveBeenCalled();
   });
 
   it.each(['', '   ', '\n\t'])(
@@ -177,7 +231,7 @@ describe('decideVerificationRequest', () => {
       await expect(
         decide(
           requestId,
-          { decision: 'RETURNED', returnReason: reason },
+          { decision: 'RETURNED', revision: 1, returnReason: reason },
           { id: 'admin-1' },
         ),
       ).rejects.toThrow('Return reason is required');
@@ -194,13 +248,13 @@ describe('decideVerificationRequest', () => {
     const { decide, requestId, notifier } = await setup();
     await decide(
       requestId,
-      { decision: 'RETURNED', returnReason: 'Doplňte' },
+      { decision: 'RETURNED', revision: 1, returnReason: 'Doplňte' },
       { id: 'admin-1' },
     );
 
     for (const decision of [
-      { decision: 'APPROVED' as const },
-      { decision: 'RETURNED' as const, returnReason: 'znovu' },
+      { decision: 'APPROVED' as const, revision: 1 },
+      { decision: 'RETURNED' as const, revision: 1, returnReason: 'znovu' },
     ]) {
       const error = await decide(requestId, decision, { id: 'admin-2' }).catch(
         (e: unknown) => e,
@@ -221,7 +275,7 @@ describe('decideVerificationRequest', () => {
       await expect(
         decide(
           requestId,
-          { decision: 'REJECTED', rejectionReason: reason },
+          { decision: 'REJECTED', revision: 1, rejectionReason: reason },
           { id: 'admin-1' },
         ),
       ).rejects.toThrow(InvalidDecisionError);
@@ -233,11 +287,15 @@ describe('decideVerificationRequest', () => {
 
   it('refuses a second decision with the stored result and does not notify again', async () => {
     const { decide, requestId, notifier } = await setup();
-    await decide(requestId, { decision: 'APPROVED' }, { id: 'admin-1' });
+    await decide(
+      requestId,
+      { decision: 'APPROVED', revision: 1 },
+      { id: 'admin-1' },
+    );
 
     const error = await decide(
       requestId,
-      { decision: 'REJECTED', rejectionReason: 'pozdě' },
+      { decision: 'REJECTED', revision: 1, rejectionReason: 'pozdě' },
       { id: 'admin-2' },
     ).catch((e: unknown) => e);
 
@@ -254,7 +312,11 @@ describe('decideVerificationRequest', () => {
   it('fails with not found for an unknown request', async () => {
     const { decide, notifier } = await setup();
     await expect(
-      decide('0'.repeat(24), { decision: 'APPROVED' }, { id: 'admin-1' }),
+      decide(
+        '0'.repeat(24),
+        { decision: 'APPROVED', revision: 1 },
+        { id: 'admin-1' },
+      ),
     ).rejects.toThrow(VerificationRequestNotFoundError);
     expect(notifier.notifyDecision).not.toHaveBeenCalled();
   });
@@ -265,7 +327,7 @@ describe('decideVerificationRequest', () => {
 
     const result = await decide(
       requestId,
-      { decision: 'APPROVED' },
+      { decision: 'APPROVED', revision: 1 },
       { id: 'admin-1' },
     );
 
@@ -285,7 +347,11 @@ describe('decideVerificationRequest', () => {
       new Error('db down'),
     );
     await expect(
-      decide(requestId, { decision: 'APPROVED' }, { id: 'admin-1' }),
+      decide(
+        requestId,
+        { decision: 'APPROVED', revision: 1 },
+        { id: 'admin-1' },
+      ),
     ).rejects.toThrow('db down');
     expect(notifier.notifyDecision).not.toHaveBeenCalled();
     expect((await breeders.findByBreederId('breeder-1'))?.isVerified).toBe(

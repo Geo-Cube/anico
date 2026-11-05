@@ -122,6 +122,7 @@ describe('inMemoryBreeders', () => {
 
     const decided = await repository.decideVerification(requestId, {
       decision: 'APPROVED',
+      revision: 1,
       reviewedBy: 'reviewer-123',
       reviewedAt,
     });
@@ -139,6 +140,7 @@ describe('inMemoryBreeders', () => {
 
     const decided = await repository.decideVerification(requestId, {
       decision: 'REJECTED',
+      revision: 1,
       reviewedBy: 'reviewer-123',
       reviewedAt,
       rejectionReason: 'Invalid certificate',
@@ -158,12 +160,14 @@ describe('inMemoryBreeders', () => {
     const { repository, requestId } = await pendingRequest();
     await repository.decideVerification(requestId, {
       decision: 'APPROVED',
+      revision: 1,
       reviewedBy: 'reviewer-123',
       reviewedAt: new Date(),
     });
 
     const secondAttempt = await repository.decideVerification(requestId, {
       decision: 'REJECTED',
+      revision: 1,
       reviewedBy: 'reviewer-456',
       reviewedAt: new Date(),
       rejectionReason: 'Invalid certificate',
@@ -174,6 +178,25 @@ describe('inMemoryBreeders', () => {
     expect(found?.verificationRequest?.status).toBe('APPROVED');
     expect(found?.isVerified).toBe(true);
     expect(found?.verificationRequest?.reviewedBy).toBe('reviewer-123');
+  });
+
+  it('decides only the current revision', async () => {
+    const { repository, requestId } = await pendingRequest();
+    const approve = (revision: number) =>
+      repository.decideVerification(requestId, {
+        decision: 'APPROVED',
+        revision,
+        reviewedBy: 'reviewer-123',
+        reviewedAt: new Date(),
+      });
+
+    expect(await approve(2)).toBeNull();
+    const decided = await approve(1);
+    expect(decided?.verificationRequest).toMatchObject({
+      status: 'APPROVED',
+      revision: 1,
+      reviewHistory: [{ decision: 'APPROVED', revision: 1 }],
+    });
   });
 
   it('lists only breeders whose request has the given status', async () => {
@@ -191,6 +214,7 @@ describe('inMemoryBreeders', () => {
       .verificationRequest!.requestId;
     await repository.decideVerification(requestIdPetr, {
       decision: 'APPROVED',
+      revision: 1,
       reviewedBy: 'reviewer-789',
       reviewedAt: new Date(),
     });
@@ -230,11 +254,13 @@ describe('inMemoryBreeders', () => {
         .requestId;
     await repository.decideVerification(await requestId('user-456'), {
       decision: 'APPROVED',
+      revision: 1,
       reviewedBy: 'reviewer-789',
       reviewedAt: new Date(),
     });
     await repository.decideVerification(await requestId('user-789'), {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Doplňte',
       reviewedBy: 'reviewer-789',
       reviewedAt: new Date(),
@@ -274,6 +300,7 @@ describe('inMemoryBreeders.resubmitVerification', () => {
     expect(await resubmit()).toBeNull(); // PENDING
     await repository.decideVerification(requestId, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Doplňte',
       reviewedBy: 'admin-1',
       reviewedAt: new Date(),
@@ -286,6 +313,7 @@ describe('inMemoryBreeders.resubmitVerification', () => {
     expect(corrected?.lastName).toBe('Opravený');
     expect(corrected?.verificationRequest).toMatchObject({
       status: 'PENDING',
+      revision: 2,
       returnReason: null,
       reviewedBy: null,
       reviewedAt: null,
@@ -299,6 +327,7 @@ describe('inMemoryBreeders.resubmitVerification', () => {
     const { repository, requestId } = await pendingRequest();
     await repository.decideVerification(requestId, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Doplňte',
       reviewedBy: 'admin-1',
       reviewedAt: new Date(),

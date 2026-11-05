@@ -8,6 +8,7 @@ import {
   ObjectIdSchema,
   ReviewDecisionSchema,
   ServiceHealthResponseSchema,
+  SubmissionRevisionSchema,
   SubmitVerificationRequestSchema,
   VerificationRequestListSchema,
   VerificationRequestSchema,
@@ -42,7 +43,11 @@ const MyAccountConflictSchema = z.strictObject({
   current: MyAccountSchema,
 });
 const AdminVerificationRequestConflictSchema = z.strictObject({
-  error: z.string(),
+  error: z
+    .enum(['Verification already decided', 'Verification revision mismatch'])
+    .describe(
+      '`Verification already decided`: žádost už není `PENDING`. `Verification revision mismatch`: žádost je `PENDING`, ale v jiné revizi, než o které administrátor rozhodl (mezitím byla vrácena a opravena) – je třeba posoudit `current`.',
+    ),
   current: AdminVerificationRequestSchema,
 });
 const SubmitVerificationRequestFormSchema =
@@ -61,6 +66,7 @@ const components = [
   ['VerificationStatus', VerificationStatusSchema],
   ['AccountState', accountSchema],
   ['ReviewDecision', ReviewDecisionSchema],
+  ['SubmissionRevision', SubmissionRevisionSchema],
   ['VerificationReview', VerificationReviewSchema],
   ['CertificateFile', CertificateFileSchema],
   ['VerificationRequest', VerificationRequestSchema],
@@ -87,7 +93,12 @@ function componentSchemas(): Record<string, JsonObject> {
   const { schemas } = z.toJSONSchema(registry, {
     target: 'draft-2020-12',
     uri: (id) => `#/components/schemas/${id}`,
-    override: ({ jsonSchema }) => {
+    override: ({ zodSchema, jsonSchema }) => {
+      // sdílené schéma popis nenese (JSDoc se do JSON Schema nepropisuje)
+      if (zodSchema === SubmissionRevisionSchema) {
+        jsonSchema.description =
+          'Revize podání: 1 při prvním podání, +1 při každé opravě vrácené žádosti (`RETURNED` -> `PENDING`). Rozhodnutí ji musí uvést (optimistická kontrola): o jiné revizi se nerozhodne.';
+      }
       // `format: date-time` stačí; regex ze Zodu dokument jen znečitelní
       if (jsonSchema.format === 'date-time') delete jsonSchema.pattern;
       // multipart soubor podle OpenAPI 3.1: binární obsah, typy určuje `encoding`
@@ -398,7 +409,7 @@ export function openApiDocument(): JsonObject {
           tags: ['verification-admin'],
           operationId: 'decideVerificationRequest',
           summary: 'Rozhodnout o žádosti',
-          description: `${adminNote} Rozhodnout lze jen žádost ve stavu \`PENDING\` (atomicky). \`APPROVED\` ověří chovatele; \`REJECTED\` je konečné a vyžaduje \`rejectionReason\`; \`RETURNED\` vrátí žádost k doplnění s \`returnReason\` a chovatel ji může opravit a znovu odeslat. Rozhodnutí se zapíše do \`reviewHistory\` a chovatel dostane e-mail (selhání e-mailu rozhodnutí nevrací). Data chovatele administrátor needituje.`,
+          description: `${adminNote} Rozhodnout lze jen žádost ve stavu \`PENDING\` (atomicky). \`APPROVED\` ověří chovatele; \`REJECTED\` je konečné a vyžaduje \`rejectionReason\`; \`RETURNED\` vrátí žádost k doplnění s \`returnReason\` a chovatel ji může opravit a znovu odeslat. Každé rozhodnutí musí uvést \`revision\` – revizi podání, kterou administrátor posoudil (\`revision\` z detailu nebo fronty); uloží se jen, pokud je žádost stále v této revizi, takže rozhodnutí načtené před opravou chovatele nikdy neschválí novou, dosud neposouzenou verzi. Rozhodnutí se zapíše do \`reviewHistory\` i s revizí a chovatel dostane e-mail (selhání e-mailu rozhodnutí nevrací). Data chovatele administrátor needituje.`,
           security: adminSecurity,
           parameters: [requestIdParameter],
           requestBody: {
@@ -411,14 +422,14 @@ export function openApiDocument(): JsonObject {
               content: json(ref('AdminVerificationRequest')),
             },
             '400': errorResponse(
-              'Neplatné rozhodnutí nebo chybějící/prázdný důvod; nevalidní JSON vrací `{"error":"Invalid JSON"}`.',
+              'Neplatné rozhodnutí, chybějící `revision` nebo chybějící/prázdný důvod; nevalidní JSON vrací `{"error":"Invalid JSON"}`.',
               { oneOf: [ref('ValidationError'), ref('Error')] },
             ),
             '401': responseRef('Unauthorized'),
             '403': responseRef('Forbidden'),
             '404': responseRef('NotFound'),
             '409': errorResponse(
-              'Žádost už není ve stavu `PENDING`; `current` je její aktuální stav.',
+              'Rozhodnutí se neuložilo, `current` je aktuální stav žádosti: `Verification already decided`, pokud žádost už není `PENDING`; `Verification revision mismatch`, pokud je `PENDING` v jiné revizi, než uvádí `revision` (mezitím vrácena a opravena). E-mail se neodešle.',
               ref('AdminVerificationRequestConflict'),
             ),
             '413': responseRef('PayloadTooLarge'),

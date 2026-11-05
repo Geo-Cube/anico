@@ -3,6 +3,7 @@ import {
   InvalidDecisionError,
   VerificationAlreadyDecidedError,
   VerificationRequestNotFoundError,
+  VerificationRevisionMismatchError,
 } from '../domain/errors.js';
 import type { Decision } from '../domain/internal-types.js';
 import type {
@@ -25,19 +26,28 @@ export function decideVerificationRequest(dependencies: {
     decision: Decision,
     admin: { id: string },
   ): Promise<Breeder> => {
-    // rozhodnout lze jen žádost ve stavu PENDING (atomicky v repozitáři);
-    // REJECTED je konečné, RETURNED vrací žádost chovateli k opravě
+    // rozhodnout lze jen žádost ve stavu PENDING v revizi, kterou admin posoudil
+    // (atomicky v repozitáři); REJECTED je konečné, RETURNED vrací žádost
+    // chovateli k opravě a oprava zvýší revizi
     let normalized: Decision = decision;
     if (decision.decision === 'REJECTED') {
       const reason = decision.rejectionReason.trim();
       if (reason === '') throw new InvalidDecisionError();
-      normalized = { decision: 'REJECTED', rejectionReason: reason };
+      normalized = {
+        decision: 'REJECTED',
+        revision: decision.revision,
+        rejectionReason: reason,
+      };
     } else if (decision.decision === 'RETURNED') {
       const reason = decision.returnReason.trim();
       if (reason === '') {
         throw new InvalidDecisionError('Return reason is required');
       }
-      normalized = { decision: 'RETURNED', returnReason: reason };
+      normalized = {
+        decision: 'RETURNED',
+        revision: decision.revision,
+        returnReason: reason,
+      };
     }
 
     const decided = await breeders.decideVerification(requestId, {
@@ -49,6 +59,10 @@ export function decideVerificationRequest(dependencies: {
     if (!decided) {
       const current = await breeders.findByVerificationRequestId(requestId);
       if (!current) throw new VerificationRequestNotFoundError();
+      // stále PENDING => rozhodnutí se týká jiné revize, než je uložená
+      if (current.verificationRequest?.status === 'PENDING') {
+        throw new VerificationRevisionMismatchError(current);
+      }
       throw new VerificationAlreadyDecidedError(current);
     }
 

@@ -38,6 +38,7 @@ describe('POST /breeders/me/verification-request', () => {
       breedingStationName: 'Stanice U Nováků',
       verificationRequest: {
         status: 'PENDING',
+        revision: 1,
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
@@ -120,7 +121,7 @@ describe('POST /breeders/me/verification-request', () => {
     await request(app)
       .post(`/verification-requests/${id}/decision`)
       .set(adminHeaders())
-      .send({ decision: 'REJECTED', rejectionReason: 'Nesedí' })
+      .send({ decision: 'REJECTED', revision: 1, rejectionReason: 'Nesedí' })
       .expect(200);
 
     const response = await submit(app, breederHeaders());

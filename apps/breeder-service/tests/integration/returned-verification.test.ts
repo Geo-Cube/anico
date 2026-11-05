@@ -84,6 +84,7 @@ describe('RETURNED na MongoDB + GridFS: souběh a soubory', () => {
     });
     await decideRequest(app, id, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Doplňte',
     }).expect(200);
     return id;
@@ -96,10 +97,15 @@ describe('RETURNED na MongoDB + GridFS: souběh a soubory', () => {
         decideRequest(
           app,
           id,
-          { decision: 'RETURNED', returnReason: 'Doplňte' },
+          { decision: 'RETURNED', revision: 1, returnReason: 'Doplňte' },
           'admin-1',
         ),
-        decideRequest(app, id, { decision: 'APPROVED' }, 'admin-2'),
+        decideRequest(
+          app,
+          id,
+          { decision: 'APPROVED', revision: 1 },
+          'admin-2',
+        ),
       ];
       const responses = await Promise.all(
         round % 2 === 0 ? pair : pair.reverse(),
@@ -180,6 +186,7 @@ describe('RETURNED na MongoDB + GridFS: souběh a soubory', () => {
 
     await decideRequest(app, id, {
       decision: 'RETURNED',
+      revision: 2,
       returnReason: 'Pořád nečitelné',
     }).expect(200);
     await submit(app, breederHeaders('b1'), {
@@ -208,9 +215,14 @@ describe('RETURNED na MongoDB + GridFS: souběh a soubory', () => {
       returnReason: null,
       reviewedBy: null,
       reviewHistory: [
-        expect.objectContaining({ decision: 'RETURNED', reason: 'Doplňte' }),
         expect.objectContaining({
           decision: 'RETURNED',
+          revision: 1,
+          reason: 'Doplňte',
+        }),
+        expect.objectContaining({
+          decision: 'RETURNED',
+          revision: 2,
           reason: 'Pořád nečitelné',
         }),
       ],

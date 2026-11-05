@@ -62,6 +62,7 @@ async function returned() {
   const request = first.verificationRequest!;
   await context.breeders.decideVerification(request.requestId, {
     decision: 'RETURNED',
+    revision: 1,
     returnReason: 'Doplňte čitelný certifikát',
     reviewedBy: 'admin-1',
     reviewedAt: new Date('2026-01-02T00:00:00Z'),
@@ -91,6 +92,7 @@ describe('submitVerificationRequest – first submission', () => {
     });
     expect(stored?.verificationRequest).toMatchObject({
       status: 'PENDING',
+      revision: 1,
       reviewedBy: null,
       reviewedAt: null,
       rejectionReason: null,
@@ -146,8 +148,12 @@ describe('submitVerificationRequest – first submission', () => {
 
   it.each<Decision | null>([
     null,
-    { decision: 'APPROVED' },
-    { decision: 'REJECTED', rejectionReason: 'Špatný certifikát' },
+    { decision: 'APPROVED', revision: 1 },
+    {
+      decision: 'REJECTED',
+      revision: 1,
+      rejectionReason: 'Špatný certifikát',
+    },
   ])(
     'rejects another submission while %o without side effects',
     async (decision) => {
@@ -292,6 +298,7 @@ describe('submitVerificationRequest – correction of a RETURNED request', () =>
     expect(request).toMatchObject({
       requestId,
       status: 'PENDING',
+      revision: 2,
       reviewedBy: null,
       reviewedAt: null,
       rejectionReason: null,
@@ -308,6 +315,7 @@ describe('submitVerificationRequest – correction of a RETURNED request', () =>
     expect(request.reviewHistory).toEqual([
       {
         decision: 'RETURNED',
+        revision: 1,
         reviewedBy: 'admin-1',
         reviewedAt: new Date('2026-01-02T00:00:00Z'),
         reason: 'Doplňte čitelný certifikát',
@@ -396,6 +404,7 @@ describe('submitVerificationRequest – correction of a RETURNED request', () =>
       .verificationRequest!;
     await breeders.decideVerification(between.requestId, {
       decision: 'RETURNED',
+      revision: 2,
       returnReason: 'Znovu',
       reviewedBy: 'admin-2',
       reviewedAt: new Date(),
@@ -466,6 +475,7 @@ function withRequest(status: VerificationStatus): Breeder {
       status,
       submittedAt: new Date(),
       lastSubmittedAt: new Date(),
+      revision: 1,
       breedingStationCertificate: {
         fileName: 'certificate.pdf',
         fileReference: '3434Jjkj34dfFFL',

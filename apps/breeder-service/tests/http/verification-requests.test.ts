@@ -46,7 +46,7 @@ describe('admin verification requests API', () => {
       const forbidden = await request(app)
         [method](path)
         .set(breederHeaders('breeder-1'))
-        .send({ decision: 'APPROVED' });
+        .send({ decision: 'APPROVED', revision: 1 });
       expect(forbidden.status, path).toBe(403);
       await request(app)[method](path).expect(401);
     }
@@ -71,9 +71,12 @@ describe('admin verification requests API', () => {
     await takeOverAndSubmit(app, 'b3');
     const fourth = await takeOverAndSubmit(app, 'b4');
     await request(app).get('/breeders/me').set(breederHeaders('b5'));
-    await decision(app, first, { decision: 'APPROVED' }).expect(200);
+    await decision(app, first, { decision: 'APPROVED', revision: 1 }).expect(
+      200,
+    );
     await decision(app, fourth, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Doplňte',
     }).expect(200);
     const ids = (response: {
@@ -140,10 +143,12 @@ describe('admin verification requests API', () => {
     const third = await takeOverAndSubmit(app, 'b3');
     await decision(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'Špatně',
     }).expect(200);
     await decision(app, third, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Doplňte',
     }).expect(200);
     const summary = await request(app)
@@ -248,7 +253,7 @@ describe('admin verification requests API', () => {
       const response = await decision(
         app,
         id,
-        { decision: 'APPROVED' },
+        { decision: 'APPROVED', revision: 1 },
         'admin-7',
       );
       expect(response.status).toBe(200);
@@ -276,6 +281,7 @@ describe('admin verification requests API', () => {
       const id = await takeOverAndSubmit(app, 'b1');
       const response = await decision(app, id, {
         decision: 'REJECTED',
+        revision: 1,
         rejectionReason: '  Název nesedí  ',
       });
       expect(response.status).toBe(200);
@@ -295,20 +301,20 @@ describe('admin verification requests API', () => {
 
     it.each([
       [{}],
-      [{ decision: 'MAYBE' }],
-      [{ decision: 'approved' }],
-      [{ decision: 'REJECTED' }],
-      [{ decision: 'REJECTED', rejectionReason: '   ' }],
-      [{ decision: 'REJECTED', rejectionReason: 'x'.repeat(501) }],
-      [{ decision: 'APPROVED', reviewedBy: 'someone' }],
-      [{ decision: 'APPROVED', isVerified: true }],
-      [{ decision: 'APPROVED', rejectionReason: 'x' }],
-      [{ decision: 'RETURNED' }],
-      [{ decision: 'RETURNED', returnReason: '' }],
-      [{ decision: 'RETURNED', returnReason: ' \n\t ' }],
-      [{ decision: 'RETURNED', returnReason: 'x'.repeat(501) }],
-      [{ decision: 'RETURNED', rejectionReason: 'x' }],
-      [{ decision: 'REJECTED', returnReason: 'x' }],
+      [{ decision: 'MAYBE', revision: 1 }],
+      [{ decision: 'approved', revision: 1 }],
+      [{ decision: 'REJECTED', revision: 1 }],
+      [{ decision: 'REJECTED', revision: 1, rejectionReason: '   ' }],
+      [{ decision: 'REJECTED', revision: 1, rejectionReason: 'x'.repeat(501) }],
+      [{ decision: 'APPROVED', revision: 1, reviewedBy: 'someone' }],
+      [{ decision: 'APPROVED', revision: 1, isVerified: true }],
+      [{ decision: 'APPROVED', revision: 1, rejectionReason: 'x' }],
+      [{ decision: 'RETURNED', revision: 1 }],
+      [{ decision: 'RETURNED', revision: 1, returnReason: '' }],
+      [{ decision: 'RETURNED', revision: 1, returnReason: ' \n\t ' }],
+      [{ decision: 'RETURNED', revision: 1, returnReason: 'x'.repeat(501) }],
+      [{ decision: 'RETURNED', revision: 1, rejectionReason: 'x' }],
+      [{ decision: 'REJECTED', revision: 1, returnReason: 'x' }],
     ])('returns 400 for invalid body %j and changes nothing', async (body) => {
       const { app, notifyDecision } = testApp();
       const id = await takeOverAndSubmit(app, 'b1');
@@ -324,12 +330,17 @@ describe('admin verification requests API', () => {
     it('returns 409 with the stored result on a second decision', async () => {
       const { app, notifyDecision } = testApp();
       const id = await takeOverAndSubmit(app, 'b1');
-      await decision(app, id, { decision: 'APPROVED' }, 'admin-1').expect(200);
+      await decision(
+        app,
+        id,
+        { decision: 'APPROVED', revision: 1 },
+        'admin-1',
+      ).expect(200);
 
       const second = await decision(
         app,
         id,
-        { decision: 'REJECTED', rejectionReason: 'pozdě' },
+        { decision: 'REJECTED', revision: 1, rejectionReason: 'pozdě' },
         'admin-2',
       );
       expect(second.status).toBe(409);
@@ -344,8 +355,13 @@ describe('admin verification requests API', () => {
 
     it('returns 404 for an unknown request and does not notify', async () => {
       const { app, notifyDecision } = testApp();
-      await decision(app, 'a'.repeat(24), { decision: 'APPROVED' }).expect(404);
-      await decision(app, 'abc', { decision: 'APPROVED' }).expect(404);
+      await decision(app, 'a'.repeat(24), {
+        decision: 'APPROVED',
+        revision: 1,
+      }).expect(404);
+      await decision(app, 'abc', { decision: 'APPROVED', revision: 1 }).expect(
+        404,
+      );
       expect(notifyDecision).not.toHaveBeenCalled();
     });
 
@@ -353,7 +369,9 @@ describe('admin verification requests API', () => {
       const { app, notifyDecision } = testApp();
       notifyDecision.mockRejectedValueOnce(new Error('smtp down'));
       const id = await takeOverAndSubmit(app, 'b1');
-      await decision(app, id, { decision: 'APPROVED' }).expect(200);
+      await decision(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+        200,
+      );
       const mine = await request(app)
         .get('/breeders/me')
         .set(breederHeaders('b1'));
@@ -364,7 +382,10 @@ describe('admin verification requests API', () => {
       const now = new Date('2026-01-02T03:04:05.000Z');
       const { app } = testApp({ now: () => now });
       const id = await takeOverAndSubmit(app, 'b1');
-      const response = await decision(app, id, { decision: 'APPROVED' });
+      const response = await decision(app, id, {
+        decision: 'APPROVED',
+        revision: 1,
+      });
       expect(response.body.reviewedAt).toBe(now.toISOString());
     });
   });

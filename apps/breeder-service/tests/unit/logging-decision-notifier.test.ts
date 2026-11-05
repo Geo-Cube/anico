@@ -16,6 +16,7 @@ const decided: Breeder = {
     status: 'REJECTED',
     submittedAt: new Date(),
     lastSubmittedAt: new Date(),
+    revision: 1,
     breedingStationCertificate: { fileName: 'c.pdf', fileReference: 'f' },
     reviewedBy: 'admin',
     reviewedAt: new Date(),

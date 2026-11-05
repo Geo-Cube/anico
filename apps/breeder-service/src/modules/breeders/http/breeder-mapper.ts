@@ -67,6 +67,7 @@ export function toVerificationRequest(
     status: request.status,
     submittedAt: request.submittedAt.toISOString(),
     lastSubmittedAt: request.lastSubmittedAt.toISOString(),
+    revision: request.revision,
     breedingStationCertificate: {
       fileName: request.breedingStationCertificate.fileName,
       contentType: contentType,
@@ -77,6 +78,7 @@ export function toVerificationRequest(
     returnReason: request.returnReason,
     reviewHistory: request.reviewHistory.map((review) => ({
       decision: review.decision,
+      revision: review.revision,
       reviewedBy: review.reviewedBy,
       reviewedAt: review.reviewedAt.toISOString(),
       reason: review.reason,

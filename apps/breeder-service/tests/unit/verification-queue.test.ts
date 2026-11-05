@@ -63,11 +63,13 @@ describe('verification queue use-cases', () => {
 
     await breeders.decideVerification(ids.b1!, {
       decision: 'APPROVED',
+      revision: 1,
       reviewedBy: 'admin',
       reviewedAt: new Date(),
     });
     await breeders.decideVerification(ids.b2!, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Doplňte',
       reviewedBy: 'admin',
       reviewedAt: new Date(),
@@ -89,6 +91,7 @@ describe('verification queue use-cases', () => {
     const { breeders, files, ids, submit } = await setup();
     await breeders.decideVerification(ids.b1!, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'Doplňte',
       reviewedBy: 'admin',
       reviewedAt: new Date(),
@@ -141,12 +144,14 @@ describe('verification queue use-cases', () => {
     });
     await breeders.decideVerification(ids.b1!, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'x',
       reviewedBy: 'admin',
       reviewedAt: new Date(),
     });
     await breeders.decideVerification(ids.b2!, {
       decision: 'RETURNED',
+      revision: 1,
       returnReason: 'y',
       reviewedBy: 'admin',
       reviewedAt: new Date(),

@@ -168,16 +168,18 @@ describe('mongooseBreederRepository', () => {
         emailAddress: 'x@example.com',
       });
 
-    const approve = (requestId: string, reviewedBy = 'admin-1') =>
+    const approve = (requestId: string, reviewedBy = 'admin-1', revision = 1) =>
       repository.decideVerification(requestId, {
         decision: 'APPROVED',
+        revision,
         reviewedBy,
         reviewedAt: new Date(),
       });
 
-    const reject = (requestId: string, reviewedBy = 'admin-2') =>
+    const reject = (requestId: string, reviewedBy = 'admin-2', revision = 1) =>
       repository.decideVerification(requestId, {
         decision: 'REJECTED',
+        revision,
         rejectionReason: 'Nečitelné',
         reviewedBy,
         reviewedAt: new Date(),
@@ -187,9 +189,11 @@ describe('mongooseBreederRepository', () => {
       requestId: string,
       reviewedBy = 'admin-3',
       returnReason = 'Doplňte',
+      revision = 1,
     ) =>
       repository.decideVerification(requestId, {
         decision: 'RETURNED',
+        revision,
         returnReason,
         reviewedBy,
         reviewedAt: new Date(),
@@ -262,6 +266,7 @@ describe('mongooseBreederRepository', () => {
       expect(breeder?.isVerified).toBe(false);
       expect(breeder?.verificationRequest).toMatchObject({
         status: 'PENDING',
+        revision: 1,
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
@@ -327,6 +332,7 @@ describe('mongooseBreederRepository', () => {
       expect(breeder?.verificationRequest?.reviewHistory).toEqual([
         {
           decision: 'APPROVED',
+          revision: 1,
           reviewedBy: 'admin-1',
           reviewedAt: breeder?.verificationRequest?.reviewedAt,
           reason: null,
@@ -392,6 +398,7 @@ describe('mongooseBreederRepository', () => {
       expect(request).toMatchObject({
         requestId,
         status: 'PENDING',
+        revision: 2,
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
@@ -411,6 +418,34 @@ describe('mongooseBreederRepository', () => {
       expect(request.reviewHistory).toEqual(
         returned!.verificationRequest!.reviewHistory,
       );
+    });
+
+    it('a decision about an older revision after a correction returns null and changes nothing', async () => {
+      const requestId = await submitted('b1');
+      await giveBack(requestId);
+      await resubmit('b1', requestId, {
+        fileName: 'novy.pdf',
+        fileReference: 'ref-new',
+      });
+      const before = await repository.findByBreederId('b1');
+
+      expect(await approve(requestId, 'admin-1', 1)).toBeNull();
+      expect(await reject(requestId, 'admin-2', 1)).toBeNull();
+      expect(await giveBack(requestId, 'admin-3', 'Znovu', 3)).toBeNull();
+      expect(await repository.findByBreederId('b1')).toEqual(before);
+      expect(before?.isVerified).toBe(false);
+
+      const approved = await approve(requestId, 'admin-1', 2);
+      expect(approved?.isVerified).toBe(true);
+      expect(
+        approved?.verificationRequest?.reviewHistory.map((review) => [
+          review.decision,
+          review.revision,
+        ]),
+      ).toEqual([
+        ['RETURNED', 1],
+        ['APPROVED', 2],
+      ]);
     });
 
     it('resubmission with a file replaces the certificate reference', async () => {
@@ -513,9 +548,9 @@ describe('mongooseBreederRepository', () => {
       const requestId = await submitted('b1');
       await giveBack(requestId, 'admin-1', 'první');
       await resubmit('b1', requestId);
-      await giveBack(requestId, 'admin-2', 'druhý');
+      await giveBack(requestId, 'admin-2', 'druhý', 2);
       await resubmit('b1', requestId);
-      const approved = await approve(requestId, 'admin-3');
+      const approved = await approve(requestId, 'admin-3', 3);
 
       expect(approved?.isVerified).toBe(true);
       expect(approved?.verificationRequest).toMatchObject({
@@ -526,13 +561,14 @@ describe('mongooseBreederRepository', () => {
       expect(
         approved?.verificationRequest?.reviewHistory.map((review) => [
           review.decision,
+          review.revision,
           review.reviewedBy,
           review.reason,
         ]),
       ).toEqual([
-        ['RETURNED', 'admin-1', 'první'],
-        ['RETURNED', 'admin-2', 'druhý'],
-        ['APPROVED', 'admin-3', null],
+        ['RETURNED', 1, 'admin-1', 'první'],
+        ['RETURNED', 2, 'admin-2', 'druhý'],
+        ['APPROVED', 3, 'admin-3', null],
       ]);
     });
 

@@ -14,6 +14,7 @@ describe('toVerificationRequest', () => {
       status: 'PENDING',
       submittedAt: new Date(),
       lastSubmittedAt: new Date(),
+      revision: 1,
       breedingStationCertificate: {
         fileName: 'certificate.pdf',
         fileReference: 'certificate-reference',
@@ -43,6 +44,7 @@ describe('toVerificationRequest', () => {
     expect(result.reviewedAt).toBe(request.reviewedAt?.toISOString() ?? null);
     expect(result.rejectionReason).toBe(request.rejectionReason);
     expect(result.lastSubmittedAt).toBe(request.lastSubmittedAt.toISOString());
+    expect(result.revision).toBe(1);
     expect(result.returnReason).toBeNull();
     expect(result.reviewHistory).toEqual([]);
   });
@@ -53,6 +55,7 @@ describe('toVerificationRequest', () => {
       status: 'RETURNED',
       submittedAt: new Date('2026-01-01T00:00:00Z'),
       lastSubmittedAt: new Date('2026-01-03T00:00:00Z'),
+      revision: 2,
       breedingStationCertificate: {
         fileName: 'certificate.pdf',
         fileReference: 'certificate-reference',
@@ -64,12 +67,14 @@ describe('toVerificationRequest', () => {
       reviewHistory: [
         {
           decision: 'RETURNED',
+          revision: 1,
           reviewedBy: 'admin-1',
           reviewedAt: new Date('2026-01-02T00:00:00Z'),
           reason: 'Nečitelné',
         },
         {
           decision: 'RETURNED',
+          revision: 2,
           reviewedBy: 'admin-2',
           reviewedAt: new Date('2026-01-04T00:00:00Z'),
           reason: 'Doplňte',
@@ -85,16 +90,19 @@ describe('toVerificationRequest', () => {
       status: 'RETURNED',
       submittedAt: '2026-01-01T00:00:00.000Z',
       lastSubmittedAt: '2026-01-03T00:00:00.000Z',
+      revision: 2,
       returnReason: 'Doplňte',
       reviewHistory: [
         {
           decision: 'RETURNED',
+          revision: 1,
           reviewedBy: 'admin-1',
           reviewedAt: '2026-01-02T00:00:00.000Z',
           reason: 'Nečitelné',
         },
         {
           decision: 'RETURNED',
+          revision: 2,
           reviewedBy: 'admin-2',
           reviewedAt: '2026-01-04T00:00:00.000Z',
           reason: 'Doplňte',

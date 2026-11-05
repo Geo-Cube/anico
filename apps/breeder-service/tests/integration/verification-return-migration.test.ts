@@ -241,6 +241,7 @@ describe('migrace 20261105110409-verification-return-history', () => {
       pending!.verificationRequest!.requestId,
       {
         decision: 'RETURNED',
+        revision: 1,
         returnReason: 'Doplňte',
         reviewedBy: 'admin-1',
         reviewedAt: day(10),
@@ -249,6 +250,7 @@ describe('migrace 20261105110409-verification-return-history', () => {
     expect(returned?.verificationRequest?.reviewHistory).toEqual([
       {
         decision: 'RETURNED',
+        revision: 1,
         reviewedBy: 'admin-1',
         reviewedAt: day(10),
         reason: 'Doplňte',

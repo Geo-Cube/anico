@@ -28,7 +28,10 @@ export interface BreederRepository {
     requestId: string,
     resubmission: Resubmission,
   ): Promise<Breeder | null>;
-  /** Rozhodnutí o žádosti; `null`, pokud žádost neexistuje nebo není PENDING. */
+  /**
+   * Rozhodnutí o žádosti; `null`, pokud žádost neexistuje, není PENDING nebo
+   * má jinou revizi než `decision.revision`.
+   */
   decideVerification(
     requestId: string,
     decision: DecisionRecord,
