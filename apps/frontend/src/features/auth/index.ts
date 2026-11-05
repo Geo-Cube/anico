@@ -7,3 +7,4 @@ export {
 } from './guards';
 export { LoginPage } from './LoginPage';
 export { displayName, UserMenu } from './UserMenu';
+export { sessionGeneration } from './session';

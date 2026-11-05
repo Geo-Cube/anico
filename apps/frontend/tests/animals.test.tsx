@@ -36,15 +36,49 @@ const animal: Animal = {
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
-function renderApp(path: string) {
+function renderApp(path: string, client = createQueryClient()) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={client}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
   return router;
 }
+
+/** Odpověď API čeká na `release`; `done` se splní, až ji MSW odešle. */
+function heldResponse(response: () => Response) {
+  let release!: () => void;
+  let sent!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const done = new Promise<void>((resolve) => (sent = resolve));
+  return {
+    release,
+    done,
+    handler: async () => {
+      await gate;
+      sent();
+      return response();
+    },
+  };
+}
+
+/** Mezitím se ve stejném prohlížeči přihlásí jiný účet (např. v jiné záložce). */
+async function switchAccount(client: ReturnType<typeof createQueryClient>) {
+  const other = sessionFor(['breeder'], {
+    identity: {
+      ...sessionFor().identity,
+      userId: '6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b',
+      email: 'petr@example.test',
+    },
+  });
+  server.use(http.get('/api/auth/session', () => HttpResponse.json(other)));
+  await client.invalidateQueries({ queryKey: ['session'] });
+  await waitFor(() => expect(client.getQueryData(['session'])).toEqual(other));
+}
+
+/** Doběhnutí zpožděné odpovědi včetně jejích callbacků. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
 beforeEach(() => {
   vi.stubGlobal(
     'URL',
@@ -270,6 +304,45 @@ describe('zvířata', () => {
       expect(router.state.location.pathname).toBe('/zvirata'),
     );
     expect(calls).toBe(1);
+  });
+
+  it('uložení odeslané pod předchozím účtem nezapíše cache ani nepřesměruje', async () => {
+    const save = heldResponse(() => HttpResponse.json(animal, { status: 201 }));
+    server.use(http.post('/api/animal/animals', save.handler));
+    const client = createQueryClient();
+    const router = renderApp('/zvirata/nove', client);
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Plemeno'),
+      breed.id,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Uložit zvíře' }));
+    await switchAccount(client);
+    save.release();
+    await save.done;
+    await settle();
+    expect(client.getQueryData(['animals', animal.id])).toBeUndefined();
+    expect(router.state.location.pathname).toBe('/zvirata/nove');
+  });
+
+  it('smazání odeslané pod předchozím účtem nepřesměruje nový účet', async () => {
+    const remove = heldResponse(() => new HttpResponse(null, { status: 204 }));
+    server.use(http.delete('/api/animal/animals/:id', remove.handler));
+    const client = createQueryClient();
+    const router = renderApp(`/zvirata/${animal.id}`, client);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Smazat zvíře' }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Nenávratně smazat',
+      }),
+    );
+    await switchAccount(client);
+    remove.release();
+    await remove.done;
+    await settle();
+    expect(router.state.location.pathname).toBe(`/zvirata/${animal.id}`);
   });
 
   it('Escape zavře potvrzení bez smazání a vrátí focus na spouštěč', async () => {

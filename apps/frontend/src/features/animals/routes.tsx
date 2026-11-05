@@ -7,7 +7,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, type RouteObject } from 'react-router';
-import { useCurrentSession } from '@/features/auth';
+import { sessionGeneration, useCurrentSession } from '@/features/auth';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
 import {
@@ -104,10 +104,18 @@ function AnimalDetailPage() {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
   const remove = useMutation({
-    mutationFn: () => deleteAnimal(animalId, session.csrfToken),
-    onSuccess: async () => {
+    mutationFn: async () => {
+      const generation = sessionGeneration(client);
+      await deleteAnimal(animalId, session.csrfToken);
+      return generation;
+    },
+    onSuccess: async (generation) => {
+      // Odpověď z relace jiného účtu nesmí měnit cache ani přesměrovat.
+      const current = () => generation === sessionGeneration(client);
+      if (!current()) return;
       client.removeQueries({ queryKey: [...animalKey, animalId] });
       await client.invalidateQueries({ queryKey: animalKey });
+      if (!current()) return;
       void navigate('/zvirata');
     },
   });

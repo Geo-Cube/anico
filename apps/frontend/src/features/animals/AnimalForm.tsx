@@ -8,7 +8,7 @@ import {
 } from '@anico/shared-schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router';
-import { useCurrentSession } from '@/features/auth';
+import { sessionGeneration, useCurrentSession } from '@/features/auth';
 import { Alert } from '@/shared/ui/alert';
 import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
@@ -90,10 +90,19 @@ function AnimalForm({ animal }: { animal?: Animal }) {
   const existing =
     animal?.photos.filter((photo) => !removed.includes(photo.id)) ?? [];
   const mutation = useMutation({
-    mutationFn: (input: Parameters<typeof saveAnimal>[0]) =>
-      saveAnimal(input, files, session.csrfToken, animal?.id),
-    onSuccess: async (saved) => {
+    mutationFn: async (input: Parameters<typeof saveAnimal>[0]) => {
+      // Generace relace v okamžiku odeslání: odpověď pro jiný účet se zahodí.
+      const generation = sessionGeneration(client);
+      return {
+        generation,
+        saved: await saveAnimal(input, files, session.csrfToken, animal?.id),
+      };
+    },
+    onSuccess: async ({ generation, saved }) => {
+      const current = () => generation === sessionGeneration(client);
+      if (!current()) return;
       await client.invalidateQueries({ queryKey: animalKey });
+      if (!current()) return;
       client.setQueryData([...animalKey, saved.id], saved);
       void navigate(`/zvirata/${saved.id}`);
     },
