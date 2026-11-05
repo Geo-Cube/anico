@@ -1,7 +1,5 @@
-import type { Readable } from 'node:stream';
 import type { Animal, AssessmentStatus } from '@anico/shared-schemas';
 import type { AnimalDocuments, DocumentVersion } from './animal-documents.js';
-import type { DocumentContentType } from './document-file.js';
 
 export interface AnimalDocumentsRepository {
   /** `null`, pokud zvíře neexistuje. */
@@ -30,25 +28,14 @@ export interface AnimalDocumentsRepository {
       version: DocumentVersion;
       animal: Pick<
         Animal,
-        'id' | 'ownerUserId' | 'name' | 'species' | 'breedId' | 'sex'
+        | 'id'
+        | 'ownerUserId'
+        | 'name'
+        | 'species'
+        | 'breedId'
+        | 'sex'
+        | 'microchipNumber'
       >;
     }[]
   >;
-}
-
-export interface DocumentFileStorage {
-  save(file: {
-    content: Buffer;
-    fileName: string;
-    contentType: DocumentContentType;
-  }): Promise<string>;
-  open(
-    fileReference: string,
-  ): Promise<{ stream: Readable; size: number } | null>;
-  delete(fileReference: string): Promise<void>;
-}
-
-/** Stav ověření chovatele z breeder-service (UC-01). Nedostupnost vyhazuje chybu. */
-export interface BreederVerification {
-  isVerified(identityToken: string): Promise<boolean>;
 }

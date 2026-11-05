@@ -15,14 +15,16 @@ import {
   type NewVersionInput,
 } from '../domain/animal-documents.js';
 import {
-  detectDocumentContentType,
+  detectFileContentType,
   sanitizeFileName,
-} from '../domain/document-file.js';
-import type {
-  AnimalDocumentsRepository,
-  BreederVerification,
-  DocumentFileStorage,
-} from '../domain/ports.js';
+} from '../../../files/file-content.js';
+import type { FileStorage } from '../../../files/file-storage.js';
+import type { BreederVerification } from '../../animal/domain/entity.js';
+import {
+  verifiedBreeder,
+  type WarnLogger,
+} from '../../animal/application/verified-breeder.js';
+import type { AnimalDocumentsRepository } from '../domain/ports.js';
 
 /** Role posuzovatele dokladů (stejné jako u UC-01). */
 const REVIEWER_ROLES: readonly Role[] = ['admin', 'owner'];
@@ -32,10 +34,6 @@ const WRITE_ATTEMPTS = 3;
 export interface Upload {
   fileName: string;
   content: Buffer;
-}
-
-export interface WarnLogger {
-  warn(details: object, message: string): void;
 }
 
 function requireActor(actor: Identity | undefined): Identity {
@@ -55,25 +53,15 @@ const isReviewer = (identity: Identity) =>
 
 export function documentUseCases(dependencies: {
   repository: AnimalDocumentsRepository;
-  files: DocumentFileStorage;
+  files: FileStorage;
   verification: BreederVerification;
   newId: () => string;
   logger: WarnLogger;
   now?: () => Date;
 }) {
-  const { repository, files, verification, logger } = dependencies;
+  const { repository, files, logger } = dependencies;
   const now = dependencies.now ?? (() => new Date());
-
-  async function requireVerified(identityToken: string | undefined) {
-    if (!identityToken) throw new AuthorizationError(401);
-    let verified: boolean;
-    try {
-      verified = await verification.isVerified(identityToken);
-    } catch {
-      throw new DocumentError(503, 'Breeder verification unavailable');
-    }
-    if (!verified) throw new DocumentError(403, 'Breeder is not verified');
-  }
+  const breeder = verifiedBreeder(dependencies.verification);
 
   /** Vlastník zvířete s ověřeným účtem; cizí i neexistující zvíře je 404. */
   async function ownedAnimal(
@@ -81,8 +69,7 @@ export function documentUseCases(dependencies: {
     identityToken: string | undefined,
     animalId: string,
   ) {
-    const identity = requireActor(actor);
-    await requireVerified(identityToken);
+    const identity = await breeder(actor, identityToken);
     const documents = await repository.load(animalId);
     if (!documents || documents.ownerUserId !== identity.userId)
       throw new DocumentError(404, 'Animal not found');
@@ -108,7 +95,7 @@ export function documentUseCases(dependencies: {
     uploads: readonly (Upload & { documentType: AnimalDocumentType })[],
   ): Promise<NewVersionInput[]> {
     const checked = uploads.map((upload) => {
-      const contentType = detectDocumentContentType(upload.content);
+      const contentType = detectFileContentType(upload.content);
       if (!contentType)
         throw new DocumentError(
           415,
@@ -119,7 +106,7 @@ export function documentUseCases(dependencies: {
     const stored: NewVersionInput[] = [];
     try {
       for (const upload of checked) {
-        const fileName = sanitizeFileName(upload.fileName);
+        const fileName = sanitizeFileName(upload.fileName, 'document');
         const fileReference = await files.save({
           content: upload.content,
           fileName,

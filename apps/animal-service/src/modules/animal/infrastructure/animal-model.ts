@@ -8,6 +8,7 @@ import {
   type AnimalDocumentType,
   type AssessmentStatus,
 } from '@anico/shared-schemas';
+import type { PhotoContentType } from '../domain/entity.js';
 
 /** Verze dokladu vnořená ve zvířeti (UC-03, ADR-0005). */
 export interface StoredDocumentVersion {
@@ -30,13 +31,34 @@ export interface StoredDocumentVersion {
   rejectionReason: string | null;
 }
 
+/** Fotografie vnořená ve zvířeti (UC-02/3); soubor je v GridFS bucketu `animalPhotos`. */
+export interface StoredPhoto {
+  _id: Types.ObjectId;
+  file: {
+    fileName: string;
+    fileReference: string;
+    contentType: PhotoContentType;
+    size: number;
+  };
+  isPrimary: boolean;
+}
+
 export interface StoredAnimal {
   ownerUserId: string;
-  name: string;
+  name: string | null;
   species: Animal['species'];
   breedId: string;
   sex: Animal['sex'];
   birthDate: string | null;
+  coatColor: string | null;
+  weightKg: number | null;
+  city: string | null;
+  pedigreeNumber: string | null;
+  microchipNumber: string | null;
+  description: string | null;
+  photos: StoredPhoto[];
+  /** Optimistická kontrola společného zápisu profilu a fotografií (UC-02/4). */
+  profileRevision: number;
   documents: StoredDocumentVersion[];
   /** Optimistická kontrola zápisů do `documents`; mění ji každé podání i rozhodnutí. */
   documentsRevision: number;
@@ -46,6 +68,31 @@ export interface StoredAnimal {
 
 /** Projekce zvířete bez dokladů pro CRUD zvířat. */
 export const WITHOUT_DOCUMENTS = { documents: 0, documentsRevision: 0 };
+
+const photoSchema = new Schema<StoredPhoto>(
+  {
+    file: {
+      _id: false,
+      fileName: { type: String, required: true, maxlength: 150 },
+      fileReference: { type: String, required: true },
+      contentType: {
+        type: String,
+        required: true,
+        enum: ['image/jpeg', 'image/png'],
+      },
+      size: { type: Number, required: true, min: 1 },
+    },
+    isPrimary: { type: Boolean, required: true },
+  },
+  { strict: 'throw' },
+);
+
+const optionalText = (maxlength: number) => ({
+  type: String,
+  default: null,
+  trim: true,
+  maxlength,
+});
 
 const documentVersionSchema = new Schema<StoredDocumentVersion>(
   {
@@ -88,7 +135,7 @@ export function animalModel(connection: Connection): Model<StoredAnimal> {
   const schema = new Schema<StoredAnimal>(
     {
       ownerUserId: { type: String, required: true, maxlength: 36 },
-      name: { type: String, required: true, trim: true, maxlength: 120 },
+      name: optionalText(120),
       species: {
         type: String,
         required: true,
@@ -97,6 +144,20 @@ export function animalModel(connection: Connection): Model<StoredAnimal> {
       breedId: { type: String, required: true, maxlength: 160 },
       sex: { type: String, required: true, enum: AnimalSexSchema.options },
       birthDate: { type: String, default: null },
+      coatColor: optionalText(60),
+      weightKg: {
+        type: Number,
+        default: null,
+        validate: (value: number | null) => value === null || value > 0,
+        max: 2000,
+      },
+      city: optionalText(120),
+      pedigreeNumber: optionalText(60),
+      // celý zápis bez ořezávání (anico-domain §4)
+      microchipNumber: { type: String, default: null, maxlength: 64 },
+      description: optionalText(2000),
+      photos: { type: [photoSchema], default: [] },
+      profileRevision: { type: Number, default: 0 },
       documents: { type: [documentVersionSchema], default: [] },
       documentsRevision: { type: Number, default: 0 },
     },

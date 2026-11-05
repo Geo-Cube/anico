@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { mongo, type Connection } from 'mongoose';
-import type { DocumentFileStorage } from '../domain/ports.js';
+import type { FileStorage } from './file-storage.js';
 
 function* uploadChunks(content: Buffer, chunkSize: number) {
   for (let offset = 0; offset < content.length; offset += chunkSize) {
@@ -12,11 +12,11 @@ function* uploadChunks(content: Buffer, chunkSize: number) {
 const isFileNotFound = (error: unknown) =>
   error instanceof Error && /file ?not ?found/i.test(error.message);
 
-/** Soubory dokladů v GridFS stejné databáze (vzor breeder-service). */
-export function gridFsDocumentStorage(
+/** GridFS bucket stejné databáze (vzor breeder-service): `animalDocuments`, `animalPhotos`. */
+export function gridFsFileStorage(
   connection: Connection,
-  bucketName = 'animalDocuments',
-): DocumentFileStorage {
+  bucketName: 'animalDocuments' | 'animalPhotos',
+): FileStorage {
   const bucket = () => {
     if (!connection.db) throw new Error('MongoDB connection is not open');
     return new mongo.GridFSBucket(connection.db, { bucketName });
@@ -48,7 +48,7 @@ export function gridFsDocumentStorage(
           if (!isFileNotFound(cleanupError))
             throw new AggregateError(
               [error, cleanupError],
-              'Document upload failed and its GridFS cleanup also failed',
+              'File upload failed and its GridFS cleanup also failed',
             );
         });
         throw error;

@@ -1,4 +1,4 @@
-import type { BreederVerification } from '../domain/ports.js';
+import type { BreederVerification } from '../domain/entity.js';
 
 /**
  * Stav ověření z breeder-service (`GET /breeders/me`, ADR-0005 bod 4). Identitu přihlášeného

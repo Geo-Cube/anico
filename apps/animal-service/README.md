@@ -41,45 +41,64 @@ src/
   server.ts                 # konfigurace, DB spojení, start a shutdown
 ```
 
-Modul `animal` obsahuje základní CRUD vlastních zvířat. Kolekce je `animals`;
-vlastník se bere výhradně z ověřeného `req.auth.userId`, ne z formuláře.
-Nový modul do stejné služby přidávej až pro jinou odpovědnost; složka `animal` už existuje.
+Modul `animal` spravuje profily vlastních zvířat a jejich fotografie (UC-02), modul
+`documents` doklady (UC-03). Kolekce je `animals`; vlastník se bere výhradně
+z ověřeného `req.auth.userId`, ne z formuláře. Soubory jsou v GridFS bucketech
+`animalPhotos` a `animalDocuments`. Návrh: [`docs/design/uc-02-zvirata.md`](../../docs/design/uc-02-zvirata.md).
 
-## První verze entity
+## Entita zvířete
 
-| Pole                     | Význam                                                                          |
-| ------------------------ | ------------------------------------------------------------------------------- |
-| `name`                   | Povinné jméno, oříznuté mezery, 1–120 znaků                                     |
-| `species`                | `dog` nebo `horse`                                                              |
-| `breedId`                | Stabilní ID ze společného JSON číselníku pro vybraný druh                       |
-| `sex`                    | `male`, `female` nebo `unknown`                                                 |
-| `birthDate`              | Nepovinné datum `YYYY-MM-DD`, bez času; nesmí být budoucí. Při vynechání `null` |
-| `id`                     | MongoDB ObjectId jako řetězec, generuje server                                  |
-| `ownerUserId`            | UUID AniCo uživatele z identity, nastavuje server                               |
-| `createdAt`, `updatedAt` | UTC časové údaje, nastavuje server                                              |
+| Pole                     | Význam                                                               |
+| ------------------------ | -------------------------------------------------------------------- |
+| `species`                | Povinné: `dog` nebo `horse`                                          |
+| `breedId`                | Povinné stabilní ID ze společného JSON číselníku pro vybraný druh    |
+| `sex`                    | Povinné: `male` nebo `female`                                        |
+| `name`                   | Volitelné jméno, oříznuté mezery, 1–120 znaků                        |
+| `birthDate`              | Volitelné datum `YYYY-MM-DD`, bez času; nesmí být budoucí            |
+| `coatColor`              | Volitelná barva srsti, 1–60 znaků                                    |
+| `weightKg`               | Volitelná hmotnost v kg, větší než 0, nejvýše 2000                   |
+| `city`                   | Volitelná obec, 1–120 znaků (přesná adresa se neeviduje)             |
+| `pedigreeNumber`         | Volitelné číslo průkazu původu, 1–60 znaků                           |
+| `microchipNumber`        | Volitelné číslo čipu do 64 znaků, ukládá se celý zápis bez ořezávání |
+| `description`            | Volitelný popis, 1–2000 znaků                                        |
+| `photos`                 | 0–10 fotografií `{ id, fileName, contentType, size, isPrimary }`     |
+| `id`                     | MongoDB ObjectId jako řetězec, generuje server                       |
+| `ownerUserId`            | UUID AniCo uživatele z identity, nastavuje server                    |
+| `createdAt`, `updatedAt` | UTC časové údaje, nastavuje server                                   |
 
-Věk neukládáme; odvodí se z data narození. ID plemen ani jejich české názvy
-nekopíruj do aplikace. Sdílené kontrakty jsou `CreateAnimalSchema`, `UpdateAnimalSchema`,
-`AnimalSchema`, `ListAnimalsQuerySchema` a `AnimalListSchema` z `@anico/shared-schemas`.
-`animalBreeds('dog')` / `animalBreeds('horse')` poskytne položky pro select ve frontendu.
-Změna druhu vyžaduje odpovídající plemeno; PATCH validuje celý výsledný stav.
+Nevyplněný volitelný údaj (vynechaný, `null`, prázdný nebo jen z mezer) se ukládá
+jako `null` a v odpovědi je vždy přítomný jako `null`. Věk neukládáme; odvodí se
+z data narození. ID plemen ani jejich české názvy nekopíruj do aplikace.
+Sdílené kontrakty jsou `CreateAnimalSchema`, `UpdateAnimalSchema`, `AnimalProfileSchema`,
+`AnimalSchema`, `AnimalPhotoSchema`, `ListAnimalsQuerySchema` a `AnimalListSchema`
+z `@anico/shared-schemas`. `animalBreeds('dog')` / `animalBreeds('horse')` poskytne
+položky pro select ve frontendu. Změna druhu vyžaduje odpovídající plemeno; PATCH
+validuje celý výsledný stav.
+
+**Fotografie:** JPEG nebo PNG podle obsahu (ne podle přípony), nejvýše 10 MiB na soubor
+a 10 na zvíře. Neprázdný seznam má právě jednu hlavní: zvolenou (`primaryUploadIndex`
+u nových, `primaryPhotoId` u stávajících), jinak dosavadní, jinak první. Po odebrání
+hlavní se hlavní stane první zbývající. Odebraná fotografie se smaže i z GridFS.
 
 ## API
 
-| Metoda a cesta ve službě               | Co dělá                                                            |
-| -------------------------------------- | ------------------------------------------------------------------ |
-| `GET /health`, `GET /ready`            | Veřejný liveness a DB readiness                                    |
-| `GET /breeds/dog`, `GET /breeds/horse` | Číselník ID/názvů; také vyžaduje přihlášení                        |
-| `POST /animals`                        | Vytvoří vlastní zvíře, vrací 201 a entitu                          |
-| `GET /animals`                         | Výpis pouze mých zvířat                                            |
-| `GET /animals/:id`                     | Detail vlastního zvířete                                           |
-| `PATCH /animals/:id`                   | Změní povolená pole vlastního zvířete                              |
-| `DELETE /animals/:id`                  | Odstraní vlastní zvíře i všechny jeho doklady a soubory, vrací 204 |
+Kontrakt je [`openapi.json`](openapi.json) (`npm run openapi -w @anico/animal-service`);
+test hlídá shodu s generátorem i s registrovanými routami.
+
+| Metoda a cesta ve službě                      | Co dělá                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| `GET /health`, `GET /ready`                   | Veřejný liveness a DB readiness                                          |
+| `GET /breeds/dog`, `GET /breeds/horse`        | Číselník ID/názvů; vyžaduje přihlášení, ne ověřený účet                  |
+| `POST /animals`                               | Vytvoří vlastní zvíře (JSON, nebo multipart s fotografiemi), vrací 201   |
+| `GET /animals`                                | Výpis pouze mých zvířat                                                  |
+| `GET /animals/:animalId`                      | Detail vlastního zvířete                                                 |
+| `PATCH /animals/:animalId`                    | Změní profil i fotografie jedním zápisem                                 |
+| `DELETE /animals/:animalId`                   | Odstraní zvíře, fotografie i všechny verze dokladů se soubory, vrací 204 |
+| `GET /animals/:animalId/photos/:photoId/file` | Soubor fotografie (`inline`, `nosniff`, `sandbox` CSP)                   |
 
 ### Doklady zvířat (UC-03)
 
-Kontrakt je [`openapi.json`](openapi.json) (`npm run openapi -w @anico/animal-service`),
-návrh v [`docs/design/uc-03-doklady.md`](../../docs/design/uc-03-doklady.md).
+Návrh v [`docs/design/uc-03-doklady.md`](../../docs/design/uc-03-doklady.md).
 
 | Metoda a cesta ve službě                                 | Co dělá                                                            |
 | -------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -89,19 +108,20 @@ návrh v [`docs/design/uc-03-doklady.md`](../../docs/design/uc-03-doklady.md).
 | `GET /animals/:animalId/documents/:documentId/file`      | Stažení verze jako `attachment`                                    |
 | `POST /animals/:animalId/documents/:documentId/versions` | Nová verze aktuálního zamítnutého dokladu (multipart `file`)       |
 | `POST /animals/:animalId/documents/:documentId/decision` | Admin: `APPROVED`, nebo `REJECTED` s `rejectionReason`             |
-| `GET /document-reviews`                                  | Admin: fronta aktuálních `PENDING` verzí                           |
+| `GET /document-reviews`                                  | Admin: fronta aktuálních `PENDING` verzí včetně čísla čipu zvířete |
 
-Operace chovatele vyžadují ověřený účet: služba se při každém požadavku zeptá
-breeder-service (`GET /breeders/me`, adresa `BREEDER_SERVICE_URL`). Bez této
-proměnné nebo při nedostupnosti breeder-service vracejí 503. Cizí nebo
-neexistující zvíře/doklad je 404, neověřený chovatel a chybějící role 403.
-Posuzovatel (`admin` | `owner`) čte a rozhoduje bez vlastnictví i ověření.
+Všechny operace chovatele se zvířaty i doklady vyžadují ověřený účet: služba se při
+každém požadavku zeptá breeder-service (`GET /breeders/me`, adresa
+`BREEDER_SERVICE_URL`). Bez této proměnné nebo při nedostupnosti breeder-service
+vracejí 503. Cizí nebo neexistující zvíře, fotografie či doklad je 404, neověřený
+chovatel a chybějící role 403. Posuzovatel (`admin` | `owner`) čte a rozhoduje
+o dokladech bez vlastnictví i ověření; ke správě cizích zvířat oprávnění nemá.
 
 Z lokálního frontendu používej prefix **`/api/animal`**, například
 `fetch('/api/animal/animals')`. Vlastní server běží na portu **3002**;
 jeho přímé chráněné routy bez podepsané identity vracejí 401.
 
-Příklad těla pro vytvoření (vlastníka neposílej):
+Příklad JSON těla pro vytvoření (vlastníka neposílej):
 
 ```json
 {
@@ -109,24 +129,30 @@ Příklad těla pro vytvoření (vlastníka neposílej):
   "species": "dog",
   "breedId": "aljassky-malamut",
   "sex": "female",
-  "birthDate": "2020-02-29"
+  "birthDate": "2020-02-29",
+  "microchipNumber": "203 098 100 123 456"
 }
 ```
+
+S fotografiemi pošli `multipart/form-data`: pole `animal` obsahuje stejný JSON
+(volitelně s `primaryUploadIndex`) a pole `photos` soubory v požadovaném pořadí.
+PATCH přijímá stejné dvě podoby; navíc `removePhotoIds` a `primaryPhotoId`.
+Vynechaný údaj zůstává, `null` nebo prázdný text ho vymaže.
 
 Výpis vrací `{ items, nextCursor }`. Filtry: `species`, `breedId`, `sex`;
 `breedId` musí doprovázet správný `species`. `limit` je 1–100 (výchozí 20).
 Další stránku získáš přes `before=nextCursor`; `nextCursor: null` znamená konec.
-Neplatná data nebo ID vracejí 400, chybějící přihlášení 401, cizí záznam 403,
-neexistující 404 a souběžná změna druhu/plemene při PATCH 409. Admin/owner nemá
-automatickou výjimku z vlastnictví. Systémová pole nelze měnit přes body/query.
+Neplatná data nebo ID vracejí 400, chybějící přihlášení 401, neověřený chovatel 403,
+cizí nebo neexistující záznam 404, nepodporovaný formát fotografie 415, příliš velký
+soubor 413 a opakovaně souběžná úprava 409. Při jakékoli chybě se profil, fotografie
+ani soubory nezmění. Systémová pole nelze měnit přes body/query.
 
-## Rozsah tohoto základu
+## Rozsah
 
-Služba volá breeder-service jen kvůli ověření chovatele u dokladů a neodebírá
-zprávy z brokeru. Fotky, schvalování chovatele u CRUD zvířat, číslo čipu,
-kontrola dokončení profilu a další údaje o zvířeti se doplní podle domluvených
-use cases. Tento základ tedy ještě neimplementuje všechny podmínky UC-02. Není
-zapojený do cloudového publish/deploymentu ani do frontendového formuláře.
+Služba volá breeder-service jen kvůli ověření chovatele a neodebírá zprávy z brokeru.
+Není zapojená do cloudového publish/deploymentu ani do frontendového formuláře.
+Pro přihlášený lokální běh musí běžet i breeder-service a animal-service potřebuje
+`BREEDER_SERVICE_URL`; bez ní vrací operace chovatele 503.
 
 Ve společném lokálním běhu je frontend na http://127.0.0.1:5173,
 API na `/api/animal`, health na `/api/animal/health`.
@@ -154,6 +180,9 @@ docker build -f apps/animal-service/Dockerfile -t anico/animal-service:local .
 ```
 
 Migrace i seed začínají bez obchodních dat. [DB postup](../../docs/DATABAZE.md).
+Migrace `20261105220513-animal-profiles` se zastaví, pokud některé zvíře má pohlaví
+mimo `male`/`female` (dřívější `unknown`). Takový záznam oprav v osobní DB a migraci
+zopakuj s `--retry 20261105220513-animal-profiles`.
 Kontejner používá port 3000; proměnné, GHCR publish, Coolify a veřejné API routy
 se konfigurují samostatně. Lokální Vite proxy nenastavuje routování na VPS.
 

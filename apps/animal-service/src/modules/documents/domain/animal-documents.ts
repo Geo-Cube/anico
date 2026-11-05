@@ -3,7 +3,10 @@ import type {
   AnimalDocumentType,
   AssessmentStatus,
 } from '@anico/shared-schemas';
-import type { DocumentContentType } from './document-file.js';
+import type { FileContentType } from '../../../files/file-content.js';
+
+/** Limit jednoho souboru dokladu (R5, ADR-0005). */
+export const MAX_DOCUMENT_FILE_BYTES = 10 * 1024 * 1024;
 
 /** Uložená verze dokladu; `fileReference` nikdy neopouští službu. */
 export interface DocumentVersion {
@@ -15,7 +18,7 @@ export interface DocumentVersion {
   file: {
     fileName: string;
     fileReference: string;
-    contentType: DocumentContentType;
+    contentType: FileContentType;
     size: number;
   };
   assessmentStatus: AssessmentStatus;
@@ -43,7 +46,7 @@ export interface NewVersionInput {
 
 export class DocumentError extends Error {
   constructor(
-    public readonly status: 403 | 404 | 409 | 415 | 503,
+    public readonly status: 404 | 409 | 415,
     message: string,
     /** Aktuální verze řady při 409 (A3, A4). */
     public readonly current?: DocumentVersion,

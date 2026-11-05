@@ -124,10 +124,11 @@ export function mongooseDocumentsRepository(
       const rows = await model.aggregate<{
         _id: Types.ObjectId;
         ownerUserId: string;
-        name: string;
+        name?: string | null;
         species: Animal['species'];
         breedId: string;
         sex: Animal['sex'];
+        microchipNumber?: string | null;
         document: StoredDocumentVersion;
       }>([
         {
@@ -153,6 +154,7 @@ export function mongooseDocumentsRepository(
             species: 1,
             breedId: 1,
             sex: 1,
+            microchipNumber: 1,
             document: '$documents',
           },
         },
@@ -162,10 +164,11 @@ export function mongooseDocumentsRepository(
         animal: {
           id: row._id.toString(),
           ownerUserId: row.ownerUserId,
-          name: row.name,
+          name: row.name ?? null,
           species: row.species,
           breedId: row.breedId,
           sex: row.sex,
+          microchipNumber: row.microchipNumber ?? null,
         },
       }));
     },

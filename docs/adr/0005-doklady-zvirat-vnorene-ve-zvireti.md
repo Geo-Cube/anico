@@ -38,13 +38,14 @@ verzí dokladů a souborů v jedné transakci (UC-02/6). Repozitář nepoužív�
 4. **Ověřený chovatel (R2):** každá operace chovatele s doklady se dotáže `GET /breeders/me` v `breeder-service`
    s identitou přihlášeného uživatele (`x-anico-identity`) a vyžaduje `isVerified: true`. Nedostupnost nebo neplatná
    odpověď vede k 503 (fail closed); neověřený chovatel 403. Admin (role `admin` | `owner`) čte a rozhoduje bez této
-   kontroly a bez vlastnictví. Správa zvířat (UC-02) kontrolu zatím nemá – mimo rozsah.
+   kontroly a bez vlastnictví. Správu zvířat (UC-02) stejnou kontrolou chrání [ADR-0006](0006-profil-a-fotografie-zvirete-jednim-zapisem.md).
 5. **Odpovědi (R4):** cizí nebo neexistující zvíře či doklad 404, chybějící role 403, neplatné ID 400 (jako zbytek
    animal-service).
 6. **Soubory (R5, R6):** PDF/JPEG/PNG podle obsahu (magic bytes), 1–10 souborů na podání, nejvýše 10 MiB na soubor,
    GridFS bucket `animalDocuments`. Stahuje se jako `attachment` pod očištěným uloženým názvem s `nosniff`
    a `sandbox` CSP. Nepodporovaný formát 415, příliš velký soubor 413; v obou případech se nic neuloží.
-7. **Číslo čipu (R8):** jen informační. Entita zvířete číslo čipu zatím nemá, posouzení ho proto nezobrazuje.
+7. **Číslo čipu (R8):** jen informační. Od UC-02 ho entita zvířete má (`microchipNumber`) a fronta admina ho
+   zobrazuje u zvířete; chybějící číslo (`null`) posouzení neblokuje.
 
 ## Zvažované alternativy
 

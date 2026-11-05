@@ -8,14 +8,25 @@ import {
   AnimalDocumentsStateSchema,
   AnimalDocumentTypeSchema,
   AnimalIdSchema,
+  AnimalListSchema,
+  AnimalPhotoIdSchema,
+  AnimalPhotoSchema,
+  AnimalSchema,
+  AnimalSexSchema,
+  AnimalSpeciesSchema,
   AssessmentStatusSchema,
+  CreateAnimalSchema,
   DecideAnimalDocumentSchema,
   DocumentReviewListSchema,
   DocumentReviewSchema,
   MAX_DOCUMENTS_PER_SUBMISSION,
+  MAX_PHOTOS_PER_ANIMAL,
   ServiceHealthResponseSchema,
+  UpdateAnimalSchema,
 } from '@anico/shared-schemas';
-import { MAX_DOCUMENT_FILE_BYTES } from '../modules/documents/domain/document-file.js';
+import { MAX_PHOTO_FILE_BYTES } from '../modules/animal/domain/photos.js';
+import { ANIMAL_FIELD, PHOTOS_FIELD } from '../modules/animal/http/router.js';
+import { MAX_DOCUMENT_FILE_BYTES } from '../modules/documents/domain/animal-documents.js';
 import {
   FILE_FIELD,
   FILES_FIELD,
@@ -24,8 +35,11 @@ import {
 type JsonObject = Record<string, unknown>;
 
 const DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const PHOTO_TYPES = ['image/jpeg', 'image/png'];
 const MAX_MIB = MAX_DOCUMENT_FILE_BYTES / 1024 / 1024;
+const MAX_PHOTO_MIB = MAX_PHOTO_FILE_BYTES / 1024 / 1024;
 const fileDescription = `PDF, JPEG nebo PNG (typ se ověřuje podle obsahu, ne podle přípony či hlavičky), nejvýše ${MAX_MIB} MiB.`;
+const photoDescription = `JPEG nebo PNG (typ se ověřuje podle obsahu, ne podle přípony či hlavičky), nejvýše ${MAX_PHOTO_MIB} MiB na soubor. Zvíře má nejvýše ${MAX_PHOTOS_PER_ANIMAL} fotografií.`;
 
 const ErrorSchema = z.strictObject({ error: z.string() });
 const ValidationErrorSchema = z.strictObject({
@@ -69,10 +83,39 @@ const SubmitAnimalDocumentsFormSchema = z.strictObject({
 const ReplaceAnimalDocumentFormSchema = z.strictObject({
   [FILE_FIELD]: z.file().describe(fileDescription),
 });
+const photosField = z
+  .array(z.file())
+  .max(MAX_PHOTOS_PER_ANIMAL)
+  .describe(
+    `${photoDescription} Pořadí určuje \`primaryUploadIndex\` i pořadí ve výsledném seznamu.`,
+  );
+const CreateAnimalFormSchema = z.strictObject({
+  [ANIMAL_FIELD]: CreateAnimalSchema,
+  [PHOTOS_FIELD]: photosField.optional(),
+});
+const UpdateAnimalFormSchema = z.strictObject({
+  [ANIMAL_FIELD]: UpdateAnimalSchema.optional(),
+  [PHOTOS_FIELD]: photosField.optional(),
+});
+const BreedCatalogSchema = z.strictObject({
+  species: AnimalSpeciesSchema,
+  breeds: z.array(z.strictObject({ id: z.string(), name: z.string() })),
+});
 
 /** Komponenty pojmenované podle exportů `@anico/shared-schemas` (bez přípony `Schema`). */
 const components = [
   ['AnimalId', AnimalIdSchema],
+  ['AnimalSpecies', AnimalSpeciesSchema],
+  ['AnimalSex', AnimalSexSchema],
+  ['AnimalPhotoId', AnimalPhotoIdSchema],
+  ['AnimalPhoto', AnimalPhotoSchema],
+  ['Animal', AnimalSchema],
+  ['AnimalList', AnimalListSchema],
+  ['CreateAnimal', CreateAnimalSchema],
+  ['UpdateAnimal', UpdateAnimalSchema],
+  ['CreateAnimalForm', CreateAnimalFormSchema],
+  ['UpdateAnimalForm', UpdateAnimalFormSchema],
+  ['BreedCatalog', BreedCatalogSchema],
   ['AnimalDocumentId', AnimalDocumentIdSchema],
   ['AnimalDocumentType', AnimalDocumentTypeSchema],
   ['AssessmentStatus', AssessmentStatusSchema],
@@ -142,13 +185,16 @@ const responses = {
     'Identita nemá roli `admin` ani `owner` – `{"error":"Insufficient permissions"}`.',
   ),
   NotFound: errorResponse(
-    'Zvíře nebo doklad neexistuje, nebo patří jinému chovateli – `{"error":"Animal not found"}` / `{"error":"Document not found"}`.',
+    'Zvíře, fotografie nebo doklad neexistuje, nebo patří jinému chovateli – `{"error":"Animal not found"}` / `{"error":"Photo not found"}` / `{"error":"Document not found"}`.',
   ),
   PayloadTooLarge: errorResponse(
-    `Soubor je větší než ${MAX_MIB} MiB – \`{"error":"Payload too large"}\`. Nic se neuloží.`,
+    `Soubor je větší než ${MAX_MIB} MiB, nebo JSON tělo překračuje limit – \`{"error":"Payload too large"}\`. Nic se neuloží.`,
   ),
   UnsupportedMediaType: errorResponse(
     'Obsah souboru není PDF, JPEG ani PNG – `{"error":"Document must be a PDF, JPEG or PNG file"}`. Nic se neuloží.',
+  ),
+  PhotoUnsupportedMediaType: errorResponse(
+    'Obsah fotografie není JPEG ani PNG – `{"error":"Photo must be a JPEG or PNG file"}`. Nic se neuloží.',
   ),
   VerificationUnavailable: errorResponse(
     'Stav ověření chovatele nelze zjistit (breeder-service nedostupná) – `{"error":"Breeder verification unavailable"}`.',
@@ -168,6 +214,31 @@ const animalIdParameter = {
   description: 'ID zvířete.',
   schema: ref('AnimalId'),
 };
+const photoIdParameter = {
+  name: 'photoId',
+  in: 'path',
+  required: true,
+  description: 'ID fotografie.',
+  schema: ref('AnimalPhotoId'),
+};
+const animalBody = (jsonSchema: ComponentName, formSchema: ComponentName) => ({
+  required: true,
+  content: {
+    ...json(ref(jsonSchema)),
+    'multipart/form-data': {
+      schema: ref(formSchema),
+      encoding: {
+        [ANIMAL_FIELD]: { contentType: 'application/json' },
+        [PHOTOS_FIELD]: { contentType: PHOTO_TYPES.join(', ') },
+      },
+    },
+  },
+});
+const queryParameter = (
+  name: string,
+  description: string,
+  schema: JsonObject,
+) => ({ name, in: 'query', required: false, description, schema });
 const documentIdParameter = {
   name: 'documentId',
   in: 'path',
@@ -188,19 +259,21 @@ const readAccess =
 const conflict = (description: string) =>
   errorResponse(description, ref('AnimalDocumentConflict'));
 
-/** OpenAPI 3.1 dokument dokladů zvířat (UC-03) sestavený ze sdílených Zod schémat. */
+/** OpenAPI 3.1 dokument animal-service (UC-02 zvířata a fotografie, UC-03 doklady) ze sdílených Zod schémat. */
 export function openApiDocument(): JsonObject {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'AniCo animal-service – doklady zvířat',
-      version: '0.1.0',
+      title: 'AniCo animal-service – zvířata a doklady',
+      version: '0.2.0',
       description: [
-        'Doklady zvířat (UC-03, ADR-0005): chovatel podá doklady ke svému zvířeti, administrátor je posoudí. Popisuje doklady a health; CRUD zvířat (UC-02) tento dokument zatím nezahrnuje.',
+        'Profily zvířat s fotografiemi (UC-02) a doklady zvířat (UC-03, ADR-0005). Chovatel spravuje jen svá zvířata; administrátor posuzuje doklady.',
+        '',
+        'Profil a fotografie se vytvářejí i mění jedním požadavkem a jedním zápisem: buď se uloží vše, nebo nic. Nevyplněné volitelné údaje (vynechané, `null`, prázdný nebo jen mezerový text) se ukládají jako `null`. Neprázdný seznam fotografií má právě jednu hlavní: zvolenou, jinak dosavadní, jinak první. Odebrání hlavní udělá hlavní první zbývající.',
         '',
         'Každá příloha je samostatný doklad s řadou verzí. Zvíře má pro každý typ nejvýše jednu řadu: nový doklad stejného typu vytvoří další verzi (`versionNumber + 1`, `previousDocumentId`) a starší verze zůstává v historii včetně souboru a rozhodnutí. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.',
         '',
-        'Operace chovatele vyžadují ověřený účet z breeder-service, ověřuje se při každém požadavku. Identitu doplňuje gateway do hlavičky `x-anico-identity`.',
+        'Operace chovatele vyžadují ověřený účet z breeder-service (`isVerified`), ověřuje se při každém požadavku. Cizí i neexistující zvíře je 404. Identitu doplňuje gateway do hlavičky `x-anico-identity`.',
       ].join('\n'),
     },
     servers: [
@@ -211,6 +284,10 @@ export function openApiDocument(): JsonObject {
       },
     ],
     tags: [
+      {
+        name: 'animals',
+        description: 'Profily a fotografie vlastních zvířat.',
+      },
       { name: 'documents', description: 'Doklady vlastního zvířete.' },
       {
         name: 'document-review',
@@ -247,6 +324,160 @@ export function openApiDocument(): JsonObject {
             '503': errorResponse(
               'Služba není připravena – `{"error":"Service unavailable"}`.',
             ),
+          },
+        },
+      },
+      '/breeds/{species}': {
+        parameters: [
+          {
+            name: 'species',
+            in: 'path',
+            required: true,
+            description: 'Druh zvířete.',
+            schema: ref('AnimalSpecies'),
+          },
+        ],
+        get: {
+          tags: ['animals'],
+          operationId: 'listBreeds',
+          summary: 'Číselník plemen druhu',
+          description:
+            'Stabilní ID a české názvy plemen ze sdíleného číselníku. Vyžaduje přihlášení, ne ověřený účet.',
+          responses: {
+            '200': {
+              description: 'Plemena druhu.',
+              content: json(ref('BreedCatalog')),
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+          },
+        },
+      },
+      '/animals': {
+        get: {
+          tags: ['animals'],
+          operationId: 'listAnimals',
+          summary: 'Moje zvířata',
+          description:
+            'Jen zvířata přihlášeného ověřeného chovatele, nejnovější první. Další stránka přes `before=nextCursor`.',
+          parameters: [
+            queryParameter('species', 'Filtr druhu.', ref('AnimalSpecies')),
+            queryParameter(
+              'breedId',
+              'Filtr plemene; vyžaduje odpovídající `species`.',
+              { type: 'string', minLength: 1, maxLength: 160 },
+            ),
+            queryParameter('sex', 'Filtr pohlaví.', ref('AnimalSex')),
+            queryParameter('limit', 'Velikost stránky.', {
+              type: 'integer',
+              minimum: 1,
+              maximum: 100,
+              default: 20,
+            }),
+            queryParameter(
+              'before',
+              'Kurzor `nextCursor` z předchozí stránky.',
+              ref('AnimalId'),
+            ),
+          ],
+          responses: {
+            '200': {
+              description: 'Stránka zvířat.',
+              content: json(ref('AnimalList')),
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
+          },
+        },
+        post: {
+          tags: ['animals'],
+          operationId: 'createAnimal',
+          summary: 'Přidat zvíře',
+          description: `Jen ověřený chovatel; vlastníkem je přihlášený uživatel. JSON tělo vytvoří profil bez fotografií, \`multipart/form-data\` profil (pole \`${ANIMAL_FIELD}\`, JSON) i fotografie (\`${PHOTOS_FIELD}\`) najednou. Bez \`primaryUploadIndex\` je hlavní první fotografie.`,
+          requestBody: animalBody('CreateAnimal', 'CreateAnimalForm'),
+          responses: {
+            '201': {
+              description: 'Vytvořené zvíře.',
+              content: json(ref('Animal')),
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '413': responseRef('PayloadTooLarge'),
+            '415': responseRef('PhotoUnsupportedMediaType'),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
+          },
+        },
+      },
+      '/animals/{animalId}': {
+        parameters: [animalIdParameter],
+        get: {
+          tags: ['animals'],
+          operationId: 'getAnimal',
+          summary: 'Detail zvířete',
+          description: 'Jen vlastník zvířete s ověřeným účtem.',
+          responses: {
+            '200': {
+              description: 'Zvíře včetně fotografií.',
+              content: json(ref('Animal')),
+            },
+            ...breederRead,
+          },
+        },
+        patch: {
+          tags: ['animals'],
+          operationId: 'updateAnimal',
+          summary: 'Upravit profil a fotografie',
+          description: `Jen vlastník zvířete s ověřeným účtem. Vynechaný údaj zůstává, \`null\` nebo prázdný text ho vymaže; validuje se výsledný profil (plemeno musí patřit k druhu). \`removePhotoIds\` odebere fotografie i jejich soubory, nové fotografie (\`${PHOTOS_FIELD}\`) se přidají na konec. Hlavní fotografii zvolí \`primaryPhotoId\` nebo \`primaryUploadIndex\`. ID zvířete, vlastník, ID zachovaných fotografií i doklady se nemění.`,
+          requestBody: animalBody('UpdateAnimal', 'UpdateAnimalForm'),
+          responses: {
+            '200': {
+              description: 'Upravené zvíře.',
+              content: json(ref('Animal')),
+            },
+            ...breederRead,
+            '409': errorResponse(
+              'Zvíře se opakovaně souběžně měnilo – `{"error":"Animal changed concurrently; retry"}`. Nic se neuložilo.',
+            ),
+            '413': responseRef('PayloadTooLarge'),
+            '415': responseRef('PhotoUnsupportedMediaType'),
+          },
+        },
+        delete: {
+          tags: ['animals'],
+          operationId: 'deleteAnimal',
+          summary: 'Odstranit zvíře',
+          description:
+            'Jen vlastník zvířete s ověřeným účtem. Nevratně odstraní profil, fotografie a všechny verze dokladů včetně souborů; doklady zmizí i z fronty admina.',
+          responses: {
+            '204': { description: 'Zvíře odstraněno.' },
+            ...breederRead,
+          },
+        },
+      },
+      '/animals/{animalId}/photos/{photoId}/file': {
+        parameters: [animalIdParameter, photoIdParameter],
+        get: {
+          tags: ['animals'],
+          operationId: 'getAnimalPhoto',
+          summary: 'Soubor fotografie',
+          description: 'Jen vlastník zvířete s ověřeným účtem.',
+          responses: {
+            '200': {
+              description:
+                'Fotografie k zobrazení (`inline`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`).',
+              content: Object.fromEntries(
+                PHOTO_TYPES.map((type) => [
+                  type,
+                  { schema: { type: 'string', contentMediaType: type } },
+                ]),
+              ),
+            },
+            ...breederRead,
           },
         },
       },

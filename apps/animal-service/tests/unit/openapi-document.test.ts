@@ -3,6 +3,7 @@ import type { Router } from 'express';
 import { describe, expect, it } from 'vitest';
 import { OPENAPI_FILE, renderOpenApiJson } from '../../scripts/openapi.js';
 import { healthRouter } from '../../src/health/health-router.js';
+import { AnimalRouter } from '../../src/modules/animal/http/router.js';
 import { DocumentsRouter } from '../../src/modules/documents/http/documents-router.js';
 import { openApiDocument } from '../../src/openapi/document.js';
 
@@ -33,19 +34,36 @@ function collectRefs(value: unknown, refs: string[] = []): string[] {
   return refs;
 }
 
-describe('OpenAPI document of animal documents', () => {
+describe('OpenAPI document of animal-service', () => {
   it('matches the committed openapi.json (run `npm run openapi -w @anico/animal-service`)', async () => {
     expect(await readFile(OPENAPI_FILE, 'utf8')).toBe(
       await renderOpenApiJson(),
     );
   });
 
-  it('documents exactly the routes registered by the documents and health routers', () => {
+  it('documents exactly the routes registered by the animal, documents and health routers', () => {
     const unused = async () => {
       throw new Error('not called');
     };
+    const files = { save: unused, open: unused, delete: unused };
     const fromRouters = [
       ...routesOf(healthRouter({ isReady: () => true })),
+      ...routesOf(
+        AnimalRouter({
+          repository: {
+            create: unused,
+            find: unused,
+            list: unused,
+            update: unused,
+            deleteOwned: unused,
+          },
+          photos: files,
+          documentFiles: files,
+          verification: { isVerified: unused },
+          newId: () => '',
+          logger: { warn: () => undefined },
+        }),
+      ),
       ...routesOf(
         DocumentsRouter({
           repository: {
@@ -54,7 +72,7 @@ describe('OpenAPI document of animal documents', () => {
             decide: unused,
             reviewQueue: unused,
           },
-          files: { save: unused, open: unused, delete: unused },
+          files,
           verification: { isVerified: unused },
           newId: () => '',
           logger: { warn: () => undefined },

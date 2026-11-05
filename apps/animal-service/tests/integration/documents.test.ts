@@ -30,7 +30,7 @@ import { createModules } from '../../src/modules/index.js';
 import { migrateDatabase } from '../../src/database/engine.js';
 import { loadMigrations } from '../../src/database/registry.js';
 import { documentUseCases } from '../../src/modules/documents/application/documents.js';
-import { gridFsDocumentStorage } from '../../src/modules/documents/infrastructure/gridfs-document-storage.js';
+import { gridFsFileStorage } from '../../src/files/gridfs-file-storage.js';
 import { mongooseDocumentsRepository } from '../../src/modules/documents/infrastructure/mongoose-documents-repository.js';
 
 const owner = testIdentity({ roles: ['breeder'] });
@@ -620,7 +620,7 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
           throw new Error('connection closed before acknowledgement');
         },
       },
-      files: gridFsDocumentStorage(connection),
+      files: gridFsFileStorage(connection, 'animalDocuments'),
       verification: { isVerified: async () => true },
       newId: () => new Types.ObjectId().toString(),
       logger: { warn: () => undefined },
