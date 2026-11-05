@@ -6,8 +6,6 @@ coverage/
 *.tsbuildinfo
 .husky/_/
 .cache/
-.claude/settings.local.json
-.claude/worktrees/
 
 # Local environment and credentials; only empty examples belong in Git
 .env
@@ -22,6 +20,7 @@ secrets/
 .aws/
 .docker/
 *.pem
+*.p8
 *.key
 *.p12
 *.pfx

@@ -3,22 +3,27 @@
 **Aplikace běží u tebe, MongoDB na VPS. Jeden osobní účet, oddělená DB pro každou službu.**
 Celý první start je v [manuálu vývojáře](MANUAL-PRO-VYVOJARE.md).
 
+Osobní DB připojení je nezávislé na aplikačním přihlášení. Pro práci s identitou
+použij [lokální přihlášení](LOKALNI-PRIHLASENI.md); jeho serverová část je nasazená
+a ověřená na devu. GitHub Access sám business API neodemkne.
+
 ## Připojení
 
 Potřebuješ `cloudflared` a vlastní soubor od správce uložený jako
-`.env.remote.local` v kořeni repozitáře. Dosavadní soubor
-`apps/breeding-service/.env.remote.local` nebo soubor přímo v adresáři vybrané služby funguje také; nemusíš jej přesouvat ani kopírovat ke každé službě. Potom z kořene:
+`.env.remote.local` v kořeni repozitáře. Soubor
+`apps/tvoje-service/.env.remote.local` funguje také; nemusíš jej kopírovat ke každé službě.
+**`tvoje-service` nahraď názvem své existující služby**, například `animal-service`. Potom z kořene:
 
 Windows PowerShell: instalaci přes winget a variantu `npm.cmd` najdeš
 v [prvním spuštění](MANUAL-PRO-VYVOJARE.md#windows-powershell). Bash bootstrap ani `chmod` tam nepotřebuješ.
 
 ```bash
 npm run setup
-npm run dev:backend -- --service breeding
+npm run dev:backend -- --service tvoje-service
 ```
 
-Při výzvě dokonči GitHub přihlášení. Breeding backend: http://127.0.0.1:3000. **Ctrl+C** zavře i tunel.
-Pouhá kontrola vybrané služby: `npm run dev:backend -- --service breeding --check`.
+Při výzvě dokonči GitHub přihlášení. Port backendu vezmi z `.env.example` své služby. **Ctrl+C** zavře i tunel.
+Pouhá kontrola vybrané služby: `npm run dev:backend -- --service tvoje-service --check`.
 Příklady předpokládají, že máš danou službu v checkoutu a správce ti přidělil její DB oprávnění.
 
 Migrace, seed a obnova vlastní DB: [databázový postup](DATABAZE.md).

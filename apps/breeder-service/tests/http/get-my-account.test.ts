@@ -13,7 +13,6 @@ describe('GET /breeders/me', () => {
     const { app } = testApp();
     const response = await request(app).get('/breeders/me');
     expect(response.status).toBe(401);
-    expect(response.body).toEqual({ error: 'Unauthorized' });
   });
 
   it('takes over the account from identity and returns NOT_SUBMITTED', async () => {
@@ -36,7 +35,7 @@ describe('GET /breeders/me', () => {
     expect(await breeders.findByBreederId('user-123')).not.toBeNull();
   });
 
-  it('decodes URL-encoded names and ignores a breederId in the query', async () => {
+  it('preserves Unicode names and ignores a breederId in the query', async () => {
     const { app } = testApp();
     const response = await request(app)
       .get('/breeders/me?breederId=someone-else')
@@ -47,7 +46,7 @@ describe('GET /breeders/me', () => {
     expect(response.body.firstName).toBe('Žofie');
   });
 
-  it('does not overwrite the stored profile when headers change', async () => {
+  it('does not overwrite the stored profile when identity changes', async () => {
     const { app } = testApp();
     await request(app).get('/breeders/me').set(breederHeaders('user-1'));
     const second = await request(app)

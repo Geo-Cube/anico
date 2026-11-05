@@ -1,5 +1,18 @@
 import request from 'supertest';
 import type { Express } from 'express';
+import { randomUUID } from 'node:crypto';
+import type { RequestHandler } from 'express';
+import type { Identity } from '@anico/auth';
+import { testIdentity } from '@anico/auth/testing';
+
+// Opaque fixtures for dependency-injected HTTP tests, NOT authentication proof.
+const identities = new Map<string, Identity>();
+export const fixtureAuthenticate: RequestHandler = (req, _res, next) => {
+  const token = req.get('x-test-identity');
+  const identity = token ? identities.get(token) : undefined;
+  if (identity) req.auth = { ...identity, roles: [...identity.roles] };
+  next();
+};
 
 export const PDF = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n');
 export const PNG = Buffer.concat([
@@ -16,14 +29,19 @@ export function identityHeaders(
   id: string,
   options: { roles?: string; firstName?: string; lastName?: string } = {},
 ) {
-  const encode = encodeURIComponent;
-  return {
-    'x-user-id': id,
-    'x-user-first-name': encode(options.firstName ?? 'Test'),
-    'x-user-last-name': encode(options.lastName ?? 'Chovatel'),
-    'x-user-email': encode(`${id}@example.test`),
-    ...(options.roles ? { 'x-user-roles': options.roles } : {}),
-  };
+  const token = randomUUID();
+  const roles = (options.roles ?? 'breeder')
+    .split(',')
+    .map((role) => role.trim());
+  identities.set(token, {
+    ...testIdentity(),
+    userId: id,
+    givenName: options.firstName ?? 'Test',
+    familyName: options.lastName ?? 'Chovatel',
+    email: `${id}@example.test`,
+    roles: roles as Identity['roles'],
+  });
+  return { 'x-test-identity': token };
 }
 
 export const breederHeaders = (id = 'breeder-1') => identityHeaders(id);

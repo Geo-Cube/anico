@@ -1,5 +1,9 @@
 # __SERVICE_NAME__
 
+Vzdálený vývoj používá `@anico/auth` a ověřené JWT. Konfiguraci veřejných klíčů
+předává launcher za běhu; API se bez ní v dev/produkčním prostředí nespustí.
+[Přihlášení při lokálním vývoji](../../docs/LOKALNI-PRIHLASENI.md).
+
 Z kořene repozitáře:
 
 ```bash
@@ -55,7 +59,7 @@ npm run feature:new -- --args __MODULE_NAME__-list
 Nový modul se připojí na `/feeding`, tedy lokálně `/api/__MODULE_NAME__/feeding`.
 Generátor používá značky v `src/modules/index.ts`. Pokud si registry přepíšeš
 ručně a značky odstraníš, pouze vygeneruje soubory a upozorní na ruční připojení.
-Frontendovou komponentu si vlož do požadované stránky; `App.tsx` se nepřepisuje.
+Frontendovou komponentu připoj jako routu v `apps/frontend/src/app/routes.tsx` nebo ji vlož do stránky; generátor routy nemění.
 
 ## DB a image
 
@@ -68,3 +72,8 @@ docker build -f apps/__SERVICE_NAME__/Dockerfile -t anico/__SERVICE_NAME__:local
 Migrace i seed začínají bez obchodních dat. [DB postup](../../docs/DATABAZE.md).
 Kontejner používá port 3000; proměnné, GHCR publish, Coolify a veřejné API routy
 se konfigurují samostatně. Lokální Vite proxy nenastavuje routování na VPS.
+
+Middleware ověří identitu, ale business oprávnění doplňuje tvoje služba.
+Používej `req.auth`, `requireRole` a `assertResourceOwner` z `@anico/auth`.
+`AuthorizationError` už zpracovává centrální handler. Žádná role nemá automatickou
+výjimku z kontroly vlastnictví. [Krátký kontrakt a příklady](../../docs/INTEGRACE-IDENTITY.md).

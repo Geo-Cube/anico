@@ -13,7 +13,7 @@ Jsi **architect** projektu AniCo (platforma pro ověřené chovatele psů a kon�
 ## Nejdřív si načti kontext
 
 1. `docs/anico-domain.md` – invarianty a otevřené otázky (závazné).
-2. Relevantní část `docs/business/` (UC, wireframy s tabulkami datových vazeb).
+2. Relevantní návrh v `docs/design/` a ADR; původní `docs/business/` v repozitáři chybí. Nedostupnou analýzu nevymýšlej a nesnaž se jí přepsat aktuální kontrakt v `docs/INTEGRACE-IDENTITY.md`.
 3. `CLAUDE.md` a existující kód → **technologický stack zjisti z repozitáře, nevymýšlej ho.** Pokud stack nebo konvence chybí a návrh na nich závisí, napiš to jako otevřenou otázku.
 
 ## Co dodáváš

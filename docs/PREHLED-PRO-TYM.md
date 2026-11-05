@@ -4,6 +4,7 @@
 Backendoví vývojáři používají osobní DB podle služby. Frontend může volat
 společné dev API, nebo jednu lokální službu; nasazený dev má společná data.
 Produkce bude samostatná a veřejná, zatím není nasazená.
+Hotové a chybějící části: [aktuální stav projektu](STAV-PROJEKTU.md).
 
 ## Co dělá který nástroj
 
@@ -35,31 +36,39 @@ flowchart LR
   A --> T[Cloudflare Tunnel]
   T --> P[Traefik]
   P -->|/| F[React v Nginx]
-  P -->|/api| B[Express backend]
-  B --> D[Společná dev MongoDB]
+  P -->|/api/auth| S[Auth-service: Google/Microsoft a relace]
+  P -->|ověření relace pro aplikační API| S
+  P -->|/api a podepsaná identita JWT| B[Express backend]
+  S --> AD[Auth DB]
+  B --> D[Dev DB služby]
 ```
 
 Docker na VPS nezveřejňuje aplikační ani DB porty přímo do internetu.
 Administrace je na `admin.anico.online`, aplikace na `dev.anico.online`.
-GitHub přihlášení k devu nenahrazuje budoucí přihlášení zákazníků AniCo.
+GitHub přihlášení k devu je přístup týmu. Samotný uživatel AniCo se na devu
+přihlašuje přes Google nebo Microsoft; backend ověřuje podepsanou identitu. Oba poskytovatelé jsou
+nasazení a přihlášení i odhlášení je potvrzené v prohlížeči.
 
 ## Jak jde změna od vývojáře na server
 
-1. Stáhnu `dev`, založím feature větev a vyberu režim: `dev:frontend`,
+1. Stáhnu `dev`, založím feature větev, nebo aktualizuji svou existující větev
+   a začlením do ní `dev` podle [Git workflow](GIT-WORKFLOW.md). Vyberu režim: `dev:frontend`,
    `dev:backend -- --service animal`, nebo `dev:fullstack -- --service animal`
    (vše přes `npm run` z kořene).
 2. Upravím kód, ověřím jej a otevřu PR do `dev`.
 3. CI a code owner review rozhodnou, zda lze změnu sloučit.
 4. Po úspěšných kontrolách merge do `dev` vzniknou images v GHCR. Deploy job
-   je předá Coolify podle konkrétních digestů a ověří zdraví obou komponent.
+   je předá Coolify podle konkrétních digestů a ověří zdraví všech tří komponent.
 
 Na VPS se aplikace nekompilují. Nová mikroservisa potřebuje vlastní odpovědnost,
 API kontrakt, image a konfiguraci nasazení; není to jen další složka.
 
 ## Co ještě není hotové
 
-Napojení UI na API, aplikační autentizace, další doménové funkce a případný
-message broker řešíme podle potřeby týmu. Produkční nasazení, provozní limity,
+Google i Microsoft login/logout na devu funguje. Volitelné propojení účtů je nasazené, ale vlastník ho nevyužívá.
+Lokální Google/Microsoft login, předání identity do lokálního i sdíleného API a logout jsou také ověřené. Zbývá napojení business UI na API,
+autorizace jednotlivých domén a doručování registrace další službě.
+Message broker není nasazený. Apple a produkci jsme odložili. Provozní limity,
 monitoring a zálohy s testem obnovy ještě zbývají.
 IaC obnoví nastavení, **nikoli ztracená data bez záloh**.
 

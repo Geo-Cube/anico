@@ -53,7 +53,7 @@ export function submitVerificationRequestHandler(dependencies: {
     try {
       const { breeder } = await submit({
         ...input.data,
-        breederId: identityOf(res).id,
+        breederId: identityOf(res).userId,
         file: { content: req.file.buffer, fileName: req.file.originalname },
       });
       res.status(201).json(await toResponse(breeder));

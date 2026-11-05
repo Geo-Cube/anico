@@ -1,0 +1,97 @@
+- name: Prepare isolated AniCo authentication runtime
+  hosts: anico
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Prepare encrypted auth inputs locally
+      ansible.builtin.command:
+        argv:
+          [
+            node,
+            --import,
+            tsx,
+            '{{ playbook_dir }}/../scripts/prepare-dev-auth.mjs',
+          ]
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+      register: anico_auth_prepared
+    - name: Skip auth runtime until configured
+      ansible.builtin.meta: end_play
+      when: not (anico_auth_prepared.stdout | from_json).enabled
+  tasks:
+    - name: Require healthy event broker before advertising gateway runtime 4
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            inspect,
+            --format,
+            '{{ "{{.State.Health.Status}}" }}',
+            anico-dev-events,
+          ]
+      register: anico_auth_broker_health
+      changed_when: false
+      check_mode: false
+    - name: Verify publisher prerequisites
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop:
+        [
+          /srv/anico/dev/events/stream-ready.json,
+          /srv/anico/dev/auth/secrets/registration-broker.json,
+        ]
+      register: anico_auth_broker_files
+    - name: Require configured stream and scoped credentials
+      ansible.builtin.assert:
+        that:
+          - anico_auth_broker_health.stdout == 'healthy'
+          - anico_auth_broker_files.results | map(attribute='stat.exists') | min
+    - name: Verify actual durable stream before enabling new application releases
+      ansible.builtin.command:
+        argv:
+          [
+            node,
+            --import,
+            tsx,
+            '{{ playbook_dir }}/../scripts/configure-dev-events.mjs',
+            '{{ inventory_hostname }}',
+            --verify,
+          ]
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+      when: not ansible_check_mode
+    - name: Create private auth runtime directory
+      ansible.builtin.file:
+        path: /srv/anico/dev/auth/secrets
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Install auth-only runtime secrets
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/dev-auth/{{ item }}'
+        dest: '/srv/anico/dev/auth/secrets/{{ item }}'
+        owner: '1000'
+        group: '1000'
+        mode: '0400'
+      loop: [mongodb-uri, provider.env, signing-key.pem, gateway-key]
+      no_log: true
+    - name: Install private session verification middleware
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/dev-auth/gateway.json'
+        # Directory discovery ignores .json; JSON content is valid YAML.
+        dest: /data/coolify/proxy/dynamic/anico-session.yaml
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+    - name: Remove ignored legacy JSON configuration
+      ansible.builtin.file:
+        path: /data/coolify/proxy/dynamic/anico-session.json
+        state: absent

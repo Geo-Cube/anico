@@ -1,8 +1,8 @@
 # breeder-service
 
 Express + TypeScript + Mongoose, Zod, Pino, Vitest a Supertest.
-Generátor vytvořil vlastní workspace `@anico/breeder-service` a ignorovaný `.env`
-s místní DB `anico_breeder_local` na portu MongoDB 27017; žádná vzdálená hesla.
+Samostatný workspace `@anico/breeder-service` přidává backend UC-01; nenahrazuje
+existující `breeding-service` ani `auth-service`. Lokální konfiguraci vytvoř podle `.env.example`.
 
 Z **kořene repozitáře**:
 
@@ -15,8 +15,8 @@ npm run db:new -w @anico/breeder-service -- add-field
 npm run db:migrate -w @anico/breeder-service
 ```
 
-HTTP: `http://127.0.0.1:3001/health`, readiness: `/ready`.
-Pro dev server musí běžet místní MongoDB nebo být doplněné vlastní připojení.
+HTTP: `http://127.0.0.1:3003/health`, readiness: `/ready`.
+Pro dev server musí běžet místní MongoDB, vlastní připojení a konfigurace ověření JWT podle [kontraktu identity](../../docs/INTEGRACE-IDENTITY.md).
 Testy používají dočasnou MongoDB a místní databázi nepotřebují.
 
 ## Kam přidat vlastní funkce
@@ -24,7 +24,7 @@ Testy používají dočasnou MongoDB a místní databázi nepotřebují.
 Přidej `src/modules/NAZEV_DOMENY/` s `domain`, `application`, `infrastructure`
 a `http`. Doména a use cases nezávisí na Expressu ani Mongoose. Adaptéry spojuje
 `server.ts`; `app.ts` pouze sestavuje HTTP aplikaci bez otevření portu.
-Startovací modul `health` ukazuje toto rozdělení bez fiktivní obchodní logiky.
+Modul `breeders` implementuje převzetí profilu a ověření chovatele (UC-01).
 Sdílené API kontrakty přidej do `@anico/shared-schemas` pro frontend i backend.
 
 ## DB a nasazení
@@ -32,8 +32,8 @@ Sdílené API kontrakty přidej do `@anico/shared-schemas` pro frontend i backen
 Migrace začínají prázdné; `db:new` vytvoří soubor, který musíš implementovat.
 Seed je záměrně prázdný ping; doplň vlastní opakovatelné ukázkové záznamy.
 Pravidla zámků, retry a neměnných migrací: [databázový postup](../../docs/DATABAZE.md).
-DB příkazy zde spouštěj s `-w @anico/breeder-service`; kořenové `db:remote:*`
-a `dev:remote` zatím spravují pouze breeding-service.
+DB příkazy zde spouštěj s `-w @anico/breeder-service`; vzdálené účty a přístup
+pro tuto službu nejsou samotným přidáním workspace zřízené.
 
 Správce musí před vzdáleným vývojem založit účty omezené na databázi této služby.
 Konvence pro osobní DB je `anico_breeder_LOGIN`, účet `dev_LOGIN` a vlastní
@@ -46,12 +46,14 @@ docker build -f apps/breeder-service/Dockerfile -t anico/breeder-service:local .
 ```
 
 Kontejner poslouchá na portu 3000. Při nasazení nastav `HOST=0.0.0.0`,
-`MONGODB_URI`, `APP_ENV` a případně `MIGRATE_ON_START=true`. Bez nastavení
+`MONGODB_URI`, `APP_ENV`, konfiguraci `@anico/auth` a případně `MIGRATE_ON_START=true`. Bez nastavení
 `HOST` služba zůstává na loopbacku. Dockerfile používá vlastní allowlist
 `Dockerfile.dockerignore` a nebalí lokální `.env` ani zdrojové soubory do runtime.
 
-Generátor nic nenasazuje. GHCR publish, Coolify, API routing, proměnné a účty DB
-musí správce explicitně přidat do infrastruktury; současný deployment se nemění.
+Služba není nasazená. GHCR publish, Coolify, API routing, proměnné a účty DB
+vyžadují explicitní infrastrukturní integraci; tento backend nemění živý deployment.
+Současný frontend a jeho sdílené přihlášení zůstávají zachované. Administrace chovatelů
+je dál simulace bez tohoto API; endpoint pro dokončení onboardingového profilu zatím neexistuje.
 
 ## UC-01 API (ověření chovatele)
 
@@ -71,19 +73,21 @@ Kontrakty jsou v `@anico/shared-schemas`.
 
 ## Identita
 
-Dočasný kontrakt: gateway doplní hlavičky `x-user-id`, `x-user-first-name`, `x-user-last-name`,
-`x-user-email` (hodnoty URL-encoded) a `x-user-roles` (čárkou oddělené, admin = `admin`).
-Bez platných hlaviček služba vrací 401, chovatel na admin cestách 403. **Servisa smí běžet jen
-za gateway, která tyto hlavičky od klienta zahazuje a přepisuje**, jinak je identitu možné
-podvrhnout. Resolver se vkládá přes `createApp({ resolveIdentity })`, takže jej lze později
-nahradit JWT. Hlavičky s osobními údaji jsou v logu redigované.
+`server.ts` zapojuje `requestAuthenticator(process.env)` z `@anico/auth`.
+Ověřená identita je v `req.auth`: `userId`, `givenName`, `familyName`, `email`, `roles`.
+Vlastník profilu a `reviewedBy` pocházejí výhradně z `userId`; hlavičky `x-user-*`,
+tělo ani query je nemohou nahradit. Chybějící/neplatný JWT vrací 401,
+nedostatečná role na administrátorských cestách 403. Přístup k administraci mají `admin` a `owner`.
 
-Ruční vyzkoušení:
+Jména a e-mail smějí v platné auth identitě chybět. `GET /breeders/me` profil
+idempotentně převezme i tehdy a chybějící hodnoty uchová jako `null`.
+Podání žádosti vyžaduje validní povinná jména a e-mail a uloží doplněné údaje.
+Nejde o endpoint dokončení onboardingu.
 
-```bash
-curl -H 'x-user-id: u1' -H 'x-user-first-name: Jan' -H 'x-user-last-name: Nov%C3%A1k' \
-  -H 'x-user-email: jan%40example.test' http://127.0.0.1:3001/breeders/me
-```
+`createApp({ authenticate })` přijímá autentizační `RequestHandler` (testy mohou nastavit
+ověřené `req.auth` testovacím middlewarem). Produkční cesta používá společné JWT ověření,
+nikoli resolver neověřených hlaviček. Konfigurace a lokální přihlášení:
+[integrace identity](../../docs/INTEGRACE-IDENTITY.md), [lokální přihlášení](../../docs/LOKALNI-PRIHLASENI.md).
 
 ## E-mail
 

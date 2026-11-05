@@ -1,9 +1,26 @@
 # Dokumentace AniCo
 
 **Vývojář začíná pouze [tímto návodem](MANUAL-PRO-VYVOJARE.md).**
+Jeho úvod vede úplného začátečníka od klonování po první spuštění a PR v GitHub Desktop.
 Cloudové tokeny, SSH a Pulumi pro běžný vývoj nepotřebuješ.
 
+**Co už funguje a co chybí:** [aktuální stav projektu](STAV-PROJEKTU.md).
+
+`tvoje-service` v návodech nahraď názvem své služby, například `animal-service`.
+Ukázková `breeding-service` není společný adresář pro nové mikroservisy;
+každá má vlastní `apps/tvoje-service`. Skutečné názvy nasazených images,
+artifactů a databází v provozních návodech označují existující infrastrukturu.
+
+Lokální identita uživatele: [přihlášení pro vývoj](LOKALNI-PRIHLASENI.md).
+
 Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
+
+Backend používající přihlášení: [middleware, role, vlastnictví a registrace](INTEGRACE-IDENTITY.md).
+
+Domluvený budoucí tok: [doplňující formulář po přihlášení a dashboard](ONBOARDING-PROFILU.md).
+Nový animal backend: [základ a API](../apps/animal-service/README.md).
+
+Správce doručování registrací: [broker, publisher a budoucí animal consumer](REGISTRACNI-UDALOSTI.md).
 
 | Chci                                       | Návod                                     |
 | ------------------------------------------ | ----------------------------------------- |
@@ -15,6 +32,7 @@ Nový backend: [vytvoření mikroservisy jedním příkazem](NOVA-SLUZBA.md).
 | Založit větev a PR v GitHub Desktop        | [Git workflow](GIT-WORKFLOW.md)           |
 | Pochopit review a blokovaný merge          | [Pravidla review](PRAVIDLA-REVIEW.md)     |
 | Umístit nový kód nebo použít schémata      | [Architektura](ARCHITEKTURA.md)           |
+| Přihlášení a kontrakt identity             | [Autentizace](AUTENTIZACE.md)             |
 | Pochopit stack a infrastrukturu            | [Přehled pro tým](PREHLED-PRO-TYM.md)     |
 | Zjistit, co se nasazuje                    | [Nasazování](NASAZOVANI.md)               |
 | Spravovat dev deployment a rollback        | [Dev nasazení](DEV-NASAZENI.md)           |

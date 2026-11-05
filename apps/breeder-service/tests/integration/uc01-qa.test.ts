@@ -23,7 +23,7 @@ import type {
 } from '../../src/modules/breeders/domain/ports.js';
 import { gridFsFileStorage } from '../../src/modules/breeders/infrastructure/gridfs-file-storage.js';
 import { mongooseBreederRepository } from '../../src/modules/breeders/infrastructure/mongoose-breeder-repository.js';
-import { gatewayHeaderIdentity } from '../../src/shared/http/identity.js';
+import { fixtureAuthenticate } from '../support/api.js';
 import {
   HTML,
   JPEG,
@@ -36,6 +36,8 @@ import {
   validFields,
 } from '../support/api.js';
 import { binary, decideRequest } from '../support/qa.js';
+import { testIdentity } from '@anico/auth/testing';
+import { signedAuth } from '../support/signed-auth.js';
 
 describe('UC-01 QA na MongoDB + GridFS', () => {
   let mongod: MongoMemoryServer;
@@ -81,7 +83,7 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
         save: (f) => (hooks.save ? hooks.save() : storage.save(f)),
       },
       notifier: { notifyDecision },
-      resolveIdentity: gatewayHeaderIdentity,
+      authenticate: fixtureAuthenticate,
     });
   });
 
@@ -468,9 +470,15 @@ describe('UC01-NFR-00 produkční server', () => {
 });
 
 describe('UC01-SEC-12 produkční server: logy neobsahují PII (spuštěný proces)', () => {
-  it('ASSUMPTION: server.ts redaguje x-user-email/jména a nelogují se data z podání', async () => {
+  it('redacts authenticated identity, gateway credentials and submission data', async () => {
     const mongod = await MongoMemoryServer.create();
     const port = 39000 + Math.floor(Math.random() * 500);
+    const auth = await signedAuth();
+    const user = testIdentity({
+      givenName: 'Tajnejmeno',
+      familyName: 'Tajnepriezvisko',
+      email: 'tajny.identita@example.test',
+    });
     const child = spawn(
       process.execPath,
       ['--import', 'tsx', 'src/server.ts'],
@@ -481,6 +489,11 @@ describe('UC01-SEC-12 produkční server: logy neobsahují PII (spuštěný proc
           PORT: String(port),
           MONGODB_URI: mongod.getUri('anico_uc01_logs'),
           LOG_LEVEL: 'info',
+          APP_ENV: 'dev',
+          HOST: '127.0.0.1',
+          AUTH_JWKS_JSON: JSON.stringify(auth.jwks),
+          AUTH_ISSUER: auth.issuer,
+          AUTH_AUDIENCE: auth.audience,
         },
       },
     );
@@ -497,10 +510,10 @@ describe('UC01-SEC-12 produkční server: logy neobsahují PII (spuštěný proc
         await new Promise((r) => setTimeout(r, 100));
       }
       const headers = {
-        'x-user-id': 'log-user',
-        'x-user-first-name': encodeURIComponent('Tajnejmeno'),
-        'x-user-last-name': encodeURIComponent('Tajnepriezvisko'),
-        'x-user-email': encodeURIComponent('tajny.identita@example.test'),
+        ...(await auth.headers(user)),
+        'cf-access-jwt-assertion': 'synthetic-cloudflare-assertion',
+        'cf-access-client-id': 'synthetic-cloudflare-id',
+        'cf-access-client-secret': 'synthetic-cloudflare-secret',
       };
       await fetch(`${base}/breeders/me`, { headers });
       const form = new FormData();
@@ -532,8 +545,7 @@ describe('UC01-SEC-12 produkční server: logy neobsahují PII (spuštěný proc
           method: 'POST',
           headers: {
             ...headers,
-            'x-user-id': 'log-admin',
-            'x-user-roles': 'admin',
+            ...(await auth.headers(testIdentity({ roles: ['admin'] }))),
             'content-type': 'application/json',
           },
           body: JSON.stringify({
@@ -545,7 +557,7 @@ describe('UC01-SEC-12 produkční server: logy neobsahují PII (spuštěný proc
       expect(decided.status).toBe(200);
       await new Promise((r) => setTimeout(r, 300));
 
-      expect(output).toContain('log-user'); // logování funguje
+      expect(output).toContain('/breeders/me'); // access logging is active
       for (const secret of [
         'tajny.identita',
         'tajny.formular',
@@ -553,6 +565,10 @@ describe('UC01-SEC-12 produkční server: logy neobsahují PII (spuštěný proc
         'Tajnepriezvisko',
         'TAJNY-OBSAH-9921',
         'Tajny duvod 5521',
+        headers['x-anico-identity'],
+        'synthetic-cloudflare-assertion',
+        'synthetic-cloudflare-id',
+        'synthetic-cloudflare-secret',
       ]) {
         expect(output, secret).not.toContain(secret);
       }

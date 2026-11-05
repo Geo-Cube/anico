@@ -17,7 +17,7 @@ def inspect(name):
 
 containers = None
 for attempt in range(40):
-    containers = {name: inspect(name + '-' + identity) for name in ['backend', 'frontend']}
+    containers = {name: inspect(name + '-' + identity) for name in ['backend', 'frontend', 'auth']}
     if all(value and value['State'].get('Health', {}).get('Status') == 'healthy' for value in containers.values()):
         break
     time.sleep(3)
@@ -35,15 +35,21 @@ for name, container in containers.items():
     revision = container['Config']['Labels']['com.anico.revision']
     assert re.fullmatch('[a-f0-9]{40}', revision)
     revisions.add(revision)
-    repository = 'breeding-service' if name == 'backend' else 'frontend'
+    repository = {'backend':'breeding-service','frontend':'frontend','auth':'auth-service'}[name]
     assert re.fullmatch('ghcr.io/geo-cube/anico-' + repository + '@sha256:[a-f0-9]{64}', container['Config']['Image'])
     networks = set(container['NetworkSettings']['Networks'])
     assert 'anico-dev-app' in networks
-    assert networks <= {'anico-dev-app', 'anico-dev-data', identity}
+    publisher_enabled = 'AUTH_REGISTRATION_PUBLISHER_ENABLED=true' in container['Config']['Env']
+    allowed_networks = {'anico-dev-app', 'anico-dev-data', identity}
+    if name == 'auth' and publisher_enabled:
+        allowed_networks.add('anico-dev-events')
+    assert networks <= allowed_networks
     if name == 'frontend':
+        assert 'anico-dev-events' not in networks
         assert 'anico-dev-data' not in networks
         assert not any(value.startswith('MONGODB_URI=') for value in container['Config']['Env'])
-    else:
+    elif name == 'backend':
+        assert 'anico-dev-events' not in networks
         assert 'anico-dev-data' in networks
         assert not any(value.startswith('MONGODB_URI=') for value in container['Config']['Env'])
         assert any(mount['Destination'] == '/run/secrets/dev-mongodb-uri' and not mount['RW'] for mount in container['Mounts'])
@@ -51,6 +57,14 @@ for name, container in containers.items():
         assert uri.hostname == 'anico-dev-mongodb'
         assert uri.username == 'anico_dev_app'
         assert uri.path == '/anico_breeding'
+    else:
+        assert 'anico-dev-data' in networks
+        assert not any(value.startswith(('MONGODB_URI=', 'GOOGLE_CLIENT_SECRET=')) for value in container['Config']['Env'])
+        assert len(container['Mounts']) >= 4
+        if publisher_enabled:
+            assert 'anico-dev-events' in networks
+            assert any(mount['Destination'] == '/run/secrets/auth-registration-broker-json' and not mount['RW'] for mount in container['Mounts'])
+        assert not any(value.startswith(('NATS_PASSWORD=', 'NATS_URL=')) for value in container['Config']['Env'])
 assert len(revisions) == 1, 'Mixed release revisions'
 
 
@@ -65,4 +79,5 @@ release = json.loads(request('/anico-release-' + next(iter(revisions)) + '.json'
 assert release['revision'] in revisions
 assert release['images']['frontend'] == containers['frontend']['Config']['Image']
 assert release['images']['breeding-service'] == containers['backend']['Config']['Image']
+assert release['images']['auth-service'] == containers['auth']['Config']['Image']
 print('Verified healthy matching dev images, frontend and /api/ready routing, non-root/read-only containers, private ports and separate DB credentials/networks.')

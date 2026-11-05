@@ -343,15 +343,13 @@ describe('UC01-SUB-15/17 soubory: limit a názvy (výchozí konfigurace)', () =>
     expect(files.size()).toBe(1);
   });
 
-  it('UC01-SEC-13: neautentizované podání s 6 MB tělem -> 401 (ne 413), nic se neuloží', async () => {
+  it('UC01-SEC-13: odmítne neautentizovaný upload inzerující 6 MB před čtením těla', async () => {
     const { app, files } = testApp();
-    const response = await submit(
-      app,
-      {},
-      {
-        file: { content: padPdf(6 * 1024 * 1024), fileName: 'big.pdf' },
-      },
-    );
+    const response = await request(app)
+      .post(URL)
+      .set('Content-Type', 'multipart/form-data; boundary=unauthenticated')
+      .set('Content-Length', String(6 * 1024 * 1024))
+      .send('');
     expect(response.status).toBe(401);
     expect(files.size()).toBe(0);
   });

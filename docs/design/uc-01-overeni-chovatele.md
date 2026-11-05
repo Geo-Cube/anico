@@ -7,6 +7,10 @@ Rozhodnutí: [ADR-0001](../adr/0001-zadost-o-overeni-vnorena-v-chovateli.md),
 [ADR-0002](../adr/0002-identita-z-gateway-hlavicek.md), [ADR-0003](../adr/0003-e-mail-po-ulozeni-rozhodnuti.md).
 Návrh neopakuje průvodce; popisuje cílový stav a odchylky od P, skillů a existujícího kódu.
 
+Aktualizace integrace 5. 11. 2026: původní doménový návrh zůstává podkladem,
+ale identitu nahrazuje současný JWT kontrakt (§6, ADR-0002). Backend UC-01 je
+lokální doplněk; `breeding-service`, společná auth a současný frontend zůstávají zachované.
+
 ## 1. Rozsah a sledovatelnost
 
 Pokrývá Převzetí účtu (HDS 1–3), UC-01 Příprava a první podání (HDS 1–7, A1–A3), Hlavní scénář – schválení
@@ -190,28 +194,17 @@ Každá „společná“ změna je jeden atomický zápis do jednoho dokumentu (
 
 ## 6. Identita a bezpečnostní předpoklad
 
-- `src/shared/http/identity.ts` (K1, ADR-0002): `Identity { id, firstName, lastName, emailAddress, isAdmin }`,
-  `IdentityResolver = (req) => Identity | null | Promise<Identity | null>` (middleware výsledek vždy `await`,
-  přechod na asynchronní JWT/JWKS tak nemění signaturu), implementace `gatewayHeaderIdentity`, továrny `authenticate(resolve)` →
-  `res.locals.identity` / 401, `requireAdmin(resolve)` → 401 / 403, `identityOf(res)` (bez middleware vyhodí
-  programátorskou chybu). Resolver se vkládá `createApp({ resolveIdentity, … })`; `server.ts` předá
-  `gatewayHeaderIdentity`, testy vlastní resolver nebo hlavičky.
-- Hlavičky: `x-user-id` (1–128 znaků, bez čárek a bílých znaků – duplicitní hlavičky Node spojuje `", "`),
-  `x-user-first-name`, `x-user-last-name` (trim, 1–100 – stejně jako
-  formulář, aby šel předvyplněný profil odeslat), `x-user-email` (`z.email()`, max. 254 – stejně jako
-  `MyAccountSchema`, jinak by výstup padal), vše URL-encoded, `decodeURIComponent` v `try/catch` → 401;
-  `x-user-roles` čárkou oddělené, `isAdmin` = obsahuje přesně `admin`.
-- Modul breeders převádí identitu jen v `http/current-breeder.ts` (`toNewBreeder(identity)`,
-  `breederId = identity.id`); `CurrentBreederResolver` zaniká. Admin router bere `reviewedBy` z
-  `identityOf(res).id`.
-- `pino` `redact` doplnit o `req.headers["x-user-email"]`, `req.headers["x-user-first-name"]`,
-  `req.headers["x-user-last-name"]` a `res.headers["content-disposition"]` (název souboru) – `pino-http` jinak
-  loguje osobní údaje u každého požadavku. `x-user-id` a `x-user-roles` zůstávají kvůli dohledatelnosti.
-- **Předpoklad nasazení**: servisa je dosažitelná jen přes gateway, která hlavičky `x-user-*` od klienta
-  **odstraní a nastaví** z ověřeného přihlášení. `HOST` má výchozí `127.0.0.1`; kontejner (`HOST=0.0.0.0`,
-  port 3000) nesmí mít publikovaný port. Dnešní Cloudflare + Traefik (`docs/NASAZOVANI.md`) hlavičky
-  nenastavují – do splnění O1/O8 se `breeder-service` nesmí routovat z internetu. Explicitní env opt-in pro
-  identitu z hlaviček je odložený; podmínky nasazení shrnuje ADR-0002.
+- `server.ts` zapojuje `requestAuthenticator(process.env)` z `@anico/auth`; `createApp({ authenticate })`
+  přijímá `RequestHandler`. Ověřená identita je v `req.auth`, nikoli v `x-user-*` hlavičkách.
+- `req.auth.userId` určuje vlastníka profilu a `reviewedBy`. `givenName`, `familyName` a `email` mohou
+  být `null`; idempotentní `GET /breeders/me` je zachová jako `null` a nevrací kvůli nim 401.
+  Podání žádosti musí obsahovat validní povinné jméno a e-mail a doplní uložený profil.
+- Administrátorské operace povolují role `admin` a `owner`. Neověřený JWT → 401, ověřený uživatel bez
+  odpovídající role → 403. Kontroly platí i pro soubory; klientské tělo ani query neurčuje vlastníka.
+- Autentizace předchází parsování chráněného těla. Logy nesmějí obsahovat tokeny, cookies, osobní údaje
+  ani obsah certifikátu. Aplikační porty se nezveřejňují; JWT se ověřuje přímo ve službě.
+- Aktuální kontrakt nahrazuje původní hlavičkový prototyp: [ADR-0002](../adr/0002-identita-z-gateway-hlavicek.md).
+  Backend existuje lokálně; cloudový routing ani frontendová integrace nejsou dokončené.
 
 ## 7. Rozpory a jejich vyhodnocení
 
@@ -239,32 +232,30 @@ Každá „společná“ změna je jeden atomický zápis do jednoho dokumentu (
 
 ## 8. Otevřené otázky a závislosti
 
-Implementaci neblokuje nic; nasazení blokují O1, O3 a O8. Výchozí volby platí, dokud tým nerozhodne jinak.
+Lokální backend UC-01 existuje; cloudové nasazení vyžaduje O8 a vlastní DB oprávnění, produkce také O3 a právní rozhodnutí O6. O1 řeší současný JWT kontrakt.
 
-| #   | Otázka                                                                        | Zdroj                       | Výchozí volba                                                                 | Blokuje           |
-| --- | ----------------------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------- | ----------------- |
-| O1  | Kontrakt identity: hlavičky vs. JWT, název role admina, formát `id`           | brief 3, domain 6.8, P 11.2 | hlavičky `x-user-*`, role `admin` (ADR-0002)                                  | nasazení          |
-| O2  | Jak vzniká profil po registraci                                               | brief 3, P D4               | JIT při `GET /breeders/me`; podání bez převzetí → 404                         | –                 |
-| O3  | E-mailový provider                                                            | brief 3, P 11.2             | vývojový logovací adaptér, e-mail se nedoručí (ADR-0003)                      | **produkci**      |
-| O4  | `reviewedBy` id vs. jméno (WF 03, 07 chtějí „Posoudila: …“)                   | brief 3, domain 6.8         | jen id dle `04-products.md`; snapshot jména až po rozhodnutí analytika        | –                 |
-| O5  | Druh chovu (psi/koně) u chovatele; pole „hospodářství“ u koní                 | brief 3, domain 6.3         | žádné nové pole; stejná pole stanice pro oba                                  | –                 |
-| O6  | Doba uchování certifikátů a osobních údajů (GDPR), mazání                     | brief 3, P 8.3              | uchovávat; žádné mazací API                                                   | produkci (právně) |
-| O7  | Audit log rozhodnutí                                                          | brief 3, P 11.2             | `reviewedBy/At` v dokumentu + log požadavku                                   | –                 |
-| O8  | Routing gateway → servisa (prefix `/api/…`), Compose/Coolify                  | brief 3, `NASAZOVANI.md`    | servisa bez prefixu, gateway prefix odřízne a nastaví hlavičky                | nasazení          |
-| O9  | Jak se další servisy dozví `isVerified`                                       | brief 3, P 11.2             | mimo UC-01; pole je v dokumentu, rozhraní se navrhne s UC-02                  | UC-02             |
-| O10 | 403 vs. 404                                                                   | domain 6.6                  | 404 neexistující/cizí, 403 chybějící role (K7)                                | rozhodnuto        |
-| O11 | Limity souborů                                                                | domain 6.7                  | 5 MiB, 1 soubor, PDF/JPEG/PNG                                                 | –                 |
-| O12 | Smí admin, který má i profil chovatele, rozhodnout vlastní žádost? (nové)     | –                           | analýza nezakazuje → bez kontroly; doporučení zakázat (1 podmínka v use-case) | –                 |
-| O13 | Má `GET /breeders/me` zakládat profil i adminovi? (nové)                      | –                           | ano, analýza role nerozlišuje                                                 | –                 |
-| O14 | PDF s hlavičkou `%PDF-` až za prvním bajtem (specifikace to toleruje) (nové)  | –                           | odmítnout 415 (A2)                                                            | –                 |
-| O15 | `docs/business/` v repozitáři chybí; analýza a průvodce jsou mimo repo (nové) | domain 7                    | odkazy na externí soubory; doplnit do repa                                    | –                 |
-| O16 | Vynutit konzistenci stavu i v DB serverovým validátorem kolekce (nové)        | architect, §7 ř. 7          | ne (K11 platí); otevřený follow-up: migrace s `collMod` jako pojistka         | –                 |
+| #   | Otázka                                                                        | Zdroj                   | Výchozí volba                                                                                     | Blokuje           |
+| --- | ----------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------- | ----------------- |
+| O1  | Kontrakt identity                                                             | aktuální auth integrace | `@anico/auth`, ověřené `req.auth.userId`, admin/owner; nullable jména/e-mail (ADR-0002)           | rozhodnuto        |
+| O2  | Jak vzniká profil po registraci                                               | brief 3, P D4           | JIT při `GET /breeders/me`; podání bez převzetí → 404                                             | –                 |
+| O3  | E-mailový provider                                                            | brief 3, P 11.2         | vývojový logovací adaptér, e-mail se nedoručí (ADR-0003)                                          | **produkci**      |
+| O4  | `reviewedBy` id vs. jméno (WF 03, 07 chtějí „Posoudila: …“)                   | brief 3, domain 6.8     | jen id dle `04-products.md`; snapshot jména až po rozhodnutí analytika                            | –                 |
+| O5  | Druh chovu (psi/koně) u chovatele; pole „hospodářství“ u koní                 | brief 3, domain 6.3     | žádné nové pole; stejná pole stanice pro oba                                                      | –                 |
+| O6  | Doba uchování certifikátů a osobních údajů (GDPR), mazání                     | brief 3, P 8.3          | uchovávat; žádné mazací API                                                                       | produkci (právně) |
+| O7  | Audit log rozhodnutí                                                          | brief 3, P 11.2         | `reviewedBy/At` v dokumentu + log požadavku                                                       | –                 |
+| O8  | Routing gateway → servisa (prefix `/api/…`), Compose/Coolify                  | `NASAZOVANI.md`         | zatím bez nasazení a frontendového napojení; budoucí route používá existující podepsanou identitu | nasazení          |
+| O9  | Jak se další servisy dozví `isVerified`                                       | brief 3, P 11.2         | mimo UC-01; pole je v dokumentu, rozhraní se navrhne s UC-02                                      | UC-02             |
+| O10 | 403 vs. 404                                                                   | domain 6.6              | 404 neexistující/cizí, 403 chybějící role (K7)                                                    | rozhodnuto        |
+| O11 | Limity souborů                                                                | domain 6.7              | 5 MiB, 1 soubor, PDF/JPEG/PNG                                                                     | –                 |
+| O12 | Smí admin, který má i profil chovatele, rozhodnout vlastní žádost? (nové)     | –                       | analýza nezakazuje → bez kontroly; doporučení zakázat (1 podmínka v use-case)                     | –                 |
+| O13 | Má `GET /breeders/me` zakládat profil i adminovi? (nové)                      | –                       | ano, analýza role nerozlišuje                                                                     | –                 |
+| O14 | PDF s hlavičkou `%PDF-` až za prvním bajtem (specifikace to toleruje) (nové)  | –                       | odmítnout 415 (A2)                                                                                | –                 |
+| O15 | `docs/business/` v repozitáři chybí; analýza a průvodce jsou mimo repo (nové) | domain 7                | odkazy na externí soubory; doplnit do repa                                                        | –                 |
+| O16 | Vynutit konzistenci stavu i v DB serverovým validátorem kolekce (nové)        | architect, §7 ř. 7      | ne (K11 platí); otevřený follow-up: migrace s `collMod` jako pojistka                             | –                 |
 
-**Zjištění mimo rozsah UC-01** (neřeší se zde, předat správci CI/infrastruktury): `scripts/check-containers.sh`,
-`infrastructure/compose.app.yaml`, `.github/workflows/publish-images.yml`, `apps/frontend/Dockerfile` a kořenový
-skript `start` stále odkazují na `apps/breeding-service`, smazaný na této větvi (commit 86595e4). CI kontejnerů
-pravděpodobně selže. Image `breeder-service` se sestaví (vlastní `Dockerfile.dockerignore`), ale není v Compose
-ani v publikaci images – souvisí s O8.
+`breeding-service` a její stávající provozní konfigurace zůstávají zachované.
+`breeder-service` je samostatný lokální backend; jeho přidání neznamená nasazení,
+produkční e-mail ani dokončení onboardingového profilu.
 
 ## 9. Rizika
 
@@ -276,8 +267,8 @@ ani v publikaci images – souvisí s O8.
   GridFS; menší varianta je dávkový `getMetadata` přes `$in` (jen fronta).
 - **Ztráta e-mailu (D8):** pád procesu mezi zápisem a odesláním nebo chyba provideru = e-mail se nepošle a
   nezopakuje. Výsledek je vždy v „Můj účet“. Cesta dál: outbox ve stejném dokumentu (ADR-0003).
-- **Identita z hlaviček:** přímý přístup k servise nebo gateway, která hlavičky připojuje místo přepisu
-  (`x-user-roles: breeder, admin`), = kdokoli je admin. Mitigace jen provozní (§6, ADR-0002).
+- **Auth integrace:** nepřidávat fallback na `x-user-*`; neplatný token nesmí obejít ověření.
+  Chybějící profilové údaje v platném JWT nesmějí zabránit převzetí profilu (ADR-0002).
 - **Paměť při uploadu:** až 5 MiB × souběžné uploady v RAM. Mitigace: `authenticate` před multerem,
   `fieldSize`, limit těla a rate limit na gateway.
 - **Osiřelé soubory:** pád mezi `save` a zápisem, selhání `delete` → soubor bez záznamu (logováno, dohledatelné).

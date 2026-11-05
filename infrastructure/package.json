@@ -29,7 +29,11 @@
     "recovery:verify": "node --env-file-if-exists=.env.local scripts/verify-recovery-snapshot.mjs",
     "pulumi": "node --env-file-if-exists=.env.local scripts/run-pulumi.mjs",
     "preview": "npm run build && npm run pulumi -- preview",
-    "up": "npm run build && npm run pulumi -- up"
+    "up": "npm run build && npm run pulumi -- up",
+    "init:dev-auth": "node --import tsx scripts/init-dev-auth.mjs",
+    "deploy:dev-auth": "bash scripts/deploy-dev-auth.sh",
+    "init:dev-events": "node --import tsx scripts/init-dev-events.mjs",
+    "deploy:dev-events": "bash scripts/deploy-dev-events.sh"
   },
   "dependencies": {
     "@pulumi/cloudflare": "^6.23.1",
@@ -38,6 +42,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
     "@types/node": "^22.20.5",
     "tsx": "^4.23.15"
   }

@@ -93,6 +93,59 @@ describe('gridFsFileStorage', () => {
     expect(await storage.open('aaaaaaaaaaaaaaaaaaaaaaaa')).toBeNull();
   });
 
+  it('removes already uploaded chunks when a later chunk insert fails', async () => {
+    const bucketName = 'rejectedCertificateChunk';
+    const db = connection.db!;
+    await db.createCollection(`${bucketName}.chunks`, {
+      validator: { n: { $ne: 1 } },
+      validationAction: 'error',
+    });
+    const storage = gridFsFileStorage(connection, bucketName);
+    await expect(
+      storage.save({
+        fileName: 'rejected.pdf',
+        contentType: 'application/pdf',
+        content: Buffer.alloc(600 * 1024, 0x61),
+      }),
+    ).rejects.toThrow(/validation/i);
+    expect(await db.collection(`${bucketName}.files`).countDocuments()).toBe(0);
+    expect(await db.collection(`${bucketName}.chunks`).countDocuments()).toBe(
+      0,
+    );
+  });
+
+  it('removes orphan chunks when the final file metadata insert fails', async () => {
+    const bucketName = 'rejectedCertificateMetadata';
+    const db = connection.db!;
+    await db.createCollection(`${bucketName}.files`, {
+      validator: { filename: { $ne: 'rejected.pdf' } },
+      validationAction: 'error',
+    });
+    const storage = gridFsFileStorage(connection, bucketName);
+    // More than one GridFS chunk must be persisted before metadata is inserted.
+    const content = Buffer.alloc(600 * 1024, 0x61);
+    await expect(
+      storage.save({
+        fileName: 'rejected.pdf',
+        contentType: 'application/pdf',
+        content,
+      }),
+    ).rejects.toThrow(/validation/i);
+    expect(await db.collection(`${bucketName}.files`).countDocuments()).toBe(0);
+    expect(await db.collection(`${bucketName}.chunks`).countDocuments()).toBe(
+      0,
+    );
+    const reference = await storage.save({
+      fileName: 'accepted.pdf',
+      contentType: 'application/pdf',
+      content,
+    });
+    expect(await storage.getMetadata(reference)).toEqual({
+      contentType: 'application/pdf',
+    });
+    await storage.delete(reference);
+  });
+
   it('fails when the connection is not open', async () => {
     const closed = createConnection();
     const storage = gridFsFileStorage(closed);

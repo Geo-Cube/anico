@@ -8,13 +8,16 @@ export const deployment = {
   description: 'Managed by AniCo IaC: development applications',
 };
 
-export function validateRelease(references, revision) {
+export function validateRelease(references, revision, { legacy = false } = {}) {
+  const services = legacy
+    ? ['frontend', 'breeding-service']
+    : ['frontend', 'breeding-service', 'auth-service'];
   if (!/^[a-f0-9]{40}$/.test(revision))
     throw new Error('Invalid release revision');
-  if (!Array.isArray(references) || references.length !== 2)
-    throw new Error('Both image references are required');
+  if (!Array.isArray(references) || references.length !== services.length)
+    throw new Error('All release image references are required');
   const images = {};
-  for (const service of ['frontend', 'breeding-service']) {
+  for (const service of services) {
     const matches = references.filter((item) => item.service === service);
     const item = matches[0];
     if (
@@ -29,8 +32,9 @@ export function validateRelease(references, revision) {
   return images;
 }
 
-export function composeForRelease(references, revision) {
-  const images = validateRelease(references, revision);
+export function composeForRelease(references, revision, options = {}) {
+  const images = validateRelease(references, revision, options);
+  const auth = !!images['auth-service'];
   const common = {
     restart: 'unless-stopped',
     read_only: true,
@@ -57,7 +61,7 @@ export function composeForRelease(references, revision) {
     'com.anico.managed-by': 'coolify',
     'com.anico.revision': revision,
   });
-  return {
+  const compose = {
     services: {
       backend: {
         ...common,
@@ -113,10 +117,84 @@ export function composeForRelease(references, revision) {
       data: { external: true, name: 'anico-dev-data' },
     },
   };
+  if (auth) {
+    const root = '/srv/anico/dev/auth/secrets/';
+    for (const name of [
+      'mongodb-uri',
+      'provider.env',
+      'signing-key.pem',
+      'gateway-key',
+      'registration-broker.json',
+    ])
+      compose.secrets['auth-' + name.replaceAll('.', '-')] = {
+        file: root + name,
+      };
+    compose.services.auth = {
+      ...common,
+      image: images['auth-service'],
+      networks: ['app', 'data', 'events'],
+      environment: {
+        NODE_ENV: 'production',
+        APP_ENV: 'dev',
+        HOST: '0.0.0.0',
+        PORT: '3000',
+        LOG_LEVEL: 'info',
+        MIGRATE_ON_START: 'true',
+        MONGODB_URI_FILE: '/run/secrets/auth-mongodb-uri',
+        AUTH_PUBLIC_ORIGIN: 'https://dev.anico.online',
+        AUTH_ISSUER: 'https://dev.anico.online/api/auth',
+        AUTH_AUDIENCE: 'anico-api-dev',
+        AUTH_SIGNING_KEY_FILE: '/run/secrets/auth-signing-key-pem',
+        AUTH_GATEWAY_KEY_FILE: '/run/secrets/auth-gateway-key',
+        AUTH_PROVIDER_ENV_FILE: '/run/secrets/auth-provider-env',
+        AUTH_DEVELOPMENT_ENABLED: 'true',
+        AUTH_REGISTRATION_PUBLISHER_ENABLED: 'true',
+        AUTH_REGISTRATION_BROKER_FILE:
+          '/run/secrets/auth-registration-broker-json',
+      },
+      secrets: Object.keys(compose.secrets)
+        .filter((name) => name.startsWith('auth-'))
+        .map((name) => ({ source: name, target: name })),
+      labels: {
+        ...labels('auth', 3000),
+        'traefik.http.routers.anico-dev-auth.rule':
+          'Host(`dev.anico.online`) && (Path(`/api/auth/providers`) || Path(`/api/auth/session`) || Path(`/api/auth/logout`) || Path(`/api/auth/.well-known/jwks.json`) || PathRegexp(`^/api/auth/login/(google|microsoft|apple)(/callback)?$`) || PathRegexp(`^/api/auth/development/(authorize|consent|approve|token|identity|logout)$`) || PathRegexp(`^/api/auth/connections/(google|microsoft)$`) || PathRegexp(`^/api/auth/users/[a-f0-9-]{36}/admin$`))',
+        'traefik.http.routers.anico-dev-auth.priority': '200',
+        'traefik.http.routers.anico-dev-auth.middlewares': 'anico-auth-prefix',
+        'traefik.http.middlewares.anico-auth-prefix.stripprefix.prefixes':
+          '/api/auth',
+      },
+    };
+    compose.services.backend.environment.AUTH_JWKS_URL =
+      'http://auth:3000/.well-known/jwks.json';
+    compose.networks.events = { external: true, name: 'anico-dev-events' };
+    compose.services.backend.environment.AUTH_ISSUER =
+      'https://dev.anico.online/api/auth';
+    compose.services.backend.environment.AUTH_AUDIENCE = 'anico-api-dev';
+    compose.services.backend.labels[
+      'traefik.http.routers.anico-dev-backend.middlewares'
+    ] = 'anico-session@file,anico-dev-api-prefix';
+    Object.assign(compose.services.backend.labels, {
+      'traefik.http.routers.anico-dev-api-health.rule':
+        'Host(`dev.anico.online`) && (Path(`/api/health`) || Path(`/api/ready`))',
+      'traefik.http.routers.anico-dev-api-health.entrypoints': 'http',
+      'traefik.http.routers.anico-dev-api-health.priority': '150',
+      'traefik.http.routers.anico-dev-api-health.service': 'anico-dev-backend',
+      'traefik.http.routers.anico-dev-api-health.middlewares':
+        'anico-dev-api-prefix',
+    });
+    compose.services.backend.depends_on = {
+      auth: { condition: 'service_healthy' },
+    };
+    compose.services.frontend.depends_on.auth = {
+      condition: 'service_healthy',
+    };
+  }
+  return compose;
 }
 
 export function readReleaseFiles(directory, revision) {
-  return ['frontend', 'breeding-service'].map((service) =>
+  return ['frontend', 'breeding-service', 'auth-service'].map((service) =>
     JSON.parse(
       readFileSync(`${directory}/${service}/image-reference.json`, 'utf8'),
     ),
@@ -163,6 +241,23 @@ export async function deployRelease({
       );
     return response.json();
   }
+  // A reviewed runtime config must be present before a new auth release can
+  // change running applications. Missing/legacy config leaves the old release up.
+  const ready = await fetchImpl(
+    `https://${deployment.apiHostname}/__auth_ready`,
+    {
+      headers: {
+        'CF-Access-Client-Id': clientId,
+        'CF-Access-Client-Secret': clientSecret,
+      },
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  if (ready.headers?.get('X-Anico-Gateway-Version') !== '4')
+    throw new Error(
+      'Auth gateway runtime is not ready; apply reviewed deploy:dev-auth before deployment',
+    );
   await request('PATCH', '', {
     docker_compose_raw: Buffer.from(JSON.stringify(compose)).toString('base64'),
     instant_deploy: true,
@@ -194,7 +289,7 @@ export async function deployRelease({
     }
     if (
       releaseMatches &&
-      applications.length === 2 &&
+      applications.length === references.length &&
       applications.every(
         (app) =>
           app.status === 'running:healthy' &&

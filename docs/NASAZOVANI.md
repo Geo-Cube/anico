@@ -1,11 +1,11 @@
 # Kde aplikace běží a jak se tam dostane
 
-| Prostředí      | Adresa                                 | Přístup                              | Stav                    |
-| -------------- | -------------------------------------- | ------------------------------------ | ----------------------- |
-| Lokální vývoj  | `127.0.0.1:5173`; backend podle služby | Tvůj počítač                         | Tři vývojové režimy     |
-| Týmový dev     | `https://dev.anico.online`             | Schválený GitHub účet                | Frontend + backend běží |
-| Správa Coolify | `https://admin.anico.online`           | Schválený GitHub účet a Coolify role | Běží                    |
-| Produkce       | `https://anico.online`                 | Má být veřejná                       | Zatím nenasazená        |
+| Prostředí      | Adresa                                 | Přístup                                         | Stav                         |
+| -------------- | -------------------------------------- | ----------------------------------------------- | ---------------------------- |
+| Lokální vývoj  | `127.0.0.1:5173`; backend podle služby | Tvůj počítač                                    | Tři vývojové režimy          |
+| Týmový dev     | `https://dev.anico.online`             | GitHub Access; aplikační login Google/Microsoft | Frontend + dva backendy běží |
+| Správa Coolify | `https://admin.anico.online`           | Schválený GitHub účet a Coolify role            | Běží                         |
+| Produkce       | `https://anico.online`                 | Má být veřejná                                  | Zatím nenasazená             |
 
 **Workflow automatického dev nasazení je součástí CI.** Spouští se po pushi do
 `dev`, jen pokud projdou povinné kontroly a publikování images. Červené CI
@@ -19,6 +19,8 @@ Týmový dev používá společnou DB. Lokální `dev:frontend` volá jeho API;
 `dev:backend -- --service animal` používá osobní DB. `dev:fullstack -- --service animal`
 přepne jen animal API na lokální službu s osobní DB, ostatní API zůstanou na devu.
 Jméno služby a její lokální port určuje workspace; breeding má port 3000.
+[Lokální přihlášení](LOKALNI-PRIHLASENI.md), odpovídající auth-service i gateway runtime 3 jsou nasazené a ověřené. Při obnově musí zůstat kompatibilní verze klienta, serveru a gateway.
+GitHub Access řeší týmový vstup, nikoli oprávnění uživatele k chráněnému API.
 
 ## Co spravujeme
 
@@ -31,9 +33,11 @@ Jméno služby a její lokální port určuje workspace; breeding má port 3000.
 | Pulumi + Ansible     | Obnovitelný předpis cloudu a serveru                |
 
 Images jsou veřejné `ghcr.io/geo-cube/anico-frontend` a
-`ghcr.io/geo-cube/anico-breeding-service`. Nasazujeme digesty z CI artifactů
-`image-reference-SLUZBA-COMMIT`, obě ze stejného commitu. Secrets se do images nedávají.
-Aktuální cloudová sestava obsahuje pouze frontend a breeding backend. Novou
+`ghcr.io/geo-cube/anico-breeding-service` a `ghcr.io/geo-cube/anico-auth-service`. Nasazujeme digesty z CI artifactů
+`image-reference-SLUZBA-COMMIT`, všechny ze stejného commitu. Secrets se do images nedávají.
+Nasazená sestava obsahuje frontend, breeding a auth backend. Google i Microsoft login/logout
+jsou ověřené. Volitelné propojení účtů je nasazené; vlastník své účty ponechává oddělené.
+Postupy jsou v [auth návodu](AUTENTIZACE.md), přehled v [aktuálním stavu](STAV-PROJEKTU.md). Novou
 mikroservisu generátor automaticky nepřidá do publish ani nasazení; správce musí
 doplnit image, runtime proměnné, DB účet a API routu. Historické breeding API je
 pod `/api/health`, `/api/ready`, `/api/breeding-plans`; nové prefixy

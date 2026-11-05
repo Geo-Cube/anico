@@ -204,7 +204,7 @@ test(
     const repository = join(__dirname, '../..');
     const root = await mkdtemp(join(tmpdir(), 'anico-template-smoke-'));
     const resolveFromBackend = createRequire(
-      join(repository, 'apps/breeder-service/package.json'),
+      join(repository, 'apps/breeding-service/package.json'),
     );
     function run(file, args, cwd) {
       const result = spawnSync(process.execPath, [file, ...args], {
@@ -239,7 +239,7 @@ test(
       const cwd = join(root, 'apps', result.name);
       const backendModules = join(
         repository,
-        'apps/breeder-service/node_modules',
+        'apps/breeding-service/node_modules',
       );
       try {
         await access(backendModules);

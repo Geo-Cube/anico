@@ -20,6 +20,9 @@ packages/**
 !packages/*/
 packages/*/**
 !packages/*/package.json
+!packages/auth/tsconfig.json
+!packages/auth/src/
+!packages/auth/src/**
 !packages/shared-schemas/tsconfig.json
 !packages/shared-schemas/src/
 !packages/shared-schemas/src/**
@@ -34,6 +37,7 @@ infrastructure/**
 **/.env.*
 **/*.env
 **/*.pem
+**/*.p8
 **/*.key
 **/*.p12
 **/*.pfx

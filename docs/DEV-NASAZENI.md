@@ -7,10 +7,10 @@ images z větve `dev`. Když některý předchozí krok selže, nová verze se n
 
 ## Jak nasazení funguje
 
-Zelené CI → oba GHCR artifacts ze stejného commitu → ověření repository/revize/digestu
-→ Coolify API → zdravý backend a frontend s odpovídajícím release manifestem.
+Zelené CI → tři GHCR artifacts ze stejného commitu → ověření repository/revize/digestu
+→ Coolify API → zdravý backend, auth a frontend s odpovídajícím release manifestem.
 Nasazení jsou postupná; čekající starší commit se přeskočí, pokud není hlavou `dev`.
-Aktuálně workflow publikuje a nasazuje frontend a breeding-service; další
+Aktuálně workflow publikuje a nasazuje frontend, breeding-service a auth-service; další
 workspace je potřeba do publish/deploy konfigurace a API routování doplnit výslovně.
 VPS stahuje hotové images. PR ani `main` dev nenasazují.
 Při výměně může nastat krátký výpadek; automatický rollback dat/migrací není zavedený.
@@ -83,8 +83,10 @@ CI nepotřebuje SSH klíč, cloudové správní tokeny, Pulumi state ani DB hesl
 
 ## Rollback aplikací
 
-Stáhni oba artifacts ze známého zeleného CI do společné složky:
-`frontend/image-reference.json` a `breeding-service/image-reference.json`.
+Stáhni tři artifacts ze známého zeleného CI do společné složky:
+`frontend/image-reference.json`, `breeding-service/image-reference.json` a
+`auth-service/image-reference.json`. Návrat k dvoukomponentové verzi bez auth
+není podporovaný.
 Nahraď `COMMIT_SHA` a cestu skutečnými hodnotami:
 
 ```bash
@@ -98,13 +100,14 @@ Migrační runner odmítne historii, kterou daný checkout nezná. Před návrat
 na starší image ověř kompatibilitu jeho migrací a dat; nepřepisuj ani nemaž
 evidenci společné DB. Často je bezpečnější oprava dopředu než návrat kódu.
 
-Sdílený ukázkový seed spusť výslovně v backendovém kontejneru v Coolify,
+Sdílený seed své služby spusť výslovně v jejím backendovém kontejneru v Coolify,
 z jeho výchozího pracovního adresáře `/app`:
 
 ```bash
-node apps/breeding-service/dist/database/cli.js seed --shared
+node apps/tvoje-service/dist/database/cli.js seed --shared
 ```
 
+`tvoje-service` nahraď skutečným názvem nasazené služby.
 Příkaz načte `MONGODB_URI_FILE` ze secret mountu, URI nevypisuje. Reset
 společné dev nebo produkční DB zůstává zakázaný i s potvrzením názvu.
 
@@ -117,3 +120,6 @@ hodnoty v `devDeploymentCredentials`. Potom cloudový plán/apply, konfigurace
 služby a `configure:dev-ci`. [Cloudflare oprávnění](../infrastructure/CLOUDFLARE.md).
 
 **Před skutečnými produkčními daty dokončit [zálohy a obnovu](../infrastructure/RECOVERY.md).**
+
+První aktivace Google, příprava secret mountů a recovery release:
+[auth rollout](AUTENTIZACE.md#správce-první-google-rollout).

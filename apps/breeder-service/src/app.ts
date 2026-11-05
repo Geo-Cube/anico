@@ -1,4 +1,8 @@
-import express, { type ErrorRequestHandler } from 'express';
+import express, {
+  type ErrorRequestHandler,
+  type RequestHandler,
+} from 'express';
+import { AuthorizationError } from '@anico/auth';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
 import type {
@@ -9,7 +13,6 @@ import type {
 import { breedersRouter } from './modules/breeders/http/breeders-router.js';
 import { verificationRequestsRouter } from './modules/breeders/http/verification-requests-router.js';
 import { healthRouter } from './modules/health/http/health-router.js';
-import type { IdentityResolver } from './shared/http/identity.js';
 
 export function createApp(dependencies: {
   logger: Logger;
@@ -17,23 +20,22 @@ export function createApp(dependencies: {
   breeders: BreederRepository;
   files: FileStorage;
   notifier: DecisionNotifier;
-  resolveIdentity: IdentityResolver;
+  authenticate?: RequestHandler;
   now?: () => Date;
   maxCertificateBytes?: number;
 }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(pinoHttp({ logger: dependencies.logger }));
-  app.use(express.json({ limit: '32kb' }));
-
   app.use(healthRouter(dependencies));
+  if (dependencies.authenticate) app.use(dependencies.authenticate);
+  app.use(express.json({ limit: '32kb' }));
 
   app.use(
     '/breeders',
     breedersRouter({
       repository: dependencies.breeders,
       files: dependencies.files,
-      resolveIdentity: dependencies.resolveIdentity,
       logger: dependencies.logger,
       ...(dependencies.maxCertificateBytes !== undefined
         ? { maxCertificateBytes: dependencies.maxCertificateBytes }
@@ -47,7 +49,6 @@ export function createApp(dependencies: {
       files: dependencies.files,
       notifier: dependencies.notifier,
       logger: dependencies.logger,
-      resolveIdentity: dependencies.resolveIdentity,
       ...(dependencies.now ? { now: dependencies.now } : {}),
     }),
   );
@@ -62,6 +63,10 @@ export function createApp(dependencies: {
   ) => {
     if (res.headersSent) {
       _next(error);
+      return;
+    }
+    if (error instanceof AuthorizationError) {
+      res.status(error.status).json({ error: error.message });
       return;
     }
     if (error instanceof SyntaxError && 'body' in error) {

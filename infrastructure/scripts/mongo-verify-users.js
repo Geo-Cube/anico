@@ -25,12 +25,14 @@ try {
         }
       }
       const allDatabases = accounts.flatMap((value) => value.databases);
-      for (const forbidden of new Set([
-        'admin',
-        'anico_prod',
-        'anico_auth',
-        ...allDatabases.filter((name) => !account.databases.includes(name)),
-      ])) {
+      for (const forbidden of new Set(
+        [
+          'admin',
+          'anico_prod',
+          'anico_auth',
+          ...allDatabases.filter((name) => !account.databases.includes(name)),
+        ].filter((name) => !account.databases.includes(name)),
+      )) {
         let denied = false;
         try {
           connection

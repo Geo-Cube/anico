@@ -4,7 +4,7 @@ import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
-import { gatewayHeaderIdentity } from '../../src/shared/http/identity.js';
+import { fixtureAuthenticate } from '../support/api.js';
 import { inMemoryBreeders, inMemoryFiles } from '../support/in-memory.js';
 import {
   createMigration,
@@ -44,7 +44,7 @@ describe('HTTP and database integration', () => {
       breeders: inMemoryBreeders(),
       files: inMemoryFiles(),
       notifier: { notifyDecision: async () => undefined },
-      resolveIdentity: gatewayHeaderIdentity,
+      authenticate: fixtureAuthenticate,
     });
     expect((await request(app).get('/health').expect(200)).body.service).toBe(
       'breeder-service',

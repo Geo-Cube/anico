@@ -1,23 +1,24 @@
 import { z } from 'zod';
 
-// services
-export const ServiceNameSchema = z.enum([
-  'breeding-service',
-  'breeder-service',
-  'animal-service',
-]);
-export type ServiceName = z.infer<typeof ServiceNameSchema>;
+export const CreateBreedingPlanSchema = z.strictObject({
+  name: z.string().trim().min(1).max(120),
+});
 
-//health schema
+export const BreedingPlanSchema = CreateBreedingPlanSchema.extend({
+  id: z.string().regex(/^[a-f\d]{24}$/i),
+});
+
+export type CreateBreedingPlanInput = z.infer<typeof CreateBreedingPlanSchema>;
+export type BreedingPlanResponse = z.infer<typeof BreedingPlanSchema>;
+
 export const ServiceHealthResponseSchema = z.strictObject({
   status: z.literal('ok'),
   service: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-service$/),
 });
 export type ServiceHealthResponse = z.infer<typeof ServiceHealthResponseSchema>;
 
-export const HealthResponseSchema = z.strictObject({
-  status: z.literal('ok'),
-  service: ServiceNameSchema,
+export const HealthResponseSchema = ServiceHealthResponseSchema.extend({
+  service: z.literal('breeding-service'),
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 
@@ -78,9 +79,9 @@ export type AccountState = z.infer<typeof accountSchema>;
 export const MyAccountSchema = z.strictObject({
   accountState: accountSchema,
   breederId: z.string(),
-  firstName: z.string(),
-  lastName: z.string(),
-  emailAddress: z.string().email(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  emailAddress: z.email().nullable(),
   breedingStationName: z.string().nullable(),
   breedingStationNumber: z.string().nullable(),
   hasBreedingStation: z.literal(true),
@@ -126,9 +127,9 @@ export type ListVerificationRequestsQuery = z.infer<
 // Breeder profile (without account state and verification request)
 export const BreederProfileSchema = z.strictObject({
   breederId: z.string(),
-  firstName: z.string(),
-  lastName: z.string(),
-  emailAddress: z.email(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  emailAddress: z.email().nullable(),
   breedingStationName: z.string().nullable(),
   breedingStationNumber: z.string().nullable(),
   hasBreedingStation: z.literal(true),
@@ -156,3 +157,50 @@ export const VerificationSummarySchema = z.strictObject({
   rejected: z.number().int().min(0),
 });
 export type VerificationSummary = z.infer<typeof VerificationSummarySchema>;
+export {
+  IdentitySchema,
+  RoleSchema,
+  type Identity,
+  type Role,
+} from './identity.js';
+
+export {
+  AuthProviderSchema,
+  ProvidersResponseSchema,
+  SessionSchema,
+  ConnectionStartResponseSchema,
+  SafeReturnPathSchema,
+  LoginErrorCodeSchema,
+  isSafeReturnPath,
+  type AuthProvider,
+  type ProvidersResponse,
+  type Session,
+  type ConnectionStartResponse,
+  type SafeReturnPath,
+  type LoginErrorCode,
+} from './auth.js';
+
+export {
+  UserRegisteredDataSchema,
+  UserRegisteredEventSchema,
+  type UserRegisteredData,
+  type UserRegisteredEvent,
+} from './registration.js';
+
+export {
+  AnimalSpeciesSchema,
+  AnimalSexSchema,
+  AnimalIdSchema,
+  CreateAnimalSchema,
+  UpdateAnimalSchema,
+  AnimalSchema,
+  ListAnimalsQuerySchema,
+  AnimalListSchema,
+  animalBreeds,
+  type AnimalSpecies,
+  type CreateAnimalInput,
+  type UpdateAnimalInput,
+  type Animal,
+  type ListAnimalsQuery,
+  type AnimalList,
+} from './animal.js';

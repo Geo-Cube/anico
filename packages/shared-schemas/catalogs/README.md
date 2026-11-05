@@ -16,10 +16,14 @@ ids.has('australsky-ovcak');
 
 Pro koně použij `horse-breeds.json`. V TypeScriptu zapni `resolveJsonModule`.
 Používající workspace musí mít závislost na `@anico/shared-schemas`;
-frontend, breeding-service i nová generovaná služba ji mají.
+frontend i nová generovaná služba ji mají.
 Stejný Set lze použít v Zodu přes `z.string().refine((id) => ids.has(id))`.
 
 JSONy nekopíruj do aplikací. Nejprve vyber druh zvířete, potom odpovídající plemeno.
 Při přejmenování zachovej existující ID a kontroluj duplicity. Číselníky nejsou
 úplný oficiální registr; „jiné“, „neznámé“ a kříženci potřebují samostatný návrh.
-Samotná data nepřidávají validaci do endpointů ani formulářů; tu musí doplnit aplikace.
+Pro animal API i frontend nyní použij `CreateAnimalSchema`, `UpdateAnimalSchema`
+a `AnimalSchema` z `@anico/shared-schemas`. `CreateAnimalSchema` kontroluje také shodu
+druhu a ID plemene; PATCH backend ověřuje proti výslednému uloženému stavu.
+`animalBreeds('dog')` / `animalBreeds('horse')` poskytne stejné položky pro výběr v UI
+bez kopírování JSONů nebo vlastních seznamů.

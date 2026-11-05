@@ -1,11 +1,22 @@
 # Kde má být nový kód
 
-| Složka                    | Odpovědnost                                       |
-| ------------------------- | ------------------------------------------------- |
-| `apps/frontend`           | React UI, TypeScript, Vite                        |
-| `apps/breeding-service`   | Express mikroservisa, Mongoose, Pino              |
-| `packages/shared-schemas` | Zod schémata a odvozené typy pro API              |
-| `infrastructure`          | Cloud, server a nasazování; není aplikační doména |
+| Složka                    | Odpovědnost                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `apps/frontend`           | React UI, TypeScript, Vite                                                          |
+| `apps/auth-service`       | OIDC přihlášení, účty, relace a role                                                |
+| `apps/animal-service`     | Základ CRUD vlastních zvířat a validace druhů/plemen; zatím bez cloudového nasazení |
+| `apps/breeder-service`    | Lokální backend UC-01: profil a ověření chovatele; bez nasazení a napojení UI       |
+| `packages/auth`           | Ověření aplikační identity v backendových službách                                  |
+| `apps/tvoje-service`      | Tvoje samostatná Express mikroservisa, Mongoose, Pino                               |
+| `packages/shared-schemas` | Zod schémata a odvozené typy pro API                                                |
+| `infrastructure`          | Cloud, server a nasazování; není aplikační doména                                   |
+
+`tvoje-service` je zástupný název vlastní služby. Ukázková `breeding-service`
+slouží jako příklad; nové mikroservisy vytvářej samostatně v `apps/` generátorem.
+`breeder-service` je samostatná doménová služba, nikoli přejmenování `breeding-service`.
+Přihlášení dál zajišťuje sdílená `auth-service`; backend UC-01 ověřuje JWT přes
+`@anico/auth` a používá ověřené `req.auth.userId`. Dokončení onboardingového profilu
+zatím nemá vlastní endpoint. Notifikátor rozhodnutí je pouze vývojový log, e-maily nedoručuje.
 
 Npm workspaces propojí balíčky, Turborepo řídí pořadí buildů.
 Všichni používáme jeden kořenový `package-lock.json`.
@@ -46,6 +57,34 @@ Frontendové funkce patří do `apps/frontend/src/features/`; kostru připraví
 Nová mikroservisa v `apps/` potřebuje také vlastní
 image, nasazení, API routu, vlastní databázi a omezený účet; samotná složka nestačí.
 
+## Frontend: struktura
+
+```text
+apps/frontend/src/
+  main.tsx            # QueryClient + router
+  styles.css          # vstup Tailwindu, barevné tokeny a globální styly
+  app/                # routes.tsx, AppLayout (hlavička), query-client.ts
+  features/
+    auth/             # přihlašovací stránka, relace, guardy, účet, UserMenu
+    profile/          # ProfileGate – místo pro kontrolu dokončení profilu
+    dashboard/        # úvodní přehled
+    breeders/         # administrace ověření chovatelů (simulace bez API)
+  shared/
+    lib/http.ts       # apiRequest: same-origin, CSRF, Zod, rozlišení 401/403/výpadku
+    ui/               # Button, Card, Alert, StatePanel, Logo
+```
+
+Stack: React Router (routy a URL), TanStack Query (serverová data a relace),
+Tailwind CSS v4 se sémantickými tokeny (`bg-primary`, `text-muted-foreground`, …)
+podle minimalistického návrhu z v0. Alias `@/` ukazuje do `src/`.
+
+- Jen 401 vede na `/prihlaseni` s bezpečným `returnTo`. 403 se zobrazí na místě jako
+  nedostatečné oprávnění, výpadek sítě nebo 5xx nabídne opakování bez přesměrování.
+- 401 z libovolného API, odhlášení i změna účtu smažou z cache data předchozího
+  uživatele. Časovač v prohlížeči jen ověří relaci znovu u serveru; vypršení vynucuje server.
+- Kontrola role je pouze na routách `/administrace/*` a slouží UX; backend ji ověřuje vždy.
+  Úvodní stránku role neurčují.
+
 ## Sdílené kontrakty
 
 Zod schémata upravuj v `@anico/shared-schemas`, typy odvozuj přes `z.infer`.
@@ -56,14 +95,19 @@ připojí UI a ostatní API ponechá na společném devu. Příkazy sestaví sd�
 závislosti a sledují jejich změny.
 Číselníky plemen: [použití a stabilní ID](../packages/shared-schemas/catalogs/README.md).
 
-Frontend zatím nemá router, aplikační přihlášení ani API klienta.
+Frontend má nasazené přihlášení Google/Microsoft a práci s relací; business obrazovky
+zůstávají simulací (administrace chovatelů na `/administrace/chovatele`). Auth backend, kontrakt identity a gateway jsou nasazené na devu;
+Google i Microsoft login/logout jsou uživatelsky ověřené. Volitelné propojení účtů je nasazené,
+vlastník ponechává své účty oddělené. [Lokální přihlášení](LOKALNI-PRIHLASENI.md) je také
+nasazené a ověřené pro Google/Microsoft, lokální i sdílené API a logout. Apple a produkce jsou odložené. [Postup a aktuální stav](AUTENTIZACE.md).
 Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí login uživatelů AniCo.
 
 ## Co testovat
 
 - Unit: use case s náhradním repository, bez databáze.
 - Integrace: Supertest + skutečná dočasná MongoDB přes `mongodb-memory-server`.
-- Frontend: zatím typecheck, build a kontrola v prohlížeči; komponentové testy nejsou zavedené.
+- Frontend: Vitest + Testing Library + MSW v `apps/frontend/tests/` pro chování
+  uživatele (přihlášení, relace, role, odhlášení); typecheck, build a kontrola v prohlížeči.
 
-Vitest používá V8 coverage. Limity jsou v `apps/breeding-service/vitest.config.ts`;
-coverage se nevztahuje na React aplikaci. Příkazy: [tahák](PRIKAZY.md).
+Vitest používá V8 coverage. Limity jsou v `apps/tvoje-service/vitest.config.ts`;
+React aplikace coverage jen reportuje, limity nemá. Příkazy: [tahák](PRIKAZY.md).

@@ -15,7 +15,7 @@ import { createApp } from '../../src/app.js';
 import type { Breeder } from '../../src/modules/breeders/domain/breeder.js';
 import { gridFsFileStorage } from '../../src/modules/breeders/infrastructure/gridfs-file-storage.js';
 import { mongooseBreederRepository } from '../../src/modules/breeders/infrastructure/mongoose-breeder-repository.js';
-import { gatewayHeaderIdentity } from '../../src/shared/http/identity.js';
+import { fixtureAuthenticate } from '../support/api.js';
 import {
   JPEG,
   PDF,
@@ -52,7 +52,7 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
       breeders: repository,
       files: gridFsFileStorage(connection),
       notifier: { notifyDecision },
-      resolveIdentity: gatewayHeaderIdentity,
+      authenticate: fixtureAuthenticate,
     });
   });
 

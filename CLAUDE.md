@@ -2,12 +2,14 @@
 
 Platforma pro bezpečné propojování ověřených chovatelů (psi, koně). MVP = US-01–US-03 (ověření chovatele, zvíře, doklady). Komunikace a dokumentace česky, identifikátory anglicky.
 
-**Doménový zdroj pravdy:** [docs/anico-domain.md](docs/anico-domain.md) (invarianty, otevřené otázky). Při rozporu s analýzou (`docs/business/`) vyhrává analýza.
+**Doménový podklad:** [docs/anico-domain.md](docs/anico-domain.md) (invarianty, otevřené otázky), [návrh UC-01](docs/design/uc-01-overeni-chovatele.md) a [ADR](docs/adr/). Citované původní analytické soubory nejsou v repozitáři (`docs/business/` neexistuje); jejich obsah si nevymýšlej. Aktuální implementační stav a technické kontrakty určují [docs/STAV-PROJEKTU.md](docs/STAV-PROJEKTU.md), [docs/ARCHITEKTURA.md](docs/ARCHITEKTURA.md) a [docs/INTEGRACE-IDENTITY.md](docs/INTEGRACE-IDENTITY.md).
 
 ## Stack (zjištěno z repozitáře)
 
 - npm workspaces + Turborepo, Node ≥ 22.19, TypeScript (ESM, importy s `.js` příponou).
 - `apps/breeder-service` – Express 5, **Mongoose 8 / MongoDB**, Zod 4, Pino, Vitest 4, Supertest, `mongodb-memory-server`.
+- `breeder-service` je doplněk, nikoli přejmenování `breeding-service`. `auth-service` dál spravuje společné přihlášení; backendy ověřují JWT přes `@anico/auth` a používají `req.auth`, nikdy klientské `x-user-*` hlavičky.
+- UC-01 backend existuje lokálně; není nasazený ani napojený na frontend a neposkytuje dokončení onboardingu. Vývojový notifikátor e-maily nedoručuje.
 - `apps/frontend` – React + Vite. `packages/shared-schemas` – Zod kontrakty (`@anico/shared-schemas`) + katalogy plemen (`catalogs/*.json`).
 - Doménový modul: `src/modules/<domena>/{domain,application,infrastructure,http}`. Doména a use cases **nezávisí** na Expressu, Mongoose ani Zodu; `server.ts` vkládá implementace portů (`domain/ports.ts`).
 - Přeložení pojmů z analýzy: tabulka → kolekce, FK → reference (`*Id`), DB constraint → unique/partial index + schema validace, podmíněný UPDATE → `findOneAndUpdate` s filtrem na stav, migrace → `.mjs` v `apps/breeder-service/migrations/` (`npm run db:new`).

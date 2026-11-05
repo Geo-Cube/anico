@@ -25,11 +25,17 @@ export function createAccessSession({
 } = {}) {
   let cached;
   let pending;
+  const controller = new AbortController();
   async function readCached() {
     const result = await run(
       'cloudflared',
       ['access', 'token', '--app', DEV_API_ORIGIN],
-      { timeout: 15000, maxBuffer: 128 * 1024, windowsHide: true },
+      {
+        timeout: 15000,
+        maxBuffer: 128 * 1024,
+        windowsHide: true,
+        signal: controller.signal,
+      },
     );
     return parseToken(result.stdout, now());
   }
@@ -37,6 +43,8 @@ export function createAccessSession({
     try {
       return await readCached();
     } catch (error) {
+      if (controller.signal.aborted)
+        throw new Error('Development login stopped');
       if (error.code === 'ENOENT')
         throw new Error('Install cloudflared to access the shared dev API');
     }
@@ -50,6 +58,7 @@ export function createAccessSession({
         timeout: 180000,
         maxBuffer: 128 * 1024,
         windowsHide: true,
+        signal: controller.signal,
       });
       return await readCached();
     } catch {
@@ -59,7 +68,13 @@ export function createAccessSession({
     }
   }
   return {
+    close() {
+      controller.abort();
+      cached = undefined;
+    },
     async getToken() {
+      if (controller.signal.aborted)
+        throw new Error('Development login stopped');
       if (cached && cached.expires > now() + 60000) return cached.token;
       if (!pending)
         pending = authenticate()

@@ -22,8 +22,8 @@ try {
     credentials = { token: randomBytes(32).toString('hex') };
     setSecret('devDeploymentCredentials', credentials);
   }
-  const revision = '50a85b8fca9a428514d43b0115a292c58c2b86b8';
-  const references = [
+  let revision = '50a85b8fca9a428514d43b0115a292c58c2b86b8';
+  let references = [
     {
       service: 'frontend',
       image: 'ghcr.io/geo-cube/anico-frontend',
@@ -39,12 +39,21 @@ try {
       revision,
     },
   ];
+  const auth = secret('devAuthCredentials', true);
+  if (auth) {
+    if (!auth.bootstrapRelease)
+      throw new Error(
+        'Register a verified three-image bootstrap release first',
+      );
+    revision = auth.bootstrapRelease.revision;
+    references = auth.bootstrapRelease.references;
+  }
   privateFile(
     new URL('../../.pulumi/dev-deployment/input.json', import.meta.url),
     JSON.stringify({
       ...deployment,
       ...credentials,
-      compose: composeForRelease(references, revision),
+      compose: composeForRelease(references, revision, { legacy: !auth }),
     }),
   );
   const uri = secret('applicationVariables').dev?.MONGODB_URI;

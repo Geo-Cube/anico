@@ -9,11 +9,11 @@ import { databaseTarget } from './database/policy.js';
 import { gridFsFileStorage } from './modules/breeders/infrastructure/gridfs-file-storage.js';
 import { loggingDecisionNotifier } from './modules/breeders/infrastructure/logging-decision-notifier.js';
 import { mongooseBreederRepository } from './modules/breeders/infrastructure/mongoose-breeder-repository.js';
-import { gatewayHeaderIdentity } from './shared/http/identity.js';
+import { requestAuthenticator } from '@anico/auth';
 
 const env = z
   .object({
-    PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+    PORT: z.coerce.number().int().min(1).max(65535).default(3003),
     HOST: z.enum(['127.0.0.1', '0.0.0.0', '::1', '::']).default('127.0.0.1'),
     MONGODB_URI: z.string().regex(/^mongodb(?:\+srv)?:\/\//),
     MIGRATE_ON_START: z.enum(['true', 'false']).default('false'),
@@ -32,6 +32,7 @@ const logger = pino({
 const connection = mongoose.createConnection();
 
 try {
+  const authenticate = requestAuthenticator(process.env);
   await connection.openUri(env.MONGODB_URI, {
     serverSelectionTimeoutMS: 10_000,
   });
@@ -63,7 +64,7 @@ try {
     breeders,
     files: gridFsFileStorage(connection),
     notifier: loggingDecisionNotifier(logger),
-    resolveIdentity: gatewayHeaderIdentity,
+    ...(authenticate ? { authenticate } : {}),
     isReady: () => !stopping && connection.readyState === 1,
   });
   const server = app.listen(env.PORT, env.HOST, () =>

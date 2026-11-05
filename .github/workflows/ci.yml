@@ -50,6 +50,8 @@ jobs:
       - run: npm ci
       - name: Prepare a single verified MongoDB binary before parallel tests
         run: npm run test:prepare-db
+      - name: Prepare verified NATS binary for publisher integration tests
+        run: npm run test:prepare-broker
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run test:dev-remote
@@ -102,6 +104,10 @@ jobs:
         with:
           name: image-reference-breeding-service-${{ github.sha }}
           path: image-references/breeding-service
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: image-reference-auth-service-${{ github.sha }}
+          path: image-references/auth-service
       - name: Skip superseded dev commits
         id: current
         env:

@@ -1,9 +1,5 @@
 import { Router } from 'express';
-import {
-  authenticate,
-  identityOf,
-  type IdentityResolver,
-} from '../../../shared/http/identity.js';
+import { authenticate, identityOf } from '../../../shared/http/identity.js';
 import { openMyCertificate } from '../application/verification-queue.js';
 import type {
   BreederRepository,
@@ -19,21 +15,19 @@ import { submitVerificationRequestHandler } from './submit-verification-request-
 export function breedersRouter(dependencies: {
   repository: BreederRepository;
   files: FileStorage;
-  resolveIdentity: IdentityResolver;
   maxCertificateBytes?: number;
   logger?: WarnLogger;
 }) {
   const router = Router();
   const { repository, files } = dependencies;
-  const authenticated = authenticate(dependencies.resolveIdentity);
   const openCertificate = openMyCertificate({ breeders: repository, files });
   const respondWithError = domainErrorResponder(files);
 
-  router.get('/me', authenticated, getMyAccountHandler(repository, files));
+  router.get('/me', authenticate, getMyAccountHandler(repository, files));
 
   router.post(
     '/me/verification-request',
-    authenticated,
+    authenticate,
     submitVerificationRequestHandler({
       repository,
       files,
@@ -45,11 +39,14 @@ export function breedersRouter(dependencies: {
 
   router.get(
     '/me/verification-request/certificate',
-    authenticated,
+    authenticate,
     async (_req, res) => {
       try {
         // vlastník vždy jen svůj certifikát: id z identity, ne z URL
-        await sendCertificate(res, await openCertificate(identityOf(res).id));
+        await sendCertificate(
+          res,
+          await openCertificate(identityOf(res).userId),
+        );
       } catch (error) {
         if (!(await respondWithError(error, res))) throw error;
       }

@@ -13,7 +13,7 @@ Jsi **reviewer** projektu AniCo (platforma pro ověřené chovatele psů a koní
 ## Vstup a postup
 
 1. Zjisti, co se reviewuje: `git diff <base>...HEAD`, `git log`, případně zadané soubory/PR. Bez jasného rozsahu se zeptej, nebo review omez na poslední změny větve.
-2. Přečti `docs/anico-domain.md`, relevantní UC v `docs/business/` a návrh v `docs/design/` + ADR. Review měří změnu **proti nim**, ne proti osobnímu vkusu.
+2. Přečti `docs/anico-domain.md`, návrh v `docs/design/`, ADR a současné technické kontrakty. `docs/business/` v repozitáři chybí; nedostupnou analýzu nevymýšlej. Review měří změnu **proti dostupným podkladům**, ne proti osobnímu vkusu.
 3. Projdi diff celý, pak čti okolní kód tam, kam změna sahá (volající, migrace, testy). Spusť testy/linter, pokud jsou k dispozici, a výsledek uveď.
 4. Každý nález ověř v kódu – žádné domněnky vydávané za fakta. Co neumíš ověřit, označ jako dotaz.
 

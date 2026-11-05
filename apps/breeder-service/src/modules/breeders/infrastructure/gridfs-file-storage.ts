@@ -16,6 +16,12 @@ function toContentType(value: unknown): CertificateContentType | null {
     : null;
 }
 
+function* uploadChunks(content: Buffer, chunkSize: number) {
+  for (let offset = 0; offset < content.length; offset += chunkSize) {
+    yield content.subarray(offset, offset + chunkSize);
+  }
+}
+
 /** Soubory ukládáme do GridFS, takže servisa nepotřebuje další infrastrukturu. */
 export function gridFsFileStorage(
   connection: Connection,
@@ -35,11 +41,34 @@ export function gridFsFileStorage(
 
   return {
     async save(file) {
-      const upload = bucket().openUploadStream(file.fileName, {
+      const files = bucket();
+      const upload = files.openUploadStream(file.fileName, {
         metadata: { contentType: file.contentType },
       });
-      await pipeline(Readable.from([file.content]), upload);
-      return upload.id.toString();
+      try {
+        // One GridFS chunk per write avoids pending inserts racing error cleanup.
+        await pipeline(
+          Readable.from(uploadChunks(file.content, upload.chunkSizeBytes)),
+          upload,
+        );
+        return upload.id.toString();
+      } catch (error) {
+        try {
+          // delete also removes orphan chunks when the final files insert failed.
+          await files.delete(upload.id);
+        } catch (cleanupError) {
+          if (
+            !(cleanupError instanceof mongo.MongoRuntimeError) ||
+            cleanupError.message !== `File not found for id ${upload.id}`
+          ) {
+            throw new AggregateError(
+              [error, cleanupError],
+              'Certificate upload failed and its GridFS cleanup also failed',
+            );
+          }
+        }
+        throw error;
+      }
     },
 
     async open(fileReference) {

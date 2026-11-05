@@ -36,9 +36,9 @@ const verificationRequestSchema = new Schema({
 
 const breederSchema = new Schema({
   breederId: { type: String, required: true, unique: true },
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  emailAddress: { type: String, required: true },
+  firstName: { type: String, default: null },
+  lastName: { type: String, default: null },
+  emailAddress: { type: String, default: null },
   breedingStationName: { type: String, default: null },
   breedingStationNumber: { type: String, default: null },
   hasBreedingStation: { type: Boolean, default: true, required: true },
@@ -80,9 +80,9 @@ function toDomain(record: BreederRecord): Breeder {
   }
   return {
     breederId: record.breederId,
-    firstName: record.firstName,
-    lastName: record.lastName,
-    emailAddress: record.emailAddress,
+    firstName: record.firstName ?? null,
+    lastName: record.lastName ?? null,
+    emailAddress: record.emailAddress ?? null,
     breedingStationName: record.breedingStationName ?? null,
     breedingStationNumber: record.breedingStationNumber ?? null,
     hasBreedingStation: true,

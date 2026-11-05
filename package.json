@@ -20,7 +20,7 @@
     "dev:remote": "node scripts/dev-remote.mjs",
     "test:dev-remote": "node --test scripts/tests/dev-remote.test.mjs",
     "test:deployment": "node --test scripts/tests/dev-deployment.test.mjs",
-    "start": "npm run start --workspace=@anico/breeder-service",
+    "start": "npm run start --workspace=@anico/breeding-service",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:unit": "turbo run test:unit",
@@ -39,14 +39,15 @@
     "db:remote:reset": "node scripts/dev-remote.mjs --db=reset",
     "db:remote:unlock": "node scripts/dev-remote.mjs --db=unlock",
     "service:new": "gen run service",
-    "test:generators": "npm run build -w @anico/shared-schemas && node --test scripts/tests/service-generator.test.cjs",
+    "test:generators": "npm run build -w @anico/shared-schemas && npm run build -w @anico/auth && node --test scripts/tests/service-generator.test.cjs",
     "module:new": "gen run module",
     "feature:new": "gen run feature",
     "setup": "node scripts/setup.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "test:dev-tools": "node --test scripts/tests/dev-tools.test.mjs scripts/tests/frontend-proxy.test.mjs scripts/tests/dev-api.test.mjs",
+    "test:dev-tools": "turbo run build --filter=@anico/auth && node --test scripts/tests/dev-tools.test.mjs scripts/tests/frontend-proxy.test.mjs scripts/tests/dev-api.test.mjs scripts/tests/dev-app-auth.test.mjs",
     "dev:fullstack": "node scripts/dev-remote.mjs --frontend",
-    "test:prepare-db": "node scripts/prepare-test-db.mjs"
+    "test:prepare-db": "node scripts/prepare-test-db.mjs",
+    "test:prepare-broker": "node scripts/prepare-test-broker.mjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"
@@ -54,8 +55,8 @@
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
     "@turbo/gen": "^2.11.9",
-    "@types/node": "^26.6.6",
     "husky": "^9.1.7",
+    "jose": "6.2.14",
     "lint-staged": "^16.2.0",
     "prettier": "^3.6.2",
     "turbo": "^2.5.8",

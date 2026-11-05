@@ -9,7 +9,7 @@ import {
 import {
   identityOf,
   requireAdmin,
-  type IdentityResolver,
+  authenticate,
 } from '../../../shared/http/identity.js';
 import { decideVerificationRequest } from '../application/decide-verification-request.js';
 import {
@@ -34,12 +34,11 @@ export function verificationRequestsRouter(dependencies: {
   files: FileStorage;
   notifier: DecisionNotifier;
   logger: WarnLogger;
-  resolveIdentity: IdentityResolver;
   now?: () => Date;
 }) {
   const router = Router();
   const { repository: breeders, files } = dependencies;
-  router.use(requireAdmin(dependencies.resolveIdentity));
+  router.use(authenticate, requireAdmin);
 
   const list = listVerificationRequests({ breeders, files });
   const summary = getVerificationSummary({ breeders });
@@ -108,7 +107,7 @@ export function verificationRequestsRouter(dependencies: {
     }
     try {
       const breeder = await decide(String(req.params.id), input.data, {
-        id: identityOf(res).id,
+        id: identityOf(res).userId,
       });
       res.status(200).json(await adminRequest(breeder));
     } catch (error) {

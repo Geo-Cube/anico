@@ -8,12 +8,16 @@ docker compose version >/dev/null
 
 smoke_project="anico-smoke-$(date +%s)-$$"
 context_image="anico/context-check:$smoke_project"
-context_probe="$(mktemp apps/breeder-service/src/.env.docker-check.XXXXXX)"
+context_probe="$(mktemp apps/breeding-service/src/.env.docker-check.XXXXXX)"
 printf '%s\n' 'build-context-sentinel' > "$context_probe"
 export ANICO_BACKEND_PORT=0 ANICO_FRONTEND_PORT=0
+ANICO_AUTH_SMOKE_CONFIG="$(mktemp "${TMPDIR:-/tmp}/anico-auth-proxy.XXXXXX")"
+export ANICO_AUTH_SMOKE_CONFIG
+node scripts/auth-container-smoke.mjs --proxy-config > "$ANICO_AUTH_SMOKE_CONFIG"
+chmod 0644 "$ANICO_AUTH_SMOKE_CONFIG"
 
 compose() {
-  docker compose --project-name "$smoke_project" -f infrastructure/compose.app.yaml "$@"
+  docker compose --project-name "$smoke_project" -f infrastructure/compose.app.yaml -f infrastructure/compose.auth-smoke.yaml "$@"
 }
 
 cleanup() {
@@ -24,13 +28,13 @@ cleanup() {
   fi
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker image rm "$context_image" >/dev/null 2>&1 || true
-  rm -f "$context_probe"
+  rm -f "$context_probe" "$ANICO_AUTH_SMOKE_CONFIG"
   exit "$smoke_status"
 }
 trap cleanup EXIT
 
 # Prove that Docker's actual context excludes local state and credentials.
-base_image="$(awk '$1 == "FROM" { print $2; exit }' apps/breeder-service/Dockerfile)"
+base_image="$(awk '$1 == "FROM" { print $2; exit }' apps/breeding-service/Dockerfile)"
 docker build --build-arg "BASE_IMAGE=$base_image" --tag "$context_image" --file - . <<'DOCKERFILE'
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
@@ -38,22 +42,24 @@ WORKDIR /context
 COPY . .
 RUN test ! -e .git && test ! -e .pulumi && test ! -e node_modules \
     && test ! -e docs && test ! -e infrastructure/ansible \
-    && test ! -e apps/breeder-service/.env \
-    && test ! -e apps/breeder-service/tests \
-    && test ! -e apps/breeder-service/dist \
-    && test -e apps/breeder-service/seeds/development.mjs \
+    && test ! -e apps/breeding-service/.env \
+    && test ! -e apps/breeding-service/tests \
+    && test ! -e apps/breeding-service/dist \
+    && test -e apps/breeding-service/migrations/20261031000100-backfill-breeding-timestamps.mjs \
+    && test -e apps/breeding-service/seeds/development.mjs \
     && test "$(find infrastructure -type f | wc -l)" -eq 1 \
-    && test -z "$(find apps/breeder-service/src -name '.env*' -print)"
+    && test -z "$(find apps/breeding-service/src -name '.env*' -print)"
 DOCKERFILE
 
 compose up --build --detach --wait --wait-timeout 120
-backend="$(compose ps --quiet breeder-service)"
+backend="$(compose ps --quiet breeding-service)"
 frontend="$(compose ps --quiet frontend)"
 database="$(compose ps --quiet mongodb)"
-backend_url="http://$(compose port breeder-service 3000)"
+backend_url="http://$(compose port breeding-service 3000)"
 frontend_url="http://$(compose port frontend 8080)"
 
-for container in "$backend" "$frontend"; do
+auth="$(compose ps --quiet auth)"
+for container in "$backend" "$frontend" "$auth"; do
   test "$(docker exec "$container" id -u)" -ne 0
   test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true
 done
@@ -62,10 +68,19 @@ docker exec "$database" mongosh --quiet --eval \
   'if (db.serverStatus().tcmalloc.usingPerCPUCaches !== false) quit(1)'
 docker exec "$backend" sh -c '
   test ! -e /app/.env && test ! -e /app/.git && test ! -e /app/infrastructure \
-    && test ! -e /app/apps/breeder-service/src \
+    && test ! -e /app/apps/breeding-service/src \
     && test ! -e /app/node_modules/typescript \
     && test ! -e /app/node_modules/vitest \
     && test ! -e /app/node_modules/tsx \
+    && test ! -e /app/node_modules/@pulumi
+'
+docker exec "$auth" sh -c '
+  test ! -e /app/.env && test ! -e /app/infrastructure && test ! -e /app/apps/frontend \
+    && test ! -e /app/apps/auth-service/src \
+    && test ! -e /app/node_modules/typescript \
+    && test ! -e /app/node_modules/vitest \
+    && test ! -e /app/node_modules/tsx \
+    && test ! -e /app/node_modules/msw \
     && test ! -e /app/node_modules/@pulumi
 '
 docker exec "$frontend" sh -c 'test ! -e /app && test ! -e /usr/share/nginx/html/.env'
@@ -78,33 +93,32 @@ docker exec "$backend" node --input-type=module -e '
     }
   }
 '
-# breeder-service has no migrations yet: require a readable journal without failures or a held lock.
-docker exec "$backend" node apps/breeder-service/dist/database/cli.js status \
+docker exec "$backend" node apps/breeding-service/dist/database/cli.js status \
   | node --input-type=module -e '
     let text = "";
     for await (const chunk of process.stdin) text += chunk;
     const status = JSON.parse(text);
-    if (!Array.isArray(status.migrations) || status.migrations.some(item => item.state !== "applied") || status.unknown?.length || status.lock) process.exit(1);
+    if (!status.migrations.length || status.migrations.some(item => item.state !== "applied") || status.lock) process.exit(1);
   '
-if docker exec "$backend" node apps/breeder-service/dist/database/cli.js reset --confirm anico_breeder >/dev/null 2>&1; then
+if docker exec "$backend" node apps/breeding-service/dist/database/cli.js reset --confirm anico_breeding >/dev/null 2>&1; then
   echo 'Reset guard unexpectedly allowed a non-personal database.' >&2
   exit 1
 fi
 
 curl --fail --silent --show-error "$backend_url/ready" >/dev/null
-# Account takeover persists a breeder profile; identity headers stand in for the gateway.
-curl --fail --silent --show-error "$backend_url/breeders/me" \
-  --header 'x-user-id: container-smoke' --header 'x-user-first-name: Container' \
-  --header 'x-user-last-name: Smoke' --header 'x-user-email: container-smoke@example.com' \
+plan_id="$(curl --fail --silent --show-error "$backend_url/breeding-plans" \
+  --header 'Content-Type: application/json' --data '{"name":"Container smoke test"}' \
   | node --input-type=module -e '
     let body = "";
     for await (const chunk of process.stdin) body += chunk;
-    const account = JSON.parse(body);
-    if (account.breederId !== "container-smoke" || account.accountState !== "NOT_SUBMITTED" || account.isVerified !== false) process.exit(1);
-  '
-docker exec "$database" mongosh anico_breeder --quiet --eval \
-  "if (!db.breeders.findOne({breederId: 'container-smoke', hasBreedingStation: true})) quit(1)"
-test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$backend_url/breeders/me")" = 401
+    const plan = JSON.parse(body);
+    if (!/^[0-9a-f]{24}$/.test(plan.id) || plan.name !== "Container smoke test") process.exit(1);
+    console.log(plan.id);
+  ')"
+docker exec "$database" mongosh anico_breeding --quiet --eval \
+  "if (!db.breedingplans.findOne({_id: ObjectId('$plan_id')})) quit(1)"
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$backend_url/breeding-plans" --header 'Content-Type: application/json' --data '{}')" = 400
 
 html="$(curl --fail --silent --show-error "$frontend_url/")"
 test "$html" = "$(curl --fail --silent --show-error "$frontend_url/nested/client-route")"
@@ -124,7 +138,7 @@ curl --fail --silent --show-error --head "$frontend_url/" | tr -d '\r' | grep -q
 docker stop --time 15 "$backend" >/dev/null
 test "$(docker inspect --format '{{.State.ExitCode}}' "$backend")" = 0
 docker start "$backend" >/dev/null
-backend_url="http://$(compose port breeder-service 3000)"
+backend_url="http://$(compose port breeding-service 3000)"
 
 wait_for_status() {
   expected="$1"
@@ -144,5 +158,26 @@ wait_for_status 503
 curl --fail --silent --show-error "$backend_url/health" >/dev/null
 docker start "$database" >/dev/null
 wait_for_status 200
+
+
+
+# The auth image must start with mounted test-only keys and a separate DB.
+docker exec "$auth" node --input-type=module -e '
+  const base="http://127.0.0.1:3000";
+  for(const [path,status] of [["/ready",200],["/session",401],["/internal/verify",401],["/login/google",503]]) {
+    const response=await fetch(base+path,{redirect:"manual"});
+    if(response.status!==status)throw new Error("Auth HTTP smoke failed: "+path);
+  }
+  const jwks=await(await fetch(base+"/.well-known/jwks.json")).json();
+  if(jwks.keys.length!==1||jwks.keys[0].d)throw new Error("Invalid public JWKS");
+'
+
+# Exercise the pinned Traefik ForwardAuth implementation, not just a mock.
+# The deliberately public test-only key exists solely in this isolated stack.
+docker exec "$auth" node --input-type=module -e '
+  const response=await fetch("http://auth-proxy:8080/protected",{headers:{"X-Anico-Identity":"forged","X-Anico-Gateway-Key":"forged"}});
+  const body=await response.json();
+  if(response.status!==401 || body.error!=="AUTHENTICATION_REQUIRED")throw new Error("ForwardAuth did not authenticate the gateway or did not reject missing session");
+'
 
 echo 'Container checks passed: private context, production dependencies, non-root/read-only runtime, HTTP, persistence, SPA caching, graceful shutdown and DB recovery.'

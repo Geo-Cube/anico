@@ -1,12 +1,17 @@
 import { pino } from 'pino';
 import { vi } from 'vitest';
+import type { RequestHandler } from 'express';
 import { createApp } from '../../src/app.js';
 import type { Breeder } from '../../src/modules/breeders/domain/breeder.js';
-import { gatewayHeaderIdentity } from '../../src/shared/http/identity.js';
+import { fixtureAuthenticate } from './api.js';
 import { inMemoryBreeders, inMemoryFiles } from './in-memory.js';
 
 export function testApp(
-  options: { maxCertificateBytes?: number; now?: () => Date } = {},
+  options: {
+    maxCertificateBytes?: number;
+    now?: () => Date;
+    authenticate?: RequestHandler;
+  } = {},
 ) {
   const breeders = inMemoryBreeders();
   const files = inMemoryFiles();
@@ -19,7 +24,7 @@ export function testApp(
     breeders,
     files,
     notifier: { notifyDecision },
-    resolveIdentity: gatewayHeaderIdentity,
+    authenticate: fixtureAuthenticate,
     ...options,
   });
   return { app, breeders, files, notifyDecision };

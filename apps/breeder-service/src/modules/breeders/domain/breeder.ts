@@ -14,9 +14,9 @@ export interface VerificationRequest {
 
 export interface Breeder {
   breederId: string;
-  firstName: string;
-  lastName: string;
-  emailAddress: string;
+  firstName: string | null;
+  lastName: string | null;
+  emailAddress: string | null;
   breedingStationName: string | null;
   breedingStationNumber: string | null;
   hasBreedingStation: true;
@@ -26,9 +26,9 @@ export interface Breeder {
 
 export interface NewBreeder {
   breederId: string;
-  firstName: string;
-  lastName: string;
-  emailAddress: string;
+  firstName: string | null;
+  lastName: string | null;
+  emailAddress: string | null;
 }
 
 export interface Submission {

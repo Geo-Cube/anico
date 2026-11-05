@@ -20,14 +20,15 @@ services:
       retries: 10
     restart: unless-stopped
 
-  breeder-service:
-    image: anico/breeder-service:local
+  breeding-service:
+    image: anico/breeding-service:local
     build:
       context: ..
-      dockerfile: apps/breeder-service/Dockerfile
+      dockerfile: apps/breeding-service/Dockerfile
     environment:
-      MONGODB_URI: mongodb://mongodb:27017/anico_breeder
+      MONGODB_URI: mongodb://mongodb:27017/anico_breeding
       LOG_LEVEL: info
+      APP_ENV: local
       MIGRATE_ON_START: 'true'
     ports:
       - '127.0.0.1:${ANICO_BACKEND_PORT:-3000}:3000'

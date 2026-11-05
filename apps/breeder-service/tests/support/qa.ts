@@ -8,8 +8,7 @@ import type {
   BreederRepository,
   FileStorage,
 } from '../../src/modules/breeders/domain/ports.js';
-import { gatewayHeaderIdentity } from '../../src/shared/http/identity.js';
-import { adminHeaders } from './api.js';
+import { adminHeaders, fixtureAuthenticate } from './api.js';
 import { inMemoryBreeders, inMemoryFiles } from './in-memory.js';
 
 /** Binární stažení (Supertest jinak bajty zahodí). */
@@ -71,7 +70,7 @@ export function faultyApp(
     breeders: options.wrapRepo ? options.wrapRepo(breeders) : breeders,
     files: options.wrapFiles ? options.wrapFiles(files) : files,
     notifier: { notifyDecision },
-    resolveIdentity: gatewayHeaderIdentity,
+    authenticate: fixtureAuthenticate,
   });
   return { app, breeders, files, notifyDecision, log };
 }

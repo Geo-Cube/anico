@@ -3,7 +3,7 @@ import request from 'supertest';
 import { pino } from 'pino';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
-import { gatewayHeaderIdentity } from '../../src/shared/http/identity.js';
+import { fixtureAuthenticate } from '../support/api.js';
 import { LOG_REDACT_PATHS } from '../../src/shared/logging.js';
 import {
   adminHeaders,
@@ -29,13 +29,26 @@ describe('certificate download', () => {
       breeders: inMemoryBreeders(),
       files: inMemoryFiles(),
       notifier: { notifyDecision: async () => undefined },
-      resolveIdentity: gatewayHeaderIdentity,
+      authenticate: fixtureAuthenticate,
     });
     const headers = identityHeaders('breeder-1', {
       firstName: 'Zdenek',
       lastName: 'Tajnovsky',
     });
     await request(app).get('/breeders/me').set(headers);
+    const credentials = {
+      'x-anico-identity': 'synthetic-signed-identity-secret',
+      'cf-access-jwt-assertion': 'synthetic-cloudflare-jwt-secret',
+      'cf-access-client-id': 'synthetic-cloudflare-client-id',
+      'cf-access-client-secret': 'synthetic-cloudflare-client-secret',
+      authorization: 'Bearer synthetic-authorization-secret',
+      cookie: 'session=synthetic-cookie-secret',
+    };
+    await request(app)
+      .get('/breeders/me')
+      .set(headers)
+      .set(credentials)
+      .expect(200);
     const id = await takeOverAndSubmit(app, 'breeder-1', {
       file: {
         content: Buffer.from('%PDF-1.4 x'),
@@ -53,6 +66,9 @@ describe('certificate download', () => {
     expect(log).not.toContain('breeder-1@example.test');
     expect(log).not.toContain('Zdenek');
     expect(log).not.toContain('Tajnovsky');
+    for (const secret of Object.values(credentials)) {
+      expect(log).not.toContain(secret);
+    }
   });
 
   it('answers 500 through the central handler when the stream fails before data', async () => {

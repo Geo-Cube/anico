@@ -21,6 +21,29 @@ describe('database command boundaries', () => {
     );
     expect(local.personal).toBe(true);
   });
+  it('allows the personal account authenticated through the shared breeding login database', () => {
+    const personalUri =
+      'mongodb://dev_example:example-only@127.0.0.1:27018/anico_breeder_example?authSource=anico_breeding_example';
+    const target = databaseTarget(personalUri, development);
+    expect(target).toEqual({
+      database: 'anico_breeder_example',
+      personal: true,
+      sharedDev: false,
+    });
+    expect(() => requireReset(target, target.database)).not.toThrow();
+    expect(() => requireSeed(target)).not.toThrow();
+    for (const value of [
+      personalUri.replace('anico_breeding_example', 'anico_breeding_other'),
+      personalUri.replace('dev_example:', 'dev_other:'),
+      personalUri.replace('127.0.0.1', 'example.com'),
+      personalUri.replace('27018', '27017'),
+    ])
+      expect(() => databaseTarget(value, development)).toThrow();
+    for (const env of [{ NODE_ENV: 'production' }, { APP_ENV: 'prod' }])
+      expect(() =>
+        requireReset(databaseTarget(personalUri, env), target.database),
+      ).toThrow();
+  });
   it('rejects resets of shared/prod DBs, mismatched accounts, direct servers and wrong confirmations', () => {
     for (const value of [
       'mongodb://127.0.0.1:27017/anico_breeder',

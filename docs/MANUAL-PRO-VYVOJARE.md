@@ -3,6 +3,44 @@
 **Vyber si, zda vyvíjíš frontend, backend, nebo je potřebuješ spojit.**
 Docker, SSH ani cloudové API tokeny k tomu nepotřebuješ.
 
+## Pokud programuješ poprvé, začni tady
+
+1. Přijmi pozvánku do GitHub repozitáře a naklonuj ho v **GitHub Desktop**.
+2. Připrav Node, npm a `cloudflared` podle svého systému v části **1. Jednou na počítači** níže.
+3. V GitHub Desktop přepni na `dev`, dej **Fetch origin** a případně **Pull origin**.
+   Pro svůj úkol vytvoř **New Branch**, například `feature/moje-prvni-zmena`.
+4. Otevři projekt ve VS Code a vyber **Terminal → New Terminal**. Jsi v kořeni,
+   pokud vidíš složky `apps`, `packages` a hlavní `package.json`.
+5. Pro první spuštění napiš postupně:
+
+   ```bash
+   npm run setup
+   npm run dev:frontend
+   ```
+
+   `setup` stáhne potřebné knihovny a připraví projekt. `dev:frontend` spustí stránku
+   na tvém počítači; její API požadavky půjdou do týmového dev prostředí.
+
+6. Nech terminál běžet a otevři **http://127.0.0.1:5173**. Dokonči případný týmový
+   GitHub přístup. V aplikaci zvol Google nebo Microsoft a potvrď **Povolit místní vývoj**.
+   Pokud se vrátíš do UI jako přihlášený, první spuštění se povedlo.
+7. Změň drobný text v `apps/frontend/src/features/dashboard/DashboardPage.tsx`, soubor ulož a ověř změnu v prohlížeči.
+   Před odesláním spusť kontroly z části **2. Každý pracovní den** a postupuj podle
+   [GitHub Desktop návodu pro commit a PR](GIT-WORKFLOW.md#běžná-práce). PR má cílit do `dev`.
+
+Při dalším spuštění už `setup` neopakuj; běžnou práci popisuje část 2. Aplikaci ukončíš
+v terminálu pomocí **Ctrl+C**. Na Windows při chybě `npm.ps1` napiš `npm.cmd` místo `npm`.
+
+**Děláš backend?** Od správce potřebuješ osobní `.env.remote.local`, přesný název své služby
+a oprávnění k její DB. Místo `dev:frontend` spusť například
+`npm run dev:fullstack -- --service animal-service`, pouze pokud tuto službu máš ve své větvi.
+Novou službu vytvoří [generátor](NOVA-SLUZBA.md); nevkládej ji do ukázkové `breeding-service`.
+Přihlášení obstará týmový dev, proto jako svou službu nevybírej `auth-service`.
+Chybějící přístup nebo DB řeš se správcem; hesla nekopíruj od kolegy ani je neposílej do Gitu.
+
+Když něco selže, pošli název příkazu a text chyby. Neposílej `.env`, databázové URI,
+tokeny nebo celou přihlašovací URL. Nezkoušej problém řešit mazáním DB nebo lockfile.
+
 ## 1. Jednou na počítači
 
 Přijmi GitHub pozvánku a naklonuj `Geo-Cube/anico` v GitHub Desktop.
@@ -49,11 +87,14 @@ je kompatibilní zkratka stejné přípravy, ve Windows není Bash potřeba.
 
 UI otevři na **http://127.0.0.1:5173**. **Ctrl+C** ukončí spuštěné procesy i jejich DB tunel.
 Frontend nikdy nepřistupuje přímo do MongoDB. Vlastní DB konfiguraci pro samotný frontend nepotřebuješ.
-Při prvním požadavku na společné dev API dokonči GitHub přihlášení v prohlížeči;
-Vite si přes `cloudflared` opatří osobní přístup pouze v Node procesu.
+Při prvním přístupu dokonči týmový GitHub Access podle pokynů terminálu.
+V UI se potom přihlas přes Google/Microsoft a potvrď **Povolit místní vývoj**.
+[Přihlášení pro frontend i backend](LOKALNI-PRIHLASENI.md) je nasazené a ověřené; tokeny se nikam nekopírují.
+Přihlášení zajišťuje společná dev auth-service. Jako `--service` vyber vlastní doménovou
+službu, nikoli `auth-service`; kolegové nepotřebují OAuth secrets ani lokální callbacky.
 
 **Backend / fullstack:** od správce si vyžádej svůj soubor `.env.remote.local`
-a ulož jej do kořene. Stávající soubor v `apps/breeding-service` funguje také.
+a ulož jej do kořene. Soubor v `apps/tvoje-service/.env.remote.local` funguje také.
 Na macOS/Linuxu nastav `chmod 600 .env.remote.local`; na Windows tento krok vynech.
 Jeden soubor stačí pro služby, ke kterým máš přidělená osobní DB oprávnění.
 
@@ -61,7 +102,12 @@ Diagnostika UI: `npm run doctor -- --frontend`.
 Diagnostika backendu i UI: `npm run doctor -- --service animal --frontend`.
 V PowerShellu můžeš používat `npm.cmd` místo `npm`.
 
-**Současný stav:** UI je zatím simulace; skutečné napojení obrazovek na API doplní vývojáři.
+**Současný stav:** business obrazovky jsou zatím simulace; jejich napojení na API doplní vývojáři.
+Google/Microsoft login na týmovém devu i pro lokální nástroje je nasazený a ověřený,
+včetně předání identity do lokálního i sdíleného API a odhlášení.
+Samotný GitHub Access nestačí pro business API. [Co máme a co zbývá](STAV-PROJEKTU.md).
+Pro vlastní backend použij [krátký integrační kontrakt](INTEGRACE-IDENTITY.md): middleware,
+`req.auth`, role a kontrola vlastnictví patří do každé služby.
 `animal` je příklad: musíš mít `apps/animal-service` ve své větvi a přidělená DB oprávnění.
 Jinak vyber název služby, na které skutečně pracuješ.
 Nová lokální služba ještě automaticky neběží na týmovém devu. Její cloudové nasazení
@@ -69,7 +115,7 @@ vyžaduje samostatnou konfiguraci. Chybějící API se nenahrazuje osobní datab
 
 ## 2. Každý pracovní den
 
-1. V GitHub Desktop stáhni `dev` a založ vlastní `feature/kratky-popis` větev.
+1. V GitHub Desktop stáhni `dev`. Pro nový úkol z něj založ `feature/kratky-popis`; pokud už vlastní větev máš, přepni na ni, stáhni její vzdálené změny a začleň aktuální `dev` pomocí merge nebo rebase podle [Git workflow](GIT-WORKFLOW.md#pokračování-na-existující-větvi).
 2. Po změně závislostí spusť `npm ci`.
 3. Spusť vhodný režim z tabulky výše, uprav kód a ověř výsledek.
 4. Před PR proveď kontroly níže. Commitni jen související soubory a otevři PR do `dev`.
@@ -86,13 +132,18 @@ Docker images a secrets. Testy používají vlastní dočasnou DB, nikoli tvou o
 Při prvním běhu potřebují internet ke stažení MongoDB binárky. V CI se binárka
 připraví jednou před paralelními testy; lokálně ji lze připravit přes
 `npm run test:prepare-db`.
+Auth testy si navíc automaticky připraví dočasný NATS broker z ověřené binárky;
+žádný broker ani další secrets ručně nenastavuješ. Předem lze spustit `npm run test:prepare-broker`.
 
 ## 3. Kam psát kód
+
+**`tvoje-service` nahraď názvem své služby. Ukázková `breeding-service` není místo
+pro další mikroservisy.** Vlastní službu založ generátorem z návodu níže.
 
 | Co měním              | Složka                                  |
 | --------------------- | --------------------------------------- |
 | React UI              | `apps/frontend/src`                     |
-| Backendovou funkci    | `apps/NAZEV-service/src/modules/DOMENA` |
+| Backendovou funkci    | `apps/tvoje-service/src/modules/DOMENA` |
 | Sdílené Zod kontrakty | `packages/shared-schemas`               |
 
 Podrobnosti: [architektura](ARCHITEKTURA.md), [generátory](NOVA-SLUZBA.md).

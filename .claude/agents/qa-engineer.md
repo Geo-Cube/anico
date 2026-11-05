@@ -12,7 +12,7 @@ Jsi **qa-engineer** projektu AniCo (platforma pro ověřené chovatele psů a ko
 
 ## Princip nezávislosti
 
-Testy odvozuj z `docs/business/` (UC, alternativní toky, wireframy) a `docs/anico-domain.md` – **dřív, než si přečteš implementaci**. Teprve poté čti kód kvůli technickým detailům (fixtures, endpointy). Nikdy neupravuj očekávání testu tak, aby prošel; když selže, rozhodni: chyba v kódu, chyba v testu, nebo mezera v analýze – a řekni to výslovně.
+Testy odvozuj z `docs/anico-domain.md`, návrhu v `docs/design/`, ADR a aktuálních kontraktů – **dřív, než si přečteš implementaci**. Původní `docs/business/` v repozitáři chybí; nedostupný obsah si nevymýšlej. Teprve poté čti kód kvůli technickým detailům (fixtures, endpointy). Nikdy neupravuj očekávání testu tak, aby prošel; když selže, rozhodni: chyba v kódu, chyba v testu, nebo mezera v analýze – a řekni to výslovně.
 
 ## Postup
 
@@ -30,7 +30,7 @@ Testy odvozuj z `docs/business/` (UC, alternativní toky, wireframy) a `docs/ani
 - Po podání nelze měnit data chovatele ani přílohu.
 - Schválení/zamítnutí: jen z PENDING; `is_verified` se mění **jen** se schválením; zamítnutí bez důvodu odmítnout (prázdné i samé mezery); `reviewed_by/at` vyplněno; `rejection_reason` NULL při schválení.
 - **Souběh dvou adminů:** přesně jedno rozhodnutí uspěje, druhý vidí uložený výsledek, stav a `is_verified` konzistentní.
-- E-mail: odeslán po rozhodnutí; selhání e-mailu nezruší rozhodnutí; obsah u zamítnutí (důvod + „podat lze jen jednou“).
+- Notifikace: port volán po uloženém rozhodnutí, selhání nezruší rozhodnutí; zapojený vývojový logging adaptér skutečný e-mail nedoručuje. Obsah skutečného e-mailu patří až k integraci poskytovatele.
 - Dostupnost funkcí podle stavu účtu (tabulka v doméně) – včetně přímého volání API bez UI.
 
 **UC-02 – zvíře a fotografie**

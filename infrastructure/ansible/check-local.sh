@@ -15,6 +15,8 @@ ansible-playbook -i inventory.example.yml application-environments.yml --syntax-
 ansible-playbook -i inventory.example.yml kernel-maintenance.yml --syntax-check
 ansible-playbook -i inventory.example.yml dev-database.yml --syntax-check
 ansible-playbook -i inventory.example.yml dev-deployment.yml --syntax-check
+ansible-playbook -i inventory.example.yml dev-auth.yml --syntax-check
+ansible-playbook -i inventory.example.yml dev-events.yml --syntax-check
 ansible-playbook -i inventory.example.yml site.yml --syntax-check
 python3 ../scripts/validate_environments.py ../environments.json
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ../tests -p '*_test.py'
@@ -23,3 +25,4 @@ python3 -c 'import ast; from pathlib import Path; ast.parse(Path("../scripts/ver
 python3 -c 'import ast; from pathlib import Path; ast.parse(Path("../scripts/verify_coolify.py").read_text())'
 python3 -c 'import ast; from pathlib import Path; ast.parse(Path("../scripts/verify_admin_origin.py").read_text())'
 python3 -c 'import ast; from pathlib import Path; ast.parse(Path("../scripts/verify-dev-deployment.py").read_text())'
+python3 -c 'import ast; from pathlib import Path; ast.parse(Path("../scripts/verify-dev-events.py").read_text())'

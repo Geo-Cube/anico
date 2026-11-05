@@ -3,6 +3,11 @@
 Odvozeno z `05-business-use-cases.md`, `03/04` (business-model), `docs/anico-domain.md`, průvodce kap. 6–8 a briefu
 koordinátora (K1–K17). Nezávisle na implementaci. Stav provedení jednotlivých případů: sekce 7.
 
+Aktualizace integrace 5. 11. 2026: autentizační scénáře používají současný JWT
+kontrakt (`@anico/auth`, `req.auth`), ne důvěryhodné `x-user-*`. Níže zachované
+reporty provedení a bugů jsou historické výsledky z původní PR větve, nikoli
+ověření integrované větve. Integrace vyžaduje nové společné ověření.
+
 Úrovně: **U** = unit (doména/use-case, in-memory, `tests/unit`), **H** = HTTP nad in-memory (`tests/http`, Supertest),
 **I** = integrace (MongoMemoryServer + GridFS, `tests/integration`; souběh a atomicita jen zde).
 Priorita: P1 = invariant / bezpečnost / konzistence dat, P2 = alternativní toky a validace, P3 = okrajové a nefunkční.
@@ -16,8 +21,8 @@ Priorita: P1 = invariant / bezpečnost / konzistence dat, P2 = alternativní tok
 | `breederApproved`    | `breeder-3`, APPROVED, `isVerified=true`, `reviewedBy=admin-1`, `rejectionReason=null`                                                                                                                                                                                         |
 | `breederRejected`    | `breeder-4`, REJECTED, důvod „Název stanice nesedí s certifikátem“, `isVerified=false`                                                                                                                                                                                         |
 | dva chovatelé (IDOR) | `breeder-A` a `breeder-B`, oba s PENDING žádostí a vlastním certifikátem                                                                                                                                                                                                       |
-| dva admini           | `admin-1`, `admin-2` (hlavička `x-user-roles: admin`)                                                                                                                                                                                                                          |
-| hlavičky identity    | `x-user-id`, `x-user-first-name`, `x-user-last-name`, `x-user-email` (URL-encoded), `x-user-roles`                                                                                                                                                                             |
+| dva admini           | `admin-1`, `admin-2` s ověřenou rolí `admin`; samostatně ověřit roli `owner`                                                                                                                                                                                                   |
+| identita             | ověřené `req.auth`: `userId`, `givenName`, `familyName`, `email`, `roles`; profilové údaje mohou být `null`                                                                                                                                                                    |
 | soubory (generované) | `valid.pdf` (`%PDF-1.4…`), `valid.png`, `valid.jpg` (magic bytes), `fake.pdf` (HTML s příponou .pdf), `anim.gif`, `empty.pdf` (0 B), `big.pdf` (5 MB + 1 B), `limit.pdf` (přesně 5 MB), jméno `../../etc/passwd.pdf`, jméno s `"` a CRLF, jméno 300 znaků, jméno s diakritikou |
 | fake notifier        | zaznamenává volání; varianta „vyhodí chybu“                                                                                                                                                                                                                                    |
 | fake FileStorage     | in-memory; varianta „save selže“; počítadlo uložených/smazaných souborů                                                                                                                                                                                                        |
@@ -39,7 +44,7 @@ Společné ověření „žádná změna“: profil (jméno, e-mail, stanice, `i
 | UC01-ACC-06 | Zobrazení výsledku 2   | Opakované `GET /me` data nemění (profil i žádost identické před/po)                                                                                                                              | H   | P3  |
 | UC01-ACC-07 | Dostupnost funkcí      | `accountState`↔`isVerified` konzistentní: `isVerified=true` ⇔ APPROVED; v ostatních stavech `false`                                                                                              | U   | P1  |
 | UC01-ACC-08 | Odvození stavu         | Čistá funkce stavu účtu z (žádost, status) pro všechny 4 vstupy                                                                                                                                  | U   | P2  |
-| UC01-ACC-09 | Převzetí – identita    | `breederId` z `x-user-id`, ne z těla/dotazu (`?breederId=` ignorován); `emailAddress`/jméno z identity                                                                                           | H   | P1  |
+| UC01-ACC-09 | Převzetí – identita    | `breederId` z ověřeného `req.auth.userId`, nikdy z těla/query/`x-user-*`; jméno/e-mail z identity, chybějící údaje jako `null`, GET uspěje                                                       | H   | P1  |
 
 ### 2.2 Příprava a první podání (`POST /breeders/me/verification-request`, multipart)
 
@@ -132,15 +137,15 @@ Společné ověření „žádná změna“: profil (jméno, e-mail, stanice, `i
 
 | ID          | Scénář UC              | Popis a očekávaný výsledek                                                                                                                                            | Úr. | Pri |
 | ----------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | --- |
-| UC01-SEC-01 | CAF přístup            | Bez identity (žádné hlavičky) → 401 `{error:'Unauthorized'}` na VŠECH chráněných routách (matice 8 endpointů × metoda)                                                | H   | P1  |
-| UC01-SEC-02 | CAF přístup            | Rozbitý escape (`x-user-first-name: %E0%A4%A`), chybějící `x-user-id`/e-mail, id > 128 znaků, neplatný e-mail → 401 (ne 500)                                          | H   | P1  |
-| UC01-SEC-03 | CAF přístup            | Chovatel (bez role admin) na všech `/verification-requests*` včetně `POST decision` a `/certificate` → 403 `{error:'Forbidden'}`; stav DB beze změny                  | H   | P1  |
-| UC01-SEC-04 | CAF přístup            | Admin smí fronta/detail/certifikát/decision; role `admin` mezi více rolemi (`user,admin`) funguje; `Admin`/`administrator` ne                                         | H   | P2  |
+| UC01-SEC-01 | CAF přístup            | Bez platného JWT → 401 na všech chráněných routách; samotné `x-user-*` autentizaci nezaloží                                                                           | H   | P1  |
+| UC01-SEC-02 | CAF přístup            | Neplatný podpis, issuer, audience nebo expirovaný JWT → 401; platná identita s nullable jménem/e-mailem může převzít profil                                           | H   | P1  |
+| UC01-SEC-03 | CAF přístup            | Chovatel bez admin/owner na všech `/verification-requests*`, včetně souborů a rozhodnutí → 403; DB beze změny                                                         | H   | P1  |
+| UC01-SEC-04 | CAF přístup            | Ověřené role `admin` a `owner` povolí frontu/detail/certifikát/rozhodnutí; `Admin`/`administrator` ne                                                                 | H   | P2  |
 | UC01-SEC-05 | IDOR                   | Chovatel A: `GET /breeders/me/verification-request/certificate` vrací jen svůj soubor; neexistuje routa pro cizí (`/breeders/{B}/…`, `?breederId=B` → 404/ignorováno) | H   | P1  |
 | UC01-SEC-06 | IDOR                   | Chovatel A tipuje `fileReference`/id žádosti B přes `/verification-requests/:id/certificate` → 403 (role), nikdy obsah                                                | H   | P1  |
 | UC01-SEC-07 | CAF přístup            | Chovatel bez žádosti: `GET …/certificate` → 404                                                                                                                       | H   | P2  |
-| UC01-SEC-08 | IDOR – identita        | Podvržení `x-user-id` je záměrně možné jen přes gateway (K1); test dokumentuje předpoklad: servisa důvěřuje hlavičkám (# ASSUMPTION A-07); body/query nemají přednost | H   | P2  |
-| UC01-SEC-09 | CAF odhlášení          | Po „odhlášení“ (hlavičky odstraněny) další požadavek → 401; pozdější požadavek s jinou rolí se vyhodnotí znovu (bez cache identity)                                   | H   | P2  |
+| UC01-SEC-08 | IDOR – identita        | Podvržené `x-user-id`/`x-user-roles` nemění ověřené `req.auth`; bez JWT → 401, s JWT se použije skutečný userId a role                                                | H   | P1  |
+| UC01-SEC-09 | CAF odhlášení          | Po odhlášení gateway nepředá platnou identitu; další požadavek → 401. Následující požadavek se autentizuje znovu, bez cache identity ve službě                        | H   | P2  |
 | UC01-SEC-10 | 8.5 chyby              | Neočekávaná chyba → 500 `{error:'Internal server error'}` bez stacku, cest, textu Mongo chyby; nevalidní JSON → 400                                                   | H   | P1  |
 | UC01-SEC-11 | 8.1 limity             | JSON tělo > 32 kB na `/decision` → 413; nepodporovaná metoda → 404/405                                                                                                | H   | P3  |
 | UC01-SEC-12 | 8.3 logy               | Log požadavků/chyb neobsahuje e-mail, jména, obsah souboru, hlavičky `x-user-*`, `authorization`, `cookie` (redakce)                                                  | H   | P2  |
@@ -191,7 +196,7 @@ Společné ověření „žádná změna“: profil (jméno, e-mail, stanice, `i
 | A-04 | Cizí / neexistující / nevalidní ObjectId → 404; 403 jen pro chybějící roli (doporučení `anico-domain.md` §6/6).                 |
 | A-05 | Fronta řazena `submittedAt` vzestupně (nejstarší první), limit 500; analýza řazení nestanoví.                                   |
 | A-06 | Pořadí kontrol při podání: identita → validace → existence žádosti (A3) → uložení; vadné druhé podání může vrátit 400 i 409.    |
-| A-07 | Identita z hlaviček `x-user-*` za gateway (K1); samotná servisa hlavičky neověřuje (bezpečnostní předpoklad, ne test).          |
+| A-07 | Identitu ověřuje `@anico/auth` z podepsaného JWT v `req.auth`; klientské `x-user-*` se ignorují (ADR-0002).                     |
 | A-08 | `reviewedBy` = `identity.id` admina (ne jméno).                                                                                 |
 | A-09 | Stažení je vždy `attachment` (analýza: „vestavěný náhled PDF neřešíme“).                                                        |
 | A-10 | Převzetí účtu je JIT při prvním `GET /breeders/me` (alternativa: událost ze správy uživatelů); `POST` podání bez profilu → 404. |

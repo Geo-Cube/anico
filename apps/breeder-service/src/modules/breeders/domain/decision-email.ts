@@ -12,6 +12,9 @@ export function decisionEmail(breeder: Breeder): DecisionEmail {
   if (!request || request.status === 'PENDING') {
     throw new Error('Cannot build decision e-mail for an undecided request');
   }
+  if (!breeder.emailAddress) {
+    throw new Error('Cannot build decision e-mail without a recipient');
+  }
 
   const greeting = `Dobrý den, ${breeder.firstName} ${breeder.lastName},`;
 
