@@ -3,6 +3,8 @@
 - Stav: přijato pro MVP (D8 průvodce, K12 briefu); produkční doručování je blokující závislost (návrh O3)
 - Datum: 2026-11-04
 - Souvisí: [návrh UC-01](../design/uc-01-overeni-chovatele.md) §4, §9
+- Doplněno: [ADR-0004](0004-vraceni-zadosti-k-doplneni.md) – e-mail i pro vrácení k doplnění (`RETURNED`);
+  věta o jediném podání u zamítnutí nyní zní „zamítnutí je konečné, žádost nelze podat znovu“
 
 ## Kontext
 

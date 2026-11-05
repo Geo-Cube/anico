@@ -28,10 +28,29 @@ export class VerificationAlreadyDecidedError extends Error {
   }
 }
 
+/**
+ * Žádost je PENDING, ale v jiné revizi, než o které administrátor rozhodl:
+ * mezitím byla vrácena a opravena (nebo klient uvedl neexistující revizi).
+ */
+export class VerificationRevisionMismatchError extends Error {
+  constructor(public readonly breeder: Breeder) {
+    super('Verification revision mismatch');
+    this.name = 'VerificationRevisionMismatchError';
+  }
+}
+
 export class InvalidCertificateError extends Error {
   constructor() {
     super('Invalid certificate');
     this.name = 'InvalidCertificateError';
+  }
+}
+
+/** Podání bez certifikátu tam, kde je povinný (vše kromě opravy RETURNED). */
+export class CertificateRequiredError extends Error {
+  constructor() {
+    super('Certificate file is required');
+    this.name = 'CertificateRequiredError';
   }
 }
 

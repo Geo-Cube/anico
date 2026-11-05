@@ -6,9 +6,11 @@ import { createApp } from './app.js';
 import { migrateDatabase } from './database/engine.js';
 import { loadMigrations } from './database/registry.js';
 import { databaseTarget } from './database/policy.js';
+import { createModules } from './modules/index.js';
 import { gridFsFileStorage } from './modules/breeders/infrastructure/gridfs-file-storage.js';
 import { loggingDecisionNotifier } from './modules/breeders/infrastructure/logging-decision-notifier.js';
 import { mongooseBreederRepository } from './modules/breeders/infrastructure/mongoose-breeder-repository.js';
+import { apiDocsEnabled } from './openapi/docs-router.js';
 import { requestAuthenticator } from '@anico/auth';
 
 const env = z
@@ -50,8 +52,13 @@ try {
       );
     }
   }
-  const breeders = mongooseBreederRepository(connection);
-  // indexy (unikátní breederId apod.) musí existovat před přijetím provozu
+  const modules = createModules(connection, {
+    repository: mongooseBreederRepository(connection),
+    files: gridFsFileStorage(connection),
+    notifier: loggingDecisionNotifier(logger),
+    logger,
+  });
+  // indexy (unikátní breederId apod.) všech modulů musí existovat před přijetím provozu
   await Promise.all(
     Object.values(connection.models).map((model) => model.init()),
   );
@@ -61,10 +68,9 @@ try {
   let stopping = false;
   const app = createApp({
     logger,
-    breeders,
-    files: gridFsFileStorage(connection),
-    notifier: loggingDecisionNotifier(logger),
+    modules,
     ...(authenticate ? { authenticate } : {}),
+    apiDocs: apiDocsEnabled(process.env),
     isReady: () => !stopping && connection.readyState === 1,
   });
   const server = app.listen(env.PORT, env.HOST, () =>

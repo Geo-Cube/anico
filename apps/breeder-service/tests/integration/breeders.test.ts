@@ -1,6 +1,5 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { createConnection, type Connection } from 'mongoose';
-import { pino } from 'pino';
 import request from 'supertest';
 import {
   afterAll,
@@ -11,7 +10,8 @@ import {
   it,
   vi,
 } from 'vitest';
-import { createApp } from '../../src/app.js';
+import type { createApp } from '../../src/app.js';
+import { serviceApp } from '../support/app.js';
 import type { Breeder } from '../../src/modules/breeders/domain/breeder.js';
 import { gridFsFileStorage } from '../../src/modules/breeders/infrastructure/gridfs-file-storage.js';
 import { mongooseBreederRepository } from '../../src/modules/breeders/infrastructure/mongoose-breeder-repository.js';
@@ -46,9 +46,8 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
     await Promise.all(
       Object.values(connection.models).map((model) => model.init()),
     );
-    app = createApp({
-      logger: pino({ level: 'silent' }),
-      isReady: () => true,
+    app = serviceApp({
+      connection,
       breeders: repository,
       files: gridFsFileStorage(connection),
       notifier: { notifyDecision },
@@ -108,12 +107,18 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
       isVerified: false,
       verificationRequest: {
         status: 'PENDING',
+        revision: 1,
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
+        returnReason: null,
+        reviewHistory: [],
       },
     });
     expect(stored?.verificationRequest.submittedAt).toBeInstanceOf(Date);
+    expect(stored?.verificationRequest.lastSubmittedAt).toEqual(
+      stored?.verificationRequest.submittedAt,
+    );
     expect(await gridFsFiles().countDocuments()).toBe(1);
   });
 
@@ -184,7 +189,11 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
   it('approves in one document: status, reviewer, Date reviewedAt and isVerified', async () => {
     const id = await takeOverAndSubmit(app, 'b1');
     const before = Date.now();
-    const response = await decide(id, { decision: 'APPROVED' }, 'admin-9');
+    const response = await decide(
+      id,
+      { decision: 'APPROVED', revision: 1 },
+      'admin-9',
+    );
     expect(response.status).toBe(200);
 
     const stored = await breeders().findOne({ breederId: 'b1' });
@@ -206,6 +215,7 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
     const id = await takeOverAndSubmit(app, 'b1');
     await decide(id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'Nesedí název',
     }).expect(200);
     const stored = await breeders().findOne({ breederId: 'b1' });
@@ -220,8 +230,12 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
   it('allows exactly one of 2 concurrent decisions', async () => {
     const id = await takeOverAndSubmit(app, 'b1');
     const responses = await Promise.all([
-      decide(id, { decision: 'APPROVED' }, 'admin-1'),
-      decide(id, { decision: 'REJECTED', rejectionReason: 'Ne' }, 'admin-2'),
+      decide(id, { decision: 'APPROVED', revision: 1 }, 'admin-1'),
+      decide(
+        id,
+        { decision: 'REJECTED', revision: 1, rejectionReason: 'Ne' },
+        'admin-2',
+      ),
     ]);
     expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
 
@@ -239,7 +253,7 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
   it('keeps the decision when the notifier fails', async () => {
     notifyDecision.mockRejectedValueOnce(new Error('smtp down'));
     const id = await takeOverAndSubmit(app, 'b1');
-    await decide(id, { decision: 'APPROVED' }).expect(200);
+    await decide(id, { decision: 'APPROVED', revision: 1 }).expect(200);
     const stored = await breeders().findOne({ breederId: 'b1' });
     expect(stored?.isVerified).toBe(true);
     expect(stored?.verificationRequest.status).toBe('APPROVED');
@@ -250,12 +264,17 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
     await takeOverAndSubmit(app, 'b2');
     await takeOverAndSubmit(app, 'b3');
     await request(app).get('/breeders/me').set(breederHeaders('b4'));
-    await decide(first, { decision: 'APPROVED' }).expect(200);
+    await decide(first, { decision: 'APPROVED', revision: 1 }).expect(200);
 
     const summary = await request(app)
       .get('/verification-requests/summary')
       .set(adminHeaders());
-    expect(summary.body).toEqual({ pending: 2, approved: 1, rejected: 0 });
+    expect(summary.body).toEqual({
+      pending: 2,
+      returned: 0,
+      approved: 1,
+      rejected: 0,
+    });
 
     const pending = await request(app)
       .get('/verification-requests?status=PENDING')
@@ -266,10 +285,11 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
       ),
     ).toEqual(['b2', 'b3']);
 
-    const all = await request(app)
+    // bez filtru jen fronta ke kontrole (PENDING)
+    const queue = await request(app)
       .get('/verification-requests')
       .set(adminHeaders());
-    expect(all.body.items).toHaveLength(3);
+    expect(queue.body).toEqual(pending.body);
   });
 
   it('answers 404 for invalid and unknown request ids', async () => {
@@ -278,7 +298,7 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
         .get(`/verification-requests/${id}`)
         .set(adminHeaders())
         .expect(404);
-      await decide(id, { decision: 'APPROVED' }).expect(404);
+      await decide(id, { decision: 'APPROVED', revision: 1 }).expect(404);
       await request(app)
         .get(`/verification-requests/${id}/certificate`)
         .set(adminHeaders())

@@ -1,4 +1,9 @@
-import type { Breeder, NewBreeder, Submission } from './breeder.js';
+import type {
+  Breeder,
+  NewBreeder,
+  Resubmission,
+  Submission,
+} from './breeder.js';
 import type {
   CertificateContentType,
   DecisionRecord,
@@ -9,15 +14,30 @@ export interface BreederRepository {
   findByBreederId(breederId: string): Promise<Breeder | null>;
   provision(input: NewBreeder): Promise<Breeder>;
   findByVerificationRequestId(requestId: string): Promise<Breeder | null>;
+  /** První podání; `null`, pokud chovatel neexistuje nebo už žádost má. */
   submitVerification(
     breederId: string,
     submission: Submission,
   ): Promise<Breeder | null>;
+  /**
+   * Oprava vrácené žádosti; `null`, pokud daná žádost už není RETURNED nebo
+   * už nemá certifikát `currentCertificateReference`.
+   */
+  resubmitVerification(
+    breederId: string,
+    requestId: string,
+    resubmission: Resubmission,
+  ): Promise<Breeder | null>;
+  /**
+   * Rozhodnutí o žádosti; `null`, pokud žádost neexistuje, není PENDING nebo
+   * má jinou revizi než `decision.revision`.
+   */
   decideVerification(
     requestId: string,
     decision: DecisionRecord,
   ): Promise<Breeder | null>;
-  listByVerificationStatus(status?: VerificationStatus): Promise<Breeder[]>;
+  /** Řazeno podle `lastSubmittedAt` vzestupně, nejvýše 500 položek. */
+  listByVerificationStatus(status: VerificationStatus): Promise<Breeder[]>;
   countByVerificationStatus(): Promise<Record<VerificationStatus, number>>;
 }
 

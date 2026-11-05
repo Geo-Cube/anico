@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { createConnection, type Connection } from 'mongoose';
-import { pino } from 'pino';
 import request from 'supertest';
 import {
   afterAll,
@@ -15,7 +14,8 @@ import {
   it,
   vi,
 } from 'vitest';
-import { createApp } from '../../src/app.js';
+import type { createApp } from '../../src/app.js';
+import { serviceApp } from '../support/app.js';
 import type { Breeder } from '../../src/modules/breeders/domain/breeder.js';
 import type {
   BreederRepository,
@@ -68,9 +68,8 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
       Object.values(connection.models).map((model) => model.init()),
     );
     storage = gridFsFileStorage(connection);
-    app = createApp({
-      logger: pino({ level: 'silent' }),
-      isReady: () => true,
+    app = serviceApp({
+      connection,
       breeders: {
         ...repository,
         submitVerification: (id, s) =>
@@ -177,12 +176,17 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
       notifyDecision.mockClear();
       const id = await takeOverAndSubmit(app, `b-${round}`);
       const approve = () =>
-        decideRequest(app, id, { decision: 'APPROVED' }, 'admin-1');
+        decideRequest(
+          app,
+          id,
+          { decision: 'APPROVED', revision: 1 },
+          'admin-1',
+        );
       const reject = () =>
         decideRequest(
           app,
           id,
-          { decision: 'REJECTED', rejectionReason: 'Důvod' },
+          { decision: 'REJECTED', revision: 1, rejectionReason: 'Důvod' },
           'admin-2',
         );
       const pair =
@@ -193,14 +197,23 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
             : round % 4 === 2
               ? [
                   approve(),
-                  decideRequest(app, id, { decision: 'APPROVED' }, 'admin-2'),
+                  decideRequest(
+                    app,
+                    id,
+                    { decision: 'APPROVED', revision: 1 },
+                    'admin-2',
+                  ),
                 ]
               : [
                   reject(),
                   decideRequest(
                     app,
                     id,
-                    { decision: 'REJECTED', rejectionReason: 'Jiný' },
+                    {
+                      decision: 'REJECTED',
+                      revision: 1,
+                      rejectionReason: 'Jiný',
+                    },
                     'admin-1',
                   ),
                 ];
@@ -277,6 +290,7 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
 
     await decideRequest(app, id, {
       decision: 'REJECTED',
+      revision: 1,
       rejectionReason: 'Nesedí',
     }).expect(200);
     const rejected = await snapshot();
@@ -291,11 +305,15 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
     const id = await takeOverAndSubmit(app, 'b1');
     const before = await breeders().findOne({ breederId: 'b1' });
     hooks.decide = () => Promise.reject(new Error('write failed'));
-    await decideRequest(app, id, { decision: 'APPROVED' }).expect(500);
+    await decideRequest(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+      500,
+    );
     expect(await breeders().findOne({ breederId: 'b1' })).toEqual(before);
     expect(notifyDecision).not.toHaveBeenCalled();
     hooks.decide = null;
-    await decideRequest(app, id, { decision: 'APPROVED' }).expect(200);
+    await decideRequest(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+      200,
+    );
   });
 
   it('UC01-APR-10: schválení je jeden zápis – podmíněný přechod; REJECTED -> APPROVED druhým adminem se nikdy neprosadí', async () => {
@@ -303,12 +321,15 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
     await decideRequest(
       app,
       id,
-      { decision: 'REJECTED', rejectionReason: 'Ne' },
+      { decision: 'REJECTED', revision: 1, rejectionReason: 'Ne' },
       'admin-1',
     ).expect(200);
-    await decideRequest(app, id, { decision: 'APPROVED' }, 'admin-2').expect(
-      409,
-    );
+    await decideRequest(
+      app,
+      id,
+      { decision: 'APPROVED', revision: 1 },
+      'admin-2',
+    ).expect(409);
     const stored = await breeders().findOne({ breederId: 'b1' });
     expect(stored?.isVerified).toBe(false);
     expect(stored?.verificationRequest).toMatchObject({
@@ -369,7 +390,9 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
   it('UC01-APR-11: rozhodnutí nemění submittedAt, certifikát ani data stanice', async () => {
     const id = await takeOverAndSubmit(app, 'b1');
     const before = await breeders().findOne({ breederId: 'b1' });
-    await decideRequest(app, id, { decision: 'APPROVED' }).expect(200);
+    await decideRequest(app, id, { decision: 'APPROVED', revision: 1 }).expect(
+      200,
+    );
     const after = await breeders().findOne({ breederId: 'b1' });
     for (const key of [
       'firstName',
@@ -386,6 +409,9 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
     );
     expect(after?.verificationRequest.submittedAt).toEqual(
       before?.verificationRequest.submittedAt,
+    );
+    expect(after?.verificationRequest.lastSubmittedAt).toEqual(
+      before?.verificationRequest.lastSubmittedAt,
     );
     expect(after?.verificationRequest.breedingStationCertificate).toEqual(
       before?.verificationRequest.breedingStationCertificate,
@@ -414,20 +440,26 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
         _id: new connection.base.Types.ObjectId(),
         status: i % 3 === 0 ? 'PENDING' : 'APPROVED',
         submittedAt: new Date(2026, 0, 1, 0, 0, i),
+        lastSubmittedAt: new Date(2026, 0, 1, 0, 0, i),
         breedingStationCertificate: { fileName: 'f', fileReference: `r${i}` },
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
+        returnReason: null,
+        reviewHistory: [],
       },
     }));
     await breeders().insertMany(docs);
     const plan = await breeders()
       .find({ 'verificationRequest.status': 'PENDING' })
-      .sort({ 'verificationRequest.submittedAt': 1 })
+      .sort({ 'verificationRequest.lastSubmittedAt': 1 })
       .limit(500)
       .explain();
-    expect(JSON.stringify(plan)).toContain('IXSCAN');
-    expect(JSON.stringify(plan)).not.toContain('COLLSCAN');
+    const text = JSON.stringify(plan);
+    expect(text).toContain('IXSCAN');
+    expect(text).not.toContain('COLLSCAN');
+    // řazení obslouží index, ne blokující SORT v paměti
+    expect(text).not.toContain('"stage":"SORT"');
   });
 });
 
@@ -550,6 +582,7 @@ describe('UC01-SEC-12 produkční server: logy neobsahují PII (spuštěný proc
           },
           body: JSON.stringify({
             decision: 'REJECTED',
+            revision: 1,
             rejectionReason: 'Tajny duvod 5521',
           }),
         },

@@ -95,6 +95,11 @@ docker build -f apps/frontend/Dockerfile -t anico/frontend:local .
 Build context je vždy kořen monorepa. Smoke test vytváří a uklidí vlastní testovací
 projekt a volume; běžná data nepoužívá. Stejné kontroly běží v CI na amd64 i arm64.
 
+Runtime `breeder-service` ověřuje samostatně `bash scripts/check-breeder-container.sh` (CI job `containers`):
+image bez zdrojů a dev nástrojů, non-root a read-only, dočasná MongoDB na interní síti bez publikovaných portů,
+migrace při startu, `/ready` 200, 401 bez identity, `/docs` a `/openapi.json` mimo produkci, odmítnutí `db:reset`
+mimo osobní databázi a čisté ukončení po SIGTERM.
+
 Backend běží jako non-root Node s produkčními závislostmi, frontend jako Nginx
 s Vite bundlem. Produkční instalace backendu vidí jen manifesty vlastní služby,
 `shared-schemas` a `auth`; manifesty frontendu a infrastruktury by jinak mohly do image

@@ -1,0 +1,896 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AniCo breeder-service",
+    "version": "0.1.0",
+    "description": "Ověření chovatele (UC-01): chovatel podá žádost s certifikátem chovatelské stanice, administrátor ji schválí, zamítne, nebo vrátí k doplnění.\n\nStavy žádosti: `PENDING` (čeká na posouzení) → `APPROVED` | `REJECTED` (konečné) | `RETURNED` (vráceno k doplnění; chovatel opraví a znovu odešle → `PENDING`). Každé rozhodnutí se přidá do `reviewHistory` (nejstarší první).\n\nIdentitu doplňuje gateway, resp. lokální vývojový most z přihlášení, do hlavičky `x-anico-identity`; klient ji nikdy nevkládá ani nezná."
+  },
+  "servers": [
+    {
+      "url": ".",
+      "description": "Relativně k umístění dokumentu (funguje i za prefixem gateway, např. /api/breeder)."
+    }
+  ],
+  "tags": [
+    { "name": "breeder", "description": "Účet přihlášeného chovatele." },
+    {
+      "name": "verification-admin",
+      "description": "Posuzování žádostí (role `admin` | `owner`)."
+    },
+    { "name": "health", "description": "Stav služby (veřejné)." }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getHealth",
+        "summary": "Liveness",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Služba běží.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getReadiness",
+        "summary": "Readiness (připojení k databázi)",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Služba přijímá provoz.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceHealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Služba není připravena – `{\"error\":\"Service unavailable\"}`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/breeders/me": {
+      "get": {
+        "tags": ["breeder"],
+        "operationId": "getMyAccount",
+        "summary": "Můj účet chovatele",
+        "description": "Idempotentně převezme profil z identity. Před prvním podáním je `accountState` `NOT_SUBMITTED`, profilová pole mohou být `null` a `verificationRequest` je `null`.",
+        "responses": {
+          "200": {
+            "description": "Účet chovatele.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MyAccount" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/breeders/me/verification-request": {
+      "post": {
+        "tags": ["breeder"],
+        "operationId": "submitVerificationRequest",
+        "summary": "Podat nebo opravit žádost o ověření",
+        "description": "Povoleno ve stavech `NOT_SUBMITTED` (první podání) a `RETURNED` (oprava vrácené žádosti); jinak po úspěšné validaci 409 s aktuálním účtem. Před podáním se idempotentně převezme profil z identity, předchozí `GET /breeders/me` není nutný.\n\nMimo opravu vrácené žádosti (`RETURNED`) je `breedingStationCertificate` povinný; jeho absence vrací 400 ve všech ostatních stavech (validace má přednost před 409). Při opravě je nepovinný: bez souboru zůstává původní certifikát. Oprava nastaví stav `PENDING`, `lastSubmittedAt` na aktuální čas a vynuluje `returnReason` a `reviewedBy`/`reviewedAt`; `submittedAt` a `reviewHistory` zůstávají.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitVerificationRequestForm"
+              },
+              "encoding": {
+                "breedingStationCertificate": {
+                  "contentType": "application/pdf, image/jpeg, image/png"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Žádost přijata, stav `PENDING`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MyAccount" }
+              }
+            }
+          },
+          "400": {
+            "description": "Neplatná pole nebo chybějící certifikát mimo opravu vrácené žádosti (RETURNED) (`issues[].path` = `[\"breedingStationCertificate\"]`), případně nečitelný multipart (`{\"error\":\"Invalid upload\"}`). Validace má přednost před 409.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/ValidationError" },
+                    { "$ref": "#/components/schemas/Error" }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": {
+            "description": "Validní podání (mimo `RETURNED` včetně souboru) ve stavu `PENDING`, `APPROVED` nebo `REJECTED` (zamítnutí je konečné), nebo souběžná oprava už uspěla; `current` je aktuální účet.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MyAccountConflict" }
+              }
+            }
+          },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": {
+            "description": "Obsah souboru není PDF, JPEG ani PNG – `{\"error\":\"Certificate must be a PDF, JPEG or PNG file\"}`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/breeders/me/verification-request/certificate": {
+      "get": {
+        "tags": ["breeder"],
+        "operationId": "downloadMyCertificate",
+        "summary": "Stáhnout můj certifikát",
+        "description": "Vždy jen certifikát přihlášeného chovatele (ID z identity, ne z URL).",
+        "responses": {
+          "200": {
+            "description": "Soubor certifikátu ke stažení (`Content-Disposition: attachment`).",
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"<ASCII>\"; filename*=UTF-8''<původní název>`",
+                "schema": { "type": "string" }
+              },
+              "Content-Length": {
+                "schema": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf"
+                }
+              },
+              "image/jpeg": {
+                "schema": { "type": "string", "contentMediaType": "image/jpeg" }
+              },
+              "image/png": {
+                "schema": { "type": "string", "contentMediaType": "image/png" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": {
+            "description": "Chovatel zatím žádost nepodal (žádný certifikát) – `{\"error\":\"Not found\"}`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/verification-requests": {
+      "get": {
+        "tags": ["verification-admin"],
+        "operationId": "listVerificationRequests",
+        "summary": "Fronta žádostí",
+        "description": "Vyžaduje roli `admin` nebo `owner`. Bez `status` vrací jen `PENDING`. Řazeno podle `lastSubmittedAt` vzestupně (nejdéle čekající první), nejvýše 500 položek.",
+        "security": [{ "identity": [] }],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Filtr stavu žádosti; výchozí `PENDING`.",
+            "schema": {
+              "$ref": "#/components/schemas/VerificationStatus",
+              "default": "PENDING"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Žádosti s profilem chovatele.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationRequestList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Neplatný dotaz.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidationError" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/verification-requests/summary": {
+      "get": {
+        "tags": ["verification-admin"],
+        "operationId": "getVerificationSummary",
+        "summary": "Počty žádostí podle stavu",
+        "description": "Vyžaduje roli `admin` nebo `owner`.",
+        "security": [{ "identity": [] }],
+        "responses": {
+          "200": {
+            "description": "Počty ve všech čtyřech stavech.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VerificationSummary" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/verification-requests/{id}": {
+      "get": {
+        "tags": ["verification-admin"],
+        "operationId": "getVerificationRequest",
+        "summary": "Detail žádosti",
+        "description": "Vyžaduje roli `admin` nebo `owner`.",
+        "security": [{ "identity": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID žádosti o ověření (`verificationRequest.id`). Neplatné i neexistující ID vrací 404.",
+            "schema": { "$ref": "#/components/schemas/ObjectId" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Žádost s profilem chovatele.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminVerificationRequest"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/verification-requests/{id}/certificate": {
+      "get": {
+        "tags": ["verification-admin"],
+        "operationId": "downloadVerificationCertificate",
+        "summary": "Stáhnout certifikát žádosti",
+        "description": "Vyžaduje roli `admin` nebo `owner`.",
+        "security": [{ "identity": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID žádosti o ověření (`verificationRequest.id`). Neplatné i neexistující ID vrací 404.",
+            "schema": { "$ref": "#/components/schemas/ObjectId" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Soubor certifikátu ke stažení (`Content-Disposition: attachment`).",
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"<ASCII>\"; filename*=UTF-8''<původní název>`",
+                "schema": { "type": "string" }
+              },
+              "Content-Length": {
+                "schema": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf"
+                }
+              },
+              "image/jpeg": {
+                "schema": { "type": "string", "contentMediaType": "image/jpeg" }
+              },
+              "image/png": {
+                "schema": { "type": "string", "contentMediaType": "image/png" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/verification-requests/{id}/decision": {
+      "post": {
+        "tags": ["verification-admin"],
+        "operationId": "decideVerificationRequest",
+        "summary": "Rozhodnout o žádosti",
+        "description": "Vyžaduje roli `admin` nebo `owner`. Rozhodnout lze jen žádost ve stavu `PENDING` (atomicky). `APPROVED` ověří chovatele; `REJECTED` je konečné a vyžaduje `rejectionReason`; `RETURNED` vrátí žádost k doplnění s `returnReason` a chovatel ji může opravit a znovu odeslat. Každé rozhodnutí musí uvést `revision` – revizi podání, kterou administrátor posoudil (`revision` z detailu nebo fronty); uloží se jen, pokud je žádost stále v této revizi, takže rozhodnutí načtené před opravou chovatele nikdy neschválí novou, dosud neposouzenou verzi. Rozhodnutí se zapíše do `reviewHistory` i s revizí a chovatel dostane e-mail (selhání e-mailu rozhodnutí nevrací). Data chovatele administrátor needituje.",
+        "security": [{ "identity": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID žádosti o ověření (`verificationRequest.id`). Neplatné i neexistující ID vrací 404.",
+            "schema": { "$ref": "#/components/schemas/ObjectId" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideVerificationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rozhodnutá žádost.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminVerificationRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Neplatné rozhodnutí, chybějící `revision` nebo chybějící/prázdný důvod; nevalidní JSON vrací `{\"error\":\"Invalid JSON\"}`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/ValidationError" },
+                    { "$ref": "#/components/schemas/Error" }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": {
+            "description": "Rozhodnutí se neuložilo, `current` je aktuální stav žádosti: `Verification already decided`, pokud žádost už není `PENDING`; `Verification revision mismatch`, pokud je `PENDING` v jiné revizi, než uvádí `revision` (mezitím vrácena a opravena). E-mail se neodešle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminVerificationRequestConflict"
+                }
+              }
+            }
+          },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ObjectId": { "type": "string", "pattern": "^[a-fA-F0-9]{24}$" },
+      "VerificationStatus": {
+        "type": "string",
+        "enum": ["PENDING", "RETURNED", "APPROVED", "REJECTED"]
+      },
+      "AccountState": {
+        "type": "string",
+        "enum": ["NOT_SUBMITTED", "PENDING", "RETURNED", "APPROVED", "REJECTED"]
+      },
+      "ReviewDecision": {
+        "type": "string",
+        "enum": ["RETURNED", "APPROVED", "REJECTED"]
+      },
+      "SubmissionRevision": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "description": "Revize podání: 1 při prvním podání, +1 při každé opravě vrácené žádosti (`RETURNED` -> `PENDING`). Rozhodnutí ji musí uvést (optimistická kontrola): o jiné revizi se nerozhodne."
+      },
+      "VerificationReview": {
+        "type": "object",
+        "properties": {
+          "decision": { "$ref": "#/components/schemas/ReviewDecision" },
+          "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
+          "reviewedBy": { "type": "string" },
+          "reviewedAt": { "type": "string", "format": "date-time" },
+          "reason": { "type": ["string", "null"] }
+        },
+        "required": [
+          "decision",
+          "revision",
+          "reviewedBy",
+          "reviewedAt",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "CertificateFile": {
+        "type": "object",
+        "properties": {
+          "fileName": { "type": "string" },
+          "contentType": {
+            "type": "string",
+            "enum": ["application/pdf", "image/jpeg", "image/png"]
+          }
+        },
+        "required": ["fileName", "contentType"],
+        "additionalProperties": false
+      },
+      "VerificationRequest": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/ObjectId" },
+          "status": { "$ref": "#/components/schemas/VerificationStatus" },
+          "submittedAt": { "type": "string", "format": "date-time" },
+          "lastSubmittedAt": { "type": "string", "format": "date-time" },
+          "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
+          "breedingStationCertificate": {
+            "$ref": "#/components/schemas/CertificateFile"
+          },
+          "reviewedBy": { "type": ["string", "null"] },
+          "reviewedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "rejectionReason": { "type": ["string", "null"] },
+          "returnReason": { "type": ["string", "null"] },
+          "reviewHistory": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/VerificationReview" }
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "submittedAt",
+          "lastSubmittedAt",
+          "revision",
+          "breedingStationCertificate",
+          "reviewedBy",
+          "reviewedAt",
+          "rejectionReason",
+          "returnReason",
+          "reviewHistory"
+        ],
+        "additionalProperties": false
+      },
+      "MyAccount": {
+        "type": "object",
+        "properties": {
+          "accountState": { "$ref": "#/components/schemas/AccountState" },
+          "breederId": { "type": "string" },
+          "firstName": { "type": ["string", "null"] },
+          "lastName": { "type": ["string", "null"] },
+          "emailAddress": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "breedingStationName": { "type": ["string", "null"] },
+          "breedingStationNumber": { "type": ["string", "null"] },
+          "hasBreedingStation": { "type": "boolean", "const": true },
+          "isVerified": { "type": "boolean" },
+          "verificationRequest": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/VerificationRequest" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "required": [
+          "accountState",
+          "breederId",
+          "firstName",
+          "lastName",
+          "emailAddress",
+          "breedingStationName",
+          "breedingStationNumber",
+          "hasBreedingStation",
+          "isVerified",
+          "verificationRequest"
+        ],
+        "additionalProperties": false
+      },
+      "SubmitVerificationRequest": {
+        "type": "object",
+        "properties": {
+          "firstName": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "lastName": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "emailAddress": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "breedingStationName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150
+          },
+          "breedingStationNumber": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        },
+        "required": [
+          "firstName",
+          "lastName",
+          "emailAddress",
+          "breedingStationName",
+          "breedingStationNumber"
+        ],
+        "additionalProperties": false
+      },
+      "SubmitVerificationRequestForm": {
+        "type": "object",
+        "properties": {
+          "firstName": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "lastName": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "emailAddress": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "breedingStationName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150
+          },
+          "breedingStationNumber": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "breedingStationCertificate": {
+            "description": "Certifikát chovatelské stanice: PDF, JPEG nebo PNG (typ se ověřuje podle obsahu souboru, ne podle přípony či hlavičky), nejvýše 5 MiB. Povinný mimo opravu vrácené žádosti (RETURNED); při opravě nepovinný – bez souboru zůstává původní certifikát.",
+            "type": "string",
+            "format": "binary",
+            "contentMediaType": "application/octet-stream"
+          }
+        },
+        "required": [
+          "firstName",
+          "lastName",
+          "emailAddress",
+          "breedingStationName",
+          "breedingStationNumber"
+        ],
+        "additionalProperties": false
+      },
+      "DecideVerificationRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "decision": { "type": "string", "const": "APPROVED" },
+              "revision": { "$ref": "#/components/schemas/SubmissionRevision" }
+            },
+            "required": ["decision", "revision"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "decision": { "type": "string", "const": "REJECTED" },
+              "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
+              "rejectionReason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": ["decision", "revision", "rejectionReason"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "decision": { "type": "string", "const": "RETURNED" },
+              "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
+              "returnReason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": ["decision", "revision", "returnReason"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "BreederProfile": {
+        "type": "object",
+        "properties": {
+          "breederId": { "type": "string" },
+          "firstName": { "type": ["string", "null"] },
+          "lastName": { "type": ["string", "null"] },
+          "emailAddress": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "breedingStationName": { "type": ["string", "null"] },
+          "breedingStationNumber": { "type": ["string", "null"] },
+          "hasBreedingStation": { "type": "boolean", "const": true },
+          "isVerified": { "type": "boolean" }
+        },
+        "required": [
+          "breederId",
+          "firstName",
+          "lastName",
+          "emailAddress",
+          "breedingStationName",
+          "breedingStationNumber",
+          "hasBreedingStation",
+          "isVerified"
+        ],
+        "additionalProperties": false
+      },
+      "AdminVerificationRequest": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/ObjectId" },
+          "status": { "$ref": "#/components/schemas/VerificationStatus" },
+          "submittedAt": { "type": "string", "format": "date-time" },
+          "lastSubmittedAt": { "type": "string", "format": "date-time" },
+          "revision": { "$ref": "#/components/schemas/SubmissionRevision" },
+          "breedingStationCertificate": {
+            "$ref": "#/components/schemas/CertificateFile"
+          },
+          "reviewedBy": { "type": ["string", "null"] },
+          "reviewedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "rejectionReason": { "type": ["string", "null"] },
+          "returnReason": { "type": ["string", "null"] },
+          "reviewHistory": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/VerificationReview" }
+          },
+          "breeder": { "$ref": "#/components/schemas/BreederProfile" }
+        },
+        "required": [
+          "id",
+          "status",
+          "submittedAt",
+          "lastSubmittedAt",
+          "revision",
+          "breedingStationCertificate",
+          "reviewedBy",
+          "reviewedAt",
+          "rejectionReason",
+          "returnReason",
+          "reviewHistory",
+          "breeder"
+        ],
+        "additionalProperties": false
+      },
+      "VerificationRequestList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AdminVerificationRequest" }
+          }
+        },
+        "required": ["items"],
+        "additionalProperties": false
+      },
+      "VerificationSummary": {
+        "type": "object",
+        "properties": {
+          "pending": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "returned": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "approved": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "rejected": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["pending", "returned", "approved", "rejected"],
+        "additionalProperties": false
+      },
+      "ServiceHealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "const": "ok" },
+          "service": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-service$"
+          }
+        },
+        "required": ["status", "service"],
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "string" } },
+        "required": ["error"],
+        "additionalProperties": false
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "const": "Validation failed" },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": { "type": "string" },
+                "path": {
+                  "type": "array",
+                  "items": { "type": ["string", "number"] }
+                },
+                "message": { "type": "string" }
+              },
+              "required": ["code", "path", "message"],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": ["error", "issues"],
+        "additionalProperties": false
+      },
+      "MyAccountConflict": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "current": { "$ref": "#/components/schemas/MyAccount" }
+        },
+        "required": ["error", "current"],
+        "additionalProperties": false
+      },
+      "AdminVerificationRequestConflict": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "Verification already decided",
+              "Verification revision mismatch"
+            ],
+            "description": "`Verification already decided`: žádost už není `PENDING`. `Verification revision mismatch`: žádost je `PENDING`, ale v jiné revizi, než o které administrátor rozhodl (mezitím byla vrácena a opravena) – je třeba posoudit `current`."
+          },
+          "current": { "$ref": "#/components/schemas/AdminVerificationRequest" }
+        },
+        "required": ["error", "current"],
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Chybí platná identita (`x-anico-identity`) – `{\"error\":\"Authentication required\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Identita nemá roli `admin` ani `owner` – `{\"error\":\"Insufficient permissions\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Záznam neexistuje – `{\"error\":\"Not found\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Neočekávaná chyba – `{\"error\":\"Internal server error\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Tělo nebo soubor přesahuje limit – `{\"error\":\"Payload too large\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "identity": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-anico-identity",
+        "description": "Krátkodobý podepsaný token identity. Hlavičku doplňuje gateway, v lokálním vývoji vývojový most z přihlášení; klient (prohlížeč, frontend) ji nikdy nevkládá a hodnotu přijatou od klienta gateway přepíše."
+      }
+    }
+  },
+  "security": [{ "identity": [] }]
+}

@@ -2,6 +2,7 @@ import { Schema, Types, type Connection, type InferSchemaType } from 'mongoose';
 import type {
   NewBreeder,
   Breeder,
+  Resubmission,
   Submission,
   VerificationRequest,
 } from '../domain/breeder.js';
@@ -21,17 +22,36 @@ const certificateSchema = new Schema(
   { _id: false },
 );
 
+const reviewSchema = new Schema(
+  {
+    decision: {
+      type: String,
+      enum: ['RETURNED', 'APPROVED', 'REJECTED'],
+      required: true,
+    },
+    revision: { type: Number, required: true, min: 1 },
+    reviewedBy: { type: String, required: true },
+    reviewedAt: { type: Date, required: true },
+    reason: { type: String, default: null },
+  },
+  { _id: false },
+);
+
 const verificationRequestSchema = new Schema({
   status: {
     type: String,
-    enum: ['PENDING', 'APPROVED', 'REJECTED'],
+    enum: ['PENDING', 'RETURNED', 'APPROVED', 'REJECTED'],
     required: true,
   },
   submittedAt: { type: Date, required: true },
+  lastSubmittedAt: { type: Date, required: true },
+  revision: { type: Number, required: true, min: 1 },
   breedingStationCertificate: { type: certificateSchema, required: true },
   reviewedBy: { type: String, default: null },
   reviewedAt: { type: Date, default: null },
   rejectionReason: { type: String, default: null },
+  returnReason: { type: String, default: null },
+  reviewHistory: { type: [reviewSchema], default: [] },
 });
 
 const breederSchema = new Schema({
@@ -57,9 +77,10 @@ breederSchema.index(
   },
 );
 
+// fronta: filtr podle stavu, řazení podle posledního podání (vytváří i migrace)
 breederSchema.index({
   'verificationRequest.status': 1,
-  'verificationRequest.submittedAt': 1,
+  'verificationRequest.lastSubmittedAt': 1,
 });
 
 type BreederRecord = InferSchemaType<typeof breederSchema>;
@@ -100,6 +121,8 @@ function toDomainVerificationRequest(
     requestId: id.toString(),
     status: request.status,
     submittedAt: request.submittedAt,
+    lastSubmittedAt: request.lastSubmittedAt,
+    revision: request.revision,
     breedingStationCertificate: {
       fileName: request.breedingStationCertificate.fileName,
       fileReference: request.breedingStationCertificate.fileReference,
@@ -107,6 +130,14 @@ function toDomainVerificationRequest(
     reviewedBy: request.reviewedBy ?? null,
     reviewedAt: request.reviewedAt ?? null,
     rejectionReason: request.rejectionReason ?? null,
+    returnReason: request.returnReason ?? null,
+    reviewHistory: request.reviewHistory.map((review) => ({
+      decision: review.decision,
+      revision: review.revision,
+      reviewedBy: review.reviewedBy,
+      reviewedAt: review.reviewedAt,
+      reason: review.reason ?? null,
+    })),
   };
 }
 
@@ -202,6 +233,7 @@ export function mongooseBreederRepository(
       submission: Submission,
     ): Promise<Breeder | null> {
       // jediný atomický zápis: uspěje jen, pokud žádost ještě neexistuje
+      const now = new Date();
       const record = await mongooseBreederModel.findOneAndUpdate(
         { breederId, verificationRequest: null },
         {
@@ -215,7 +247,9 @@ export function mongooseBreederRepository(
             verificationRequest: {
               _id: new Types.ObjectId(),
               status: 'PENDING',
-              submittedAt: new Date(),
+              submittedAt: now,
+              lastSubmittedAt: now,
+              revision: 1,
               breedingStationCertificate: {
                 fileName: submission.breedingStationCertificate.fileName,
                 fileReference:
@@ -224,8 +258,60 @@ export function mongooseBreederRepository(
               reviewedBy: null,
               reviewedAt: null,
               rejectionReason: null,
+              returnReason: null,
+              reviewHistory: [],
             },
           },
+        },
+        { returnDocument: 'after' },
+      );
+      return record ? toDomain(record) : null;
+    },
+
+    async resubmitVerification(
+      breederId: string,
+      requestId: string,
+      resubmission: Resubmission,
+    ): Promise<Breeder | null> {
+      if (!isObjectId(requestId)) {
+        return null;
+      }
+      const certificate = resubmission.breedingStationCertificate;
+      // jediný atomický zápis: uspěje jen, pokud je právě tato žádost vrácená
+      // a má certifikát, ze kterého oprava vychází; revize se zvýší, takže
+      // rozhodnutí o předchozí revizi už nic nezmění; submittedAt
+      // a reviewHistory zůstávají
+      const record = await mongooseBreederModel.findOneAndUpdate(
+        {
+          breederId,
+          'verificationRequest._id': new Types.ObjectId(requestId),
+          'verificationRequest.status': 'RETURNED',
+          'verificationRequest.breedingStationCertificate.fileReference':
+            resubmission.currentCertificateReference,
+        },
+        {
+          $set: {
+            firstName: resubmission.firstName,
+            lastName: resubmission.lastName,
+            emailAddress: resubmission.emailAddress,
+            breedingStationName: resubmission.breedingStationName,
+            breedingStationNumber: resubmission.breedingStationNumber,
+            'verificationRequest.status': 'PENDING',
+            'verificationRequest.lastSubmittedAt': new Date(),
+            'verificationRequest.reviewedBy': null,
+            'verificationRequest.reviewedAt': null,
+            'verificationRequest.rejectionReason': null,
+            'verificationRequest.returnReason': null,
+            ...(certificate
+              ? {
+                  'verificationRequest.breedingStationCertificate': {
+                    fileName: certificate.fileName,
+                    fileReference: certificate.fileReference,
+                  },
+                }
+              : {}),
+          },
+          $inc: { 'verificationRequest.revision': 1 },
         },
         { returnDocument: 'after' },
       );
@@ -239,12 +325,20 @@ export function mongooseBreederRepository(
       if (!isObjectId(requestId)) {
         return null;
       }
-      // stav žádosti a isVerified se mění v jednom příkazu; podmínka PENDING
-      // zaručí, že rozhodnutí je konečné i při souběhu
+      const reason =
+        decision.decision === 'REJECTED'
+          ? decision.rejectionReason
+          : decision.decision === 'RETURNED'
+            ? decision.returnReason
+            : null;
+      // stav, historie a isVerified se mění v jednom příkazu; podmínka PENDING
+      // a revize zaručí, že o každém kole rozhodne nejvýše jeden administrátor
+      // a jen o té verzi podání, kterou posoudil
       const record = await mongooseBreederModel.findOneAndUpdate(
         {
           'verificationRequest._id': new Types.ObjectId(requestId),
           'verificationRequest.status': 'PENDING',
+          'verificationRequest.revision': decision.revision,
         },
         {
           $set: {
@@ -252,10 +346,19 @@ export function mongooseBreederRepository(
             'verificationRequest.reviewedBy': decision.reviewedBy,
             'verificationRequest.reviewedAt': decision.reviewedAt,
             'verificationRequest.rejectionReason':
-              decision.decision === 'REJECTED'
-                ? decision.rejectionReason
-                : null,
+              decision.decision === 'REJECTED' ? reason : null,
+            'verificationRequest.returnReason':
+              decision.decision === 'RETURNED' ? reason : null,
             isVerified: decision.decision === 'APPROVED',
+          },
+          $push: {
+            'verificationRequest.reviewHistory': {
+              decision: decision.decision,
+              revision: decision.revision,
+              reviewedBy: decision.reviewedBy,
+              reviewedAt: decision.reviewedAt,
+              reason,
+            },
           },
         },
         { returnDocument: 'after' },
@@ -264,14 +367,11 @@ export function mongooseBreederRepository(
     },
 
     async listByVerificationStatus(
-      status?: VerificationStatus,
+      status: VerificationStatus,
     ): Promise<Breeder[]> {
-      const filter = status
-        ? { 'verificationRequest.status': status }
-        : { verificationRequest: { $ne: null } };
       const records = await mongooseBreederModel
-        .find(filter)
-        .sort({ 'verificationRequest.submittedAt': 1 })
+        .find({ 'verificationRequest.status': status })
+        .sort({ 'verificationRequest.lastSubmittedAt': 1 })
         .limit(QUEUE_LIMIT);
       return records.map(toDomain);
     },
@@ -288,6 +388,7 @@ export function mongooseBreederRepository(
       ]);
       const counts: Record<VerificationStatus, number> = {
         PENDING: 0,
+        RETURNED: 0,
         APPROVED: 0,
         REJECTED: 0,
       };

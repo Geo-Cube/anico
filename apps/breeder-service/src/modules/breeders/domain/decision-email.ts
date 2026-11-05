@@ -32,6 +32,24 @@ export function decisionEmail(breeder: Breeder): DecisionEmail {
     };
   }
 
+  if (request.status === 'RETURNED') {
+    return {
+      to: breeder.emailAddress,
+      subject: 'AniCo: žádost o ověření účtu byla vrácena k doplnění',
+      text: [
+        greeting,
+        '',
+        'vaše žádost o ověření účtu chovatele byla vrácena k doplnění.',
+        '',
+        `Důvod: ${request.returnReason ?? 'neuveden'}`,
+        '',
+        'Žádost můžete v aplikaci AniCo opravit a znovu odeslat ke schválení.',
+        '',
+        'Tým AniCo',
+      ].join('\n'),
+    };
+  }
+
   return {
     to: breeder.emailAddress,
     subject: 'AniCo: žádost o ověření účtu byla zamítnuta',
@@ -42,7 +60,7 @@ export function decisionEmail(breeder: Breeder): DecisionEmail {
       '',
       `Důvod: ${request.rejectionReason ?? 'neuveden'}`,
       '',
-      'Upozornění: žádost o ověření účtu lze podat pouze jednou.',
+      'Upozornění: zamítnutí je konečné, žádost o ověření účtu nelze podat znovu.',
       '',
       'Tým AniCo',
     ].join('\n'),

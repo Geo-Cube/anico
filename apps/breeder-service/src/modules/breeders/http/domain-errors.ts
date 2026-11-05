@@ -1,13 +1,16 @@
 import type { Response } from 'express';
 import {
   BreederNotFoundError,
+  CertificateRequiredError,
   InvalidCertificateError,
   InvalidDecisionError,
   VerificationAlreadyDecidedError,
   VerificationAlreadySubmittedError,
   VerificationRequestNotFoundError,
+  VerificationRevisionMismatchError,
 } from '../domain/errors.js';
 import type { FileStorage } from '../domain/ports.js';
+import { MISSING_CERTIFICATE_ISSUE } from './parse-upload.js';
 import { adminRequestOf, myAccountOf } from './responses.js';
 
 /**
@@ -37,6 +40,20 @@ export function domainErrorResponder(files: FileStorage) {
       res.status(409).json({
         error: 'Verification already decided',
         current: await adminRequest(error.breeder),
+      });
+      return true;
+    }
+    if (error instanceof VerificationRevisionMismatchError) {
+      res.status(409).json({
+        error: 'Verification revision mismatch',
+        current: await adminRequest(error.breeder),
+      });
+      return true;
+    }
+    if (error instanceof CertificateRequiredError) {
+      res.status(400).json({
+        error: 'Validation failed',
+        issues: [MISSING_CERTIFICATE_ISSUE],
       });
       return true;
     }
