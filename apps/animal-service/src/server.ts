@@ -7,7 +7,7 @@ import { createModules } from './modules/index.js';
 import { migrateDatabase } from './database/engine.js';
 import { loadMigrations } from './database/registry.js';
 import { databaseTarget } from './database/policy.js';
-import { httpBreederVerification } from './modules/documents/infrastructure/http-breeder-verification.js';
+import { httpBreederVerification } from './modules/animal/infrastructure/http-breeder-verification.js';
 
 const env = z
   .object({
@@ -18,7 +18,7 @@ const env = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
-    /** breeder-service pro ověření chovatele u dokladů (UC-03, ADR-0005); bez něj doklady chovatelů 503. */
+    /** breeder-service pro ověření chovatele (`isVerified`) u zvířat i dokladů; bez něj operace chovatelů 503. */
     BREEDER_SERVICE_URL: z.url({ protocol: /^https?$/ }).optional(),
   })
   .parse(process.env);
@@ -61,7 +61,7 @@ try {
   const authenticate = requestAuthenticator(process.env);
   if (!env.BREEDER_SERVICE_URL)
     logger.warn(
-      'BREEDER_SERVICE_URL is not set: breeder document operations answer 503 (fail closed)',
+      'BREEDER_SERVICE_URL is not set: breeder animal and document operations answer 503 (fail closed)',
     );
   const app = createApp({
     ...(authenticate ? { authenticate } : {}),

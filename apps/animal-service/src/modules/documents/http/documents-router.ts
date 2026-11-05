@@ -1,7 +1,6 @@
 import { pipeline } from 'node:stream/promises';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
-import type { z } from 'zod';
 import {
   AnimalDocumentHistorySchema,
   AnimalDocumentIdSchema,
@@ -14,31 +13,28 @@ import {
   SubmitAnimalDocumentsSchema,
   type AnimalDocument,
 } from '@anico/shared-schemas';
-import {
-  documentUseCases,
-  type Upload,
-  type WarnLogger,
-} from '../application/documents.js';
+import { documentUseCases, type Upload } from '../application/documents.js';
+import type { WarnLogger } from '../../animal/application/verified-breeder.js';
 import {
   DocumentError,
+  MAX_DOCUMENT_FILE_BYTES,
   documentsState,
   type DocumentVersion,
 } from '../domain/animal-documents.js';
-import { MAX_DOCUMENT_FILE_BYTES } from '../domain/document-file.js';
-import type {
-  AnimalDocumentsRepository,
-  BreederVerification,
-  DocumentFileStorage,
-} from '../domain/ports.js';
+import type { AnimalDocumentsRepository } from '../domain/ports.js';
+import type { BreederVerification } from '../../animal/domain/entity.js';
+import type { FileStorage } from '../../../files/file-storage.js';
+import {
+  UploadError,
+  contract,
+  multipart,
+  storedFileHeaders,
+} from '../../../http/files.js';
+import { identityToken } from '../../../http/identity-token.js';
+import { jsonBody } from '../../../http/json-body.js';
 
 export const FILES_FIELD = 'files';
 export const FILE_FIELD = 'file';
-
-export class UploadError extends Error {
-  constructor(public readonly status: 400 | 413) {
-    super(status === 413 ? 'Payload too large' : 'Invalid upload');
-  }
-}
 
 function toDto(animalId: string, version: DocumentVersion): AnimalDocument {
   return {
@@ -61,47 +57,6 @@ function toDto(animalId: string, version: DocumentVersion): AnimalDocument {
   };
 }
 
-/** Odpověď musí odpovídat sdílenému kontraktu; porušení je chyba serveru (500), ne klienta. */
-function contract<T>(schema: z.ZodType<T>, value: unknown): T {
-  const parsed = schema.safeParse(value);
-  if (!parsed.success) throw new Error('Document response violates contract');
-  return parsed.data;
-}
-
-function asciiFallback(fileName: string): string {
-  return fileName.normalize('NFKD').replace(/[^\x20-\x7e]|["\\]/g, '_');
-}
-
-function encodeRfc5987(name: string): string {
-  return encodeURIComponent(name).replace(
-    /['()*]/g,
-    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase(),
-  );
-}
-
-/** Soubory zůstávají v paměti, dokud use case neověří formát (nic se neuloží předčasně). */
-function multipart(handler: ReturnType<ReturnType<typeof multer>['array']>) {
-  return (req: Request, res: Response): Promise<void> =>
-    new Promise((resolve, reject) => {
-      handler(req, res, (error: unknown) => {
-        if (!error) return resolve();
-        reject(
-          new UploadError(
-            error instanceof multer.MulterError &&
-              error.code === 'LIMIT_FILE_SIZE'
-              ? 413
-              : 400,
-          ),
-        );
-      });
-    });
-}
-
-const identityToken = (req: Request) => {
-  const token = req.headers['x-anico-identity'];
-  return typeof token === 'string' ? token : undefined;
-};
-
 /** ID verze malými písmeny: schéma přijímá hex v obou velikostech, uložená ID jsou malá. */
 const documentIdOf = (req: Request) =>
   AnimalDocumentIdSchema.parse(req.params.documentId).toLowerCase();
@@ -120,10 +75,6 @@ function animalRoute(handler: AnimalHandler) {
       await handler(req, res, animalId);
     } catch (error) {
       if (res.headersSent) throw error;
-      if (error instanceof UploadError) {
-        res.status(error.status).json({ error: error.message });
-        return;
-      }
       if (!(error instanceof DocumentError)) throw error;
       res.status(error.status).json({
         error: error.message,
@@ -135,7 +86,7 @@ function animalRoute(handler: AnimalHandler) {
 
 export function DocumentsRouter(dependencies: {
   repository: AnimalDocumentsRepository;
-  files: DocumentFileStorage;
+  files: FileStorage;
   verification: BreederVerification;
   newId: () => string;
   logger: WarnLogger;
@@ -237,14 +188,7 @@ export function DocumentsRouter(dependencies: {
         animalId,
         documentId,
       );
-      res.set({
-        'Content-Type': opened.file.contentType,
-        'Content-Length': String(opened.size),
-        'Content-Disposition': `attachment; filename="${asciiFallback(opened.file.fileName)}"; filename*=UTF-8''${encodeRfc5987(opened.file.fileName)}`,
-        'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': "default-src 'none'; sandbox",
-        'Cache-Control': 'private, no-store',
-      });
+      res.set(storedFileHeaders(opened.file, opened.size, 'attachment'));
       try {
         await pipeline(opened.stream, res);
       } catch {
@@ -277,6 +221,7 @@ export function DocumentsRouter(dependencies: {
 
   router.post(
     '/animals/:animalId/documents/:documentId/decision',
+    jsonBody,
     animalRoute(async (req, res, animalId) => {
       const documentId = documentIdOf(req);
       const decided = await documents.decide(

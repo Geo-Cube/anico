@@ -24,6 +24,9 @@ export function AppLayout() {
             <NavLink to="/" end className={navClass}>
               Přehled
             </NavLink>
+            <NavLink to="/zvirata" className={navClass}>
+              Moje zvířata
+            </NavLink>
             {canAdminister(session) && (
               <NavLink to="/administrace/chovatele" className={navClass}>
                 Administrace

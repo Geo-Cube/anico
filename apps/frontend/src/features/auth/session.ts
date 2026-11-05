@@ -27,15 +27,32 @@ export function useSession() {
   return useQuery(sessionQuery);
 }
 
+const generations = new WeakMap<QueryClient, number>();
+
+/**
+ * Increases whenever cached user data is discarded (logout, 401, another
+ * account). A request started under an older generation must not write its
+ * result into the cache or navigate.
+ */
+export function sessionGeneration(client: QueryClient) {
+  return generations.get(client) ?? 0;
+}
+
+/** Drops all non-session queries and starts a new session generation. */
+export function discardUserData(client: QueryClient) {
+  generations.set(client, sessionGeneration(client) + 1);
+  client.getMutationCache().clear();
+  client.removeQueries({
+    predicate: (query) => query.queryKey[0] !== sessionQueryKey[0],
+  });
+}
+
 /**
  * Removes everything cached for the current user and marks the session as
  * anonymous. Mutations are dropped too so no callback writes old data back.
  */
 export function forgetUser(client: QueryClient) {
-  client.getMutationCache().clear();
-  client.removeQueries({
-    predicate: (query) => query.queryKey[0] !== sessionQueryKey[0],
-  });
+  discardUserData(client);
   client.setQueryData(sessionQueryKey, null);
 }
 

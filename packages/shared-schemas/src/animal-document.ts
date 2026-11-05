@@ -105,16 +105,20 @@ export type DecideAnimalDocumentInput = z.infer<
   typeof DecideAnimalDocumentSchema
 >;
 
-/** Položka fronty admina: aktuální `PENDING` verze a zvíře, ke kterému patří. */
+/**
+ * Položka fronty admina: aktuální `PENDING` verze a zvíře, ke kterému patří. Bez čísla čipu
+ * (`microchipNumber: null`) admin doklad ověřit nemůže (UC-02/2, jen informace).
+ */
 export const DocumentReviewSchema = z.strictObject({
   document: AnimalDocumentSchema,
   animal: z.strictObject({
     id: AnimalIdSchema,
     ownerUserId: z.uuid(),
-    name: z.string(),
+    name: z.string().nullable(),
     species: AnimalSpeciesSchema,
     breedId: z.string(),
     sex: AnimalSexSchema,
+    microchipNumber: z.string().nullable(),
   }),
 });
 export type DocumentReview = z.infer<typeof DocumentReviewSchema>;

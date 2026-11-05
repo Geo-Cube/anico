@@ -1,8 +1,5 @@
-export type DocumentContentType =
-  'application/pdf' | 'image/jpeg' | 'image/png';
-
-/** Limit jednoho souboru dokladu (R5, ADR-0005). */
-export const MAX_DOCUMENT_FILE_BYTES = 10 * 1024 * 1024;
+/** Formáty souborů, které služba přijímá (doklady PDF/JPEG/PNG, fotografie JPEG/PNG). */
+export type FileContentType = 'application/pdf' | 'image/jpeg' | 'image/png';
 
 const MAX_FILE_NAME_LENGTH = 150;
 const LONE_SURROGATE =
@@ -20,9 +17,9 @@ function startsWith(bytes: Uint8Array, signature: number[]): boolean {
 }
 
 /** Určí typ souboru podle obsahu (magic bytes), nikdy podle přípony či hlavičky klienta. */
-export function detectDocumentContentType(
+export function detectFileContentType(
   bytes: Uint8Array,
-): DocumentContentType | null {
+): FileContentType | null {
   if (startsWith(bytes, PDF)) return 'application/pdf';
   if (startsWith(bytes, PNG)) return 'image/png';
   if (startsWith(bytes, JPEG)) return 'image/jpeg';
@@ -52,8 +49,11 @@ function truncateKeepingExtension(name: string, max: number): string {
   return takeUtf16(name, max);
 }
 
-/** Název souboru je jen metadata pro stažení; nikdy se nepoužije jako cesta. */
-export function sanitizeFileName(name: string): string {
+/**
+ * Název souboru je jen metadata pro stažení; nikdy se nepoužije jako cesta.
+ * Prázdný výsledek nahradí `fallback`.
+ */
+export function sanitizeFileName(name: string, fallback: string): string {
   const lastSegment = name.split(/[/\\]/).pop() ?? '';
   const cleaned = truncateKeepingExtension(
     lastSegment
@@ -67,5 +67,5 @@ export function sanitizeFileName(name: string): string {
       .trim(),
     MAX_FILE_NAME_LENGTH,
   ).trim();
-  return cleaned === '' ? 'document' : cleaned;
+  return cleaned === '' ? fallback : cleaned;
 }

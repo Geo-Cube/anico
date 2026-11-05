@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "AniCo animal-service – doklady zvířat",
-    "version": "0.1.0",
-    "description": "Doklady zvířat (UC-03, ADR-0005): chovatel podá doklady ke svému zvířeti, administrátor je posoudí. Popisuje doklady a health; CRUD zvířat (UC-02) tento dokument zatím nezahrnuje.\n\nKaždá příloha je samostatný doklad s řadou verzí. Zvíře má pro každý typ nejvýše jednu řadu: nový doklad stejného typu vytvoří další verzi (`versionNumber + 1`, `previousDocumentId`) a starší verze zůstává v historii včetně souboru a rozhodnutí. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.\n\nOperace chovatele vyžadují ověřený účet z breeder-service, ověřuje se při každém požadavku. Identitu doplňuje gateway do hlavičky `x-anico-identity`."
+    "title": "AniCo animal-service – zvířata a doklady",
+    "version": "0.2.0",
+    "description": "Profily zvířat s fotografiemi (UC-02) a doklady zvířat (UC-03, ADR-0005). Chovatel spravuje jen svá zvířata; administrátor posuzuje doklady.\n\nProfil a fotografie se vytvářejí i mění jedním požadavkem a jedním zápisem: buď se uloží vše, nebo nic. Nevyplněné volitelné údaje (vynechané, `null`, prázdný nebo jen mezerový text) se ukládají jako `null`. Neprázdný seznam fotografií má právě jednu hlavní: zvolenou, jinak dosavadní, jinak první. Odebrání hlavní udělá hlavní první zbývající.\n\nKaždá příloha je samostatný doklad s řadou verzí. Zvíře má pro každý typ nejvýše jednu řadu: nový doklad stejného typu vytvoří další verzi (`versionNumber + 1`, `previousDocumentId`) a starší verze zůstává v historii včetně souboru a rozhodnutí. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.\n\nOperace chovatele vyžadují ověřený účet z breeder-service (`isVerified`), ověřuje se při každém požadavku. Cizí i neexistující zvíře je 404. Identitu doplňuje gateway do hlavičky `x-anico-identity`."
   },
   "servers": [
     {
@@ -12,6 +12,10 @@
     }
   ],
   "tags": [
+    {
+      "name": "animals",
+      "description": "Profily a fotografie vlastních zvířat."
+    },
     { "name": "documents", "description": "Doklady vlastního zvířete." },
     {
       "name": "document-review",
@@ -65,6 +69,276 @@
               }
             }
           }
+        }
+      }
+    },
+    "/breeds/{species}": {
+      "parameters": [
+        {
+          "name": "species",
+          "in": "path",
+          "required": true,
+          "description": "Druh zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalSpecies" }
+        }
+      ],
+      "get": {
+        "tags": ["animals"],
+        "operationId": "listBreeds",
+        "summary": "Číselník plemen druhu",
+        "description": "Stabilní ID a české názvy plemen ze sdíleného číselníku. Vyžaduje přihlášení, ne ověřený účet.",
+        "responses": {
+          "200": {
+            "description": "Plemena druhu.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BreedCatalog" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/animals": {
+      "get": {
+        "tags": ["animals"],
+        "operationId": "listAnimals",
+        "summary": "Moje zvířata",
+        "description": "Jen zvířata přihlášeného ověřeného chovatele, nejnovější první. Další stránka přes `before=nextCursor`.",
+        "parameters": [
+          {
+            "name": "species",
+            "in": "query",
+            "required": false,
+            "description": "Filtr druhu.",
+            "schema": { "$ref": "#/components/schemas/AnimalSpecies" }
+          },
+          {
+            "name": "breedId",
+            "in": "query",
+            "required": false,
+            "description": "Filtr plemene; vyžaduje odpovídající `species`.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 160 }
+          },
+          {
+            "name": "sex",
+            "in": "query",
+            "required": false,
+            "description": "Filtr pohlaví.",
+            "schema": { "$ref": "#/components/schemas/AnimalSex" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Velikost stránky.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "Kurzor `nextCursor` z předchozí stránky.",
+            "schema": { "$ref": "#/components/schemas/AnimalId" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stránka zvířat.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnimalList" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      },
+      "post": {
+        "tags": ["animals"],
+        "operationId": "createAnimal",
+        "summary": "Přidat zvíře",
+        "description": "Jen ověřený chovatel; vlastníkem je přihlášený uživatel. JSON tělo vytvoří profil bez fotografií, `multipart/form-data` profil (pole `animal`, JSON) i fotografie (`photos`) najednou. Bez `primaryUploadIndex` je hlavní první fotografie.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateAnimal" }
+            },
+            "multipart/form-data": {
+              "schema": { "$ref": "#/components/schemas/CreateAnimalForm" },
+              "encoding": {
+                "animal": { "contentType": "application/json" },
+                "photos": { "contentType": "image/jpeg, image/png" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Vytvořené zvíře.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Animal" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/PhotoUnsupportedMediaType" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
+    "/animals/{animalId}": {
+      "parameters": [
+        {
+          "name": "animalId",
+          "in": "path",
+          "required": true,
+          "description": "ID zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalId" }
+        }
+      ],
+      "get": {
+        "tags": ["animals"],
+        "operationId": "getAnimal",
+        "summary": "Detail zvířete",
+        "description": "Jen vlastník zvířete s ověřeným účtem.",
+        "responses": {
+          "200": {
+            "description": "Zvíře včetně fotografií.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Animal" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      },
+      "patch": {
+        "tags": ["animals"],
+        "operationId": "updateAnimal",
+        "summary": "Upravit profil a fotografie",
+        "description": "Jen vlastník zvířete s ověřeným účtem. Vynechaný údaj zůstává, `null` nebo prázdný text ho vymaže; validuje se výsledný profil (plemeno musí patřit k druhu). `removePhotoIds` odebere fotografie i jejich soubory, nové fotografie (`photos`) se přidají na konec. Hlavní fotografii zvolí `primaryPhotoId` nebo `primaryUploadIndex`. ID zvířete, vlastník, ID zachovaných fotografií i doklady se nemění.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateAnimal" }
+            },
+            "multipart/form-data": {
+              "schema": { "$ref": "#/components/schemas/UpdateAnimalForm" },
+              "encoding": {
+                "animal": { "contentType": "application/json" },
+                "photos": { "contentType": "image/jpeg, image/png" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upravené zvíře.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Animal" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": {
+            "description": "Zvíře se opakovaně souběžně měnilo – `{\"error\":\"Animal changed concurrently; retry\"}`. Nic se neuložilo.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/PhotoUnsupportedMediaType" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      },
+      "delete": {
+        "tags": ["animals"],
+        "operationId": "deleteAnimal",
+        "summary": "Odstranit zvíře",
+        "description": "Jen vlastník zvířete s ověřeným účtem. Nevratně odstraní profil, fotografie a všechny verze dokladů včetně souborů; doklady zmizí i z fronty admina.",
+        "responses": {
+          "204": { "description": "Zvíře odstraněno." },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
+    "/animals/{animalId}/photos/{photoId}/file": {
+      "parameters": [
+        {
+          "name": "animalId",
+          "in": "path",
+          "required": true,
+          "description": "ID zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalId" }
+        },
+        {
+          "name": "photoId",
+          "in": "path",
+          "required": true,
+          "description": "ID fotografie.",
+          "schema": { "$ref": "#/components/schemas/AnimalPhotoId" }
+        }
+      ],
+      "get": {
+        "tags": ["animals"],
+        "operationId": "getAnimalPhoto",
+        "summary": "Soubor fotografie",
+        "description": "Jen vlastník zvířete s ověřeným účtem.",
+        "responses": {
+          "200": {
+            "description": "Fotografie k zobrazení (`inline`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`).",
+            "content": {
+              "image/jpeg": {
+                "schema": { "type": "string", "contentMediaType": "image/jpeg" }
+              },
+              "image/png": {
+                "schema": { "type": "string", "contentMediaType": "image/png" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
         }
       }
     },
@@ -407,6 +681,331 @@
   "components": {
     "schemas": {
       "AnimalId": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+      "AnimalSpecies": { "type": "string", "enum": ["dog", "horse"] },
+      "AnimalSex": { "type": "string", "enum": ["male", "female"] },
+      "AnimalPhotoId": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+      "AnimalPhoto": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/AnimalPhotoId" },
+          "fileName": { "type": "string", "minLength": 1, "maxLength": 150 },
+          "contentType": {
+            "type": "string",
+            "enum": ["image/jpeg", "image/png"]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "isPrimary": { "type": "boolean" }
+        },
+        "required": ["id", "fileName", "contentType", "size", "isPrimary"],
+        "additionalProperties": false
+      },
+      "Animal": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/AnimalId" },
+          "ownerUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 120 },
+              { "type": "null" }
+            ]
+          },
+          "species": { "$ref": "#/components/schemas/AnimalSpecies" },
+          "breedId": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "sex": { "$ref": "#/components/schemas/AnimalSex" },
+          "birthDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "coatColor": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 60 },
+              { "type": "null" }
+            ]
+          },
+          "weightKg": {
+            "anyOf": [
+              { "type": "number", "exclusiveMinimum": 0, "maximum": 2000 },
+              { "type": "null" }
+            ]
+          },
+          "city": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 120 },
+              { "type": "null" }
+            ]
+          },
+          "pedigreeNumber": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 60 },
+              { "type": "null" }
+            ]
+          },
+          "microchipNumber": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 64 },
+              { "type": "null" }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 2000 },
+              { "type": "null" }
+            ]
+          },
+          "photos": {
+            "maxItems": 10,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AnimalPhoto" }
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "required": [
+          "id",
+          "ownerUserId",
+          "name",
+          "species",
+          "breedId",
+          "sex",
+          "birthDate",
+          "coatColor",
+          "weightKg",
+          "city",
+          "pedigreeNumber",
+          "microchipNumber",
+          "description",
+          "photos",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AnimalList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Animal" }
+          },
+          "nextCursor": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/AnimalId" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "required": ["items", "nextCursor"],
+        "additionalProperties": false
+      },
+      "CreateAnimal": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 120 },
+              { "type": "null" }
+            ]
+          },
+          "birthDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "coatColor": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 60 },
+              { "type": "null" }
+            ]
+          },
+          "weightKg": {
+            "anyOf": [
+              { "type": "number", "exclusiveMinimum": 0, "maximum": 2000 },
+              { "type": "null" }
+            ]
+          },
+          "city": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 120 },
+              { "type": "null" }
+            ]
+          },
+          "pedigreeNumber": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 60 },
+              { "type": "null" }
+            ]
+          },
+          "microchipNumber": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 64 },
+              { "type": "null" }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 2000 },
+              { "type": "null" }
+            ]
+          },
+          "species": { "$ref": "#/components/schemas/AnimalSpecies" },
+          "breedId": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "sex": { "$ref": "#/components/schemas/AnimalSex" },
+          "primaryUploadIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          }
+        },
+        "required": ["species", "breedId", "sex"],
+        "additionalProperties": false
+      },
+      "UpdateAnimal": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 120 },
+              { "type": "null" }
+            ]
+          },
+          "birthDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "coatColor": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 60 },
+              { "type": "null" }
+            ]
+          },
+          "weightKg": {
+            "anyOf": [
+              { "type": "number", "exclusiveMinimum": 0, "maximum": 2000 },
+              { "type": "null" }
+            ]
+          },
+          "city": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 120 },
+              { "type": "null" }
+            ]
+          },
+          "pedigreeNumber": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 60 },
+              { "type": "null" }
+            ]
+          },
+          "microchipNumber": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 64 },
+              { "type": "null" }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 2000 },
+              { "type": "null" }
+            ]
+          },
+          "species": { "$ref": "#/components/schemas/AnimalSpecies" },
+          "breedId": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "sex": { "$ref": "#/components/schemas/AnimalSex" },
+          "removePhotoIds": {
+            "maxItems": 10,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AnimalPhotoId" }
+          },
+          "primaryPhotoId": { "$ref": "#/components/schemas/AnimalPhotoId" },
+          "primaryUploadIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateAnimalForm": {
+        "type": "object",
+        "properties": {
+          "animal": { "$ref": "#/components/schemas/CreateAnimal" },
+          "photos": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "binary",
+              "contentMediaType": "application/octet-stream"
+            },
+            "description": "JPEG nebo PNG (typ se ověřuje podle obsahu, ne podle přípony či hlavičky), nejvýše 10 MiB na soubor. Zvíře má nejvýše 10 fotografií. Pořadí určuje `primaryUploadIndex` i pořadí ve výsledném seznamu."
+          }
+        },
+        "required": ["animal"],
+        "additionalProperties": false
+      },
+      "UpdateAnimalForm": {
+        "type": "object",
+        "properties": {
+          "animal": { "$ref": "#/components/schemas/UpdateAnimal" },
+          "photos": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "binary",
+              "contentMediaType": "application/octet-stream"
+            },
+            "description": "JPEG nebo PNG (typ se ověřuje podle obsahu, ne podle přípony či hlavičky), nejvýše 10 MiB na soubor. Zvíře má nejvýše 10 fotografií. Pořadí určuje `primaryUploadIndex` i pořadí ve výsledném seznamu."
+          }
+        },
+        "additionalProperties": false
+      },
+      "BreedCatalog": {
+        "type": "object",
+        "properties": {
+          "species": { "$ref": "#/components/schemas/AnimalSpecies" },
+          "breeds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" }
+              },
+              "required": ["id", "name"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["species", "breeds"],
+        "additionalProperties": false
+      },
       "AnimalDocumentId": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
       "AnimalDocumentType": {
         "type": "string",
@@ -552,10 +1151,11 @@
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
               },
-              "name": { "type": "string" },
-              "species": { "type": "string", "enum": ["dog", "horse"] },
+              "name": { "type": ["string", "null"] },
+              "species": { "$ref": "#/components/schemas/AnimalSpecies" },
               "breedId": { "type": "string" },
-              "sex": { "type": "string", "enum": ["male", "female", "unknown"] }
+              "sex": { "$ref": "#/components/schemas/AnimalSex" },
+              "microchipNumber": { "type": ["string", "null"] }
             },
             "required": [
               "id",
@@ -563,7 +1163,8 @@
               "name",
               "species",
               "breedId",
-              "sex"
+              "sex",
+              "microchipNumber"
             ],
             "additionalProperties": false
           }
@@ -721,7 +1322,7 @@
         }
       },
       "NotFound": {
-        "description": "Zvíře nebo doklad neexistuje, nebo patří jinému chovateli – `{\"error\":\"Animal not found\"}` / `{\"error\":\"Document not found\"}`.",
+        "description": "Zvíře, fotografie nebo doklad neexistuje, nebo patří jinému chovateli – `{\"error\":\"Animal not found\"}` / `{\"error\":\"Photo not found\"}` / `{\"error\":\"Document not found\"}`.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/Error" }
@@ -729,7 +1330,7 @@
         }
       },
       "PayloadTooLarge": {
-        "description": "Soubor je větší než 10 MiB – `{\"error\":\"Payload too large\"}`. Nic se neuloží.",
+        "description": "Soubor je větší než 10 MiB, nebo JSON tělo překračuje limit – `{\"error\":\"Payload too large\"}`. Nic se neuloží.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/Error" }
@@ -738,6 +1339,14 @@
       },
       "UnsupportedMediaType": {
         "description": "Obsah souboru není PDF, JPEG ani PNG – `{\"error\":\"Document must be a PDF, JPEG or PNG file\"}`. Nic se neuloží.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "PhotoUnsupportedMediaType": {
+        "description": "Obsah fotografie není JPEG ani PNG – `{\"error\":\"Photo must be a JPEG or PNG file\"}`. Nic se neuloží.",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/Error" }

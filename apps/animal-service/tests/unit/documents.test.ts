@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { testIdentity } from '@anico/auth/testing';
 import { documentUseCases } from '../../src/modules/documents/application/documents.js';
-import type {
-  AnimalDocumentsRepository,
-  DocumentFileStorage,
-} from '../../src/modules/documents/domain/ports.js';
-import { httpBreederVerification } from '../../src/modules/documents/infrastructure/http-breeder-verification.js';
+import type { AnimalDocumentsRepository } from '../../src/modules/documents/domain/ports.js';
+import type { FileStorage } from '../../src/files/file-storage.js';
+import { httpBreederVerification } from '../../src/modules/animal/infrastructure/http-breeder-verification.js';
 
 const owner = testIdentity({ roles: ['breeder'] });
 const ANIMAL_ID = '000000000000000000000001';
@@ -14,7 +12,7 @@ const PDF = Buffer.from('%PDF-1.7');
 function fakeFiles() {
   const stored = new Set<string>();
   let next = 0;
-  const files: DocumentFileStorage = {
+  const files: FileStorage = {
     async save() {
       const reference = `file-${next++}`;
       stored.add(reference);
@@ -32,7 +30,7 @@ function fakeFiles() {
 
 function useCases(
   repository: Partial<AnimalDocumentsRepository>,
-  files: DocumentFileStorage,
+  files: FileStorage,
 ) {
   let id = 0;
   return documentUseCases({
