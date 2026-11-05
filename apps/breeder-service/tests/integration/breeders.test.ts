@@ -1,6 +1,5 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { createConnection, type Connection } from 'mongoose';
-import { pino } from 'pino';
 import request from 'supertest';
 import {
   afterAll,
@@ -11,7 +10,8 @@ import {
   it,
   vi,
 } from 'vitest';
-import { createApp } from '../../src/app.js';
+import type { createApp } from '../../src/app.js';
+import { serviceApp } from '../support/app.js';
 import type { Breeder } from '../../src/modules/breeders/domain/breeder.js';
 import { gridFsFileStorage } from '../../src/modules/breeders/infrastructure/gridfs-file-storage.js';
 import { mongooseBreederRepository } from '../../src/modules/breeders/infrastructure/mongoose-breeder-repository.js';
@@ -46,9 +46,8 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
     await Promise.all(
       Object.values(connection.models).map((model) => model.init()),
     );
-    app = createApp({
-      logger: pino({ level: 'silent' }),
-      isReady: () => true,
+    app = serviceApp({
+      connection,
       breeders: repository,
       files: gridFsFileStorage(connection),
       notifier: { notifyDecision },
@@ -111,9 +110,14 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
+        returnReason: null,
+        reviewHistory: [],
       },
     });
     expect(stored?.verificationRequest.submittedAt).toBeInstanceOf(Date);
+    expect(stored?.verificationRequest.lastSubmittedAt).toEqual(
+      stored?.verificationRequest.submittedAt,
+    );
     expect(await gridFsFiles().countDocuments()).toBe(1);
   });
 
@@ -255,7 +259,12 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
     const summary = await request(app)
       .get('/verification-requests/summary')
       .set(adminHeaders());
-    expect(summary.body).toEqual({ pending: 2, approved: 1, rejected: 0 });
+    expect(summary.body).toEqual({
+      pending: 2,
+      returned: 0,
+      approved: 1,
+      rejected: 0,
+    });
 
     const pending = await request(app)
       .get('/verification-requests?status=PENDING')
@@ -266,10 +275,11 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
       ),
     ).toEqual(['b2', 'b3']);
 
-    const all = await request(app)
+    // bez filtru jen fronta ke kontrole (PENDING)
+    const queue = await request(app)
       .get('/verification-requests')
       .set(adminHeaders());
-    expect(all.body.items).toHaveLength(3);
+    expect(queue.body).toEqual(pending.body);
   });
 
   it('answers 404 for invalid and unknown request ids', async () => {

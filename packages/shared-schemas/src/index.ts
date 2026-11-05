@@ -51,19 +51,44 @@ export const ObjectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/);
 // Verification-related schemas and types
 export const VerificationStatusSchema = z.enum([
   'PENDING',
+  'RETURNED',
   'APPROVED',
   'REJECTED',
 ]);
 export type VerificationStatus = z.infer<typeof VerificationStatusSchema>;
 
+export const ReviewDecisionSchema = z.enum([
+  'RETURNED',
+  'APPROVED',
+  'REJECTED',
+]);
+export type ReviewDecision = z.infer<typeof ReviewDecisionSchema>;
+
+/** One administrator decision; returned requests keep every round. */
+export const VerificationReviewSchema = z.strictObject({
+  decision: ReviewDecisionSchema,
+  reviewedBy: z.string(),
+  reviewedAt: z.iso.datetime(),
+  reason: z.string().nullable(),
+});
+export type VerificationReview = z.infer<typeof VerificationReviewSchema>;
+
 export const VerificationRequestSchema = z.strictObject({
   id: ObjectIdSchema,
   status: VerificationStatusSchema,
+  /** First submission; never changes. */
   submittedAt: z.iso.datetime(),
+  /** Latest entry into PENDING (first submission or a corrected resubmission). */
+  lastSubmittedAt: z.iso.datetime(),
   breedingStationCertificate: CertificateFileSchema,
+  /** Latest review; null while PENDING. */
   reviewedBy: z.string().nullable(),
   reviewedAt: z.iso.datetime().nullable(),
   rejectionReason: z.string().nullable(),
+  /** Administrator note while RETURNED; null otherwise. */
+  returnReason: z.string().nullable(),
+  /** All reviews, oldest first. */
+  reviewHistory: z.array(VerificationReviewSchema),
 });
 export type VerificationRequestDto = z.infer<typeof VerificationRequestSchema>;
 
@@ -71,6 +96,7 @@ export type VerificationRequestDto = z.infer<typeof VerificationRequestSchema>;
 export const accountSchema = z.enum([
   'NOT_SUBMITTED',
   'PENDING',
+  'RETURNED',
   'APPROVED',
   'REJECTED',
 ]);
@@ -110,6 +136,10 @@ export const DecideVerificationRequestSchema = z.discriminatedUnion(
     z.strictObject({
       decision: z.literal('REJECTED'),
       rejectionReason: z.string().trim().min(1).max(500),
+    }),
+    z.strictObject({
+      decision: z.literal('RETURNED'),
+      returnReason: z.string().trim().min(1).max(500),
     }),
   ],
 );
@@ -153,6 +183,7 @@ export type VerificationRequestList = z.infer<
 
 export const VerificationSummarySchema = z.strictObject({
   pending: z.number().int().min(0),
+  returned: z.number().int().min(0),
   approved: z.number().int().min(0),
   rejected: z.number().int().min(0),
 });

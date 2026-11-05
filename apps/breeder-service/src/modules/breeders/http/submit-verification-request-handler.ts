@@ -2,13 +2,15 @@ import type { RequestHandler } from 'express';
 import { SubmitVerificationRequestSchema } from '@anico/shared-schemas';
 import { identityOf } from '../../../shared/http/identity.js';
 import { submitVerificationRequest } from '../application/submit-verification-request.js';
+import { requiresCertificate } from '../domain/breeder.js';
 import type {
   BreederRepository,
   FileStorage,
   WarnLogger,
 } from '../domain/ports.js';
+import { toNewBreeder } from './current-breeder.js';
 import { domainErrorResponder } from './domain-errors.js';
-import { CERTIFICATE_FIELD, uploadParser } from './parse-upload.js';
+import { MISSING_CERTIFICATE_ISSUE, uploadParser } from './parse-upload.js';
 import { myAccountOf } from './responses.js';
 
 export function submitVerificationRequestHandler(dependencies: {
@@ -32,29 +34,33 @@ export function submitVerificationRequestHandler(dependencies: {
   return async (req, res) => {
     if (!(await parseUpload(req, res))) return;
 
+    const account = toNewBreeder(identityOf(res));
     const input = SubmitVerificationRequestSchema.safeParse(req.body ?? {});
-    const issues = [
-      ...(input.success ? [] : input.error.issues),
-      ...(req.file
-        ? []
-        : [
-            {
-              code: 'custom' as const,
-              path: [CERTIFICATE_FIELD],
-              message: 'Certificate file is required',
-            },
-          ]),
-    ];
-    if (!input.success || !req.file) {
-      res.status(400).json({ error: 'Validation failed', issues });
+    if (!input.success) {
+      // povinnost certifikátu určuje uložený stav (nepovinný jen při opravě
+      // RETURNED), ne klient; chybějící soubor hlásíme spolu s chybami polí
+      const missingCertificate =
+        !req.file &&
+        requiresCertificate(
+          await dependencies.repository.findByBreederId(account.breederId),
+        );
+      res.status(400).json({
+        error: 'Validation failed',
+        issues: [
+          ...input.error.issues,
+          ...(missingCertificate ? [MISSING_CERTIFICATE_ISSUE] : []),
+        ],
+      });
       return;
     }
 
     try {
-      const { breeder } = await submit({
+      const breeder = await submit({
         ...input.data,
-        breederId: identityOf(res).userId,
-        file: { content: req.file.buffer, fileName: req.file.originalname },
+        account,
+        file: req.file
+          ? { content: req.file.buffer, fileName: req.file.originalname }
+          : null,
       });
       res.status(201).json(await toResponse(breeder));
     } catch (error) {

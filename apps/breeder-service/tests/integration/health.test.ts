@@ -1,9 +1,8 @@
 import mongoose, { type Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createApp } from '../../src/app.js';
+import { serviceApp } from '../support/app.js';
 import { fixtureAuthenticate } from '../support/api.js';
 import { inMemoryBreeders, inMemoryFiles } from '../support/in-memory.js';
 import {
@@ -38,8 +37,8 @@ describe('HTTP and database integration', () => {
   it('uses a real MongoDB connection for readiness and exposes service identity', async () => {
     await connection.db!.command({ ping: 1 });
     let stopping = false;
-    const app = createApp({
-      logger: pino({ level: 'silent' }),
+    const app = serviceApp({
+      connection,
       isReady: () => !stopping && connection.readyState === 1,
       breeders: inMemoryBreeders(),
       files: inMemoryFiles(),
@@ -66,6 +65,10 @@ describe('HTTP and database integration', () => {
   });
   it('migrates once, seeds and resets only its personal test database', async () => {
     const migrations = await loadMigrations();
+    expect(migrations.length).toBeGreaterThan(0);
+    expect(await migrateDatabase(connection, migrations)).toEqual(
+      migrations.map((migration) => migration.id),
+    );
     expect(await migrateDatabase(connection, migrations)).toEqual([]);
     const target = {
       database: 'anico_breeder_test',
@@ -74,8 +77,9 @@ describe('HTTP and database integration', () => {
     };
     const seed = await loadSeed();
     await seedDatabase(connection, migrations, seed, target);
+    // po všech migracích služby, jinak by engine hlásil OUT_OF_ORDER
     const change = {
-      id: '20261031000100-test-records',
+      id: '29991231000100-test-records',
       checksum: 'a'.repeat(64),
       up: async (c: Connection) => {
         await c
@@ -87,12 +91,15 @@ describe('HTTP and database integration', () => {
           );
       },
     };
-    expect(await migrateDatabase(connection, [change])).toEqual([change.id]);
-    expect(await migrateDatabase(connection, [change])).toEqual([]);
+    const all = [...migrations, change];
+    expect(await migrateDatabase(connection, all)).toEqual([change.id]);
+    expect(await migrateDatabase(connection, all)).toEqual([]);
     expect(
-      (await migrationStatus(connection, [change])).migrations[0]?.state,
-    ).toBe('applied');
-    await resetDatabase(connection, [change], seed, target, target.database);
+      (await migrationStatus(connection, all)).migrations.map(
+        (migration) => migration.state,
+      ),
+    ).toEqual(all.map(() => 'applied'));
+    await resetDatabase(connection, all, seed, target, target.database);
     expect(
       await connection.db!.collection('test_records').countDocuments(),
     ).toBe(1);

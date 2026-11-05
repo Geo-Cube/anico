@@ -46,12 +46,15 @@ async function openCertificate(
 }
 
 /**
+ * Fronta ke kontrole: bez filtru jen PENDING, jinak žádosti v daném stavu.
  * Typ obsahu se čte per položka ze storage (N+1, max. 500 položek) – vědomé
  * riziko; kdyby vadilo, uložit contentType do záznamu žádosti.
  */
 export function listVerificationRequests({ breeders, files }: Dependencies) {
   const contentTypeOf = certificateContentTypeOf(files);
-  return async (status?: VerificationStatus): Promise<VerificationView[]> => {
+  return async (
+    status: VerificationStatus = 'PENDING',
+  ): Promise<VerificationView[]> => {
     const found = await breeders.listByVerificationStatus(status);
     return Promise.all(
       found.map(async (breeder) => {
@@ -69,6 +72,7 @@ export function getVerificationSummary({
     const counts = await breeders.countByVerificationStatus();
     return {
       pending: counts.PENDING,
+      returned: counts.RETURNED,
       approved: counts.APPROVED,
       rejected: counts.REJECTED,
     };

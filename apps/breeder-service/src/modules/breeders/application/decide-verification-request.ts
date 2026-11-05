@@ -25,11 +25,19 @@ export function decideVerificationRequest(dependencies: {
     decision: Decision,
     admin: { id: string },
   ): Promise<Breeder> => {
+    // rozhodnout lze jen žádost ve stavu PENDING (atomicky v repozitáři);
+    // REJECTED je konečné, RETURNED vrací žádost chovateli k opravě
     let normalized: Decision = decision;
     if (decision.decision === 'REJECTED') {
       const reason = decision.rejectionReason.trim();
       if (reason === '') throw new InvalidDecisionError();
       normalized = { decision: 'REJECTED', rejectionReason: reason };
+    } else if (decision.decision === 'RETURNED') {
+      const reason = decision.returnReason.trim();
+      if (reason === '') {
+        throw new InvalidDecisionError('Return reason is required');
+      }
+      normalized = { decision: 'RETURNED', returnReason: reason };
     }
 
     const decided = await breeders.decideVerification(requestId, {

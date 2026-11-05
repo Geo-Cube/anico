@@ -3,6 +3,8 @@
 - Stav: přijato (D2 průvodce, K2/K11 briefu; v kódu už implementováno)
 - Datum: 2026-11-04
 - Souvisí: [návrh UC-01](../design/uc-01-overeni-chovatele.md) §2, §4
+- Doplněno: [ADR-0004](0004-vraceni-zadosti-k-doplneni.md) – vrácení k doplnění (`RETURNED`) opravuje tutéž
+  vnořenou žádost (`reviewHistory`); „max. 1 žádost“ platí dál, opakované podání je jen oprava vrácené žádosti
 
 ## Kontext
 

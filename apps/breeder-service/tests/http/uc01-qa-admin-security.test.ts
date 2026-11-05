@@ -4,20 +4,23 @@ import {
   MyAccountSchema,
 } from '@anico/shared-schemas';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { decisionEmail } from '../../src/modules/breeders/domain/decision-email.js';
+import { LOG_REDACT_PATHS } from '../../src/shared/logging.js';
 import {
   PDF,
   PNG,
   adminHeaders,
   breederHeaders,
+  fixtureAuthenticate,
   identityHeaders,
   submit,
   takeOverAndSubmit,
   validFields,
 } from '../support/api.js';
-import { testApp } from '../support/app.js';
-import { decideRequest, faultyApp } from '../support/qa.js';
+import { serviceApp, testApp } from '../support/app.js';
+import { inMemoryBreeders, inMemoryFiles } from '../support/in-memory.js';
+import { decideRequest, faultyApp, logCapture } from '../support/qa.js';
 import { signedAuth } from '../support/signed-auth.js';
 
 const me = (app: Parameters<typeof request>[0], id = 'breeder-1') =>
@@ -136,6 +139,21 @@ describe('UC01-A4 / APR-16 druhé rozhodnutí', () => {
       'REJECTED',
     ],
     [{ decision: 'APPROVED' }, { decision: 'APPROVED' }, 'APPROVED'],
+    [
+      { decision: 'RETURNED', returnReason: 'doplňte' },
+      { decision: 'APPROVED' },
+      'RETURNED',
+    ],
+    [
+      { decision: 'APPROVED' },
+      { decision: 'RETURNED', returnReason: 'pozdě' },
+      'APPROVED',
+    ],
+    [
+      { decision: 'REJECTED', rejectionReason: 'konečné' },
+      { decision: 'RETURNED', returnReason: 'pozdě' },
+      'REJECTED',
+    ],
   ] as const)(
     'A4-01: %j potom %j -> 409 s uloženým výsledkem; původní reviewedBy/At a isVerified beze změny; e-mail 1x',
     async (first, second, finalStatus) => {
@@ -152,7 +170,10 @@ describe('UC01-A4 / APR-16 druhé rozhodnutí', () => {
         reviewedBy: 'admin-1',
         reviewedAt: winner.body.reviewedAt,
         rejectionReason: winner.body.rejectionReason,
+        returnReason: winner.body.returnReason,
+        reviewHistory: winner.body.reviewHistory,
       });
+      expect(loser.body.current.reviewHistory).toHaveLength(1);
       expect((await me(app)).body.isVerified).toBe(finalStatus === 'APPROVED');
       expect(notifyDecision).toHaveBeenCalledTimes(1);
     },
@@ -177,7 +198,7 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
     expect(seen).toEqual([{ status: 'APPROVED', to: 'z.podani@example.test' }]);
   });
 
-  it('REJ-06: e-mail při zamítnutí obsahuje důvod a větu, že žádost lze podat pouze jednou', async () => {
+  it('REJ-06: e-mail při zamítnutí obsahuje důvod a větu, že zamítnutí je konečné', async () => {
     const { app, notifyDecision } = testApp();
     const id = await takeOverAndSubmit(app, 'breeder-1');
     await decideRequest(app, id, {
@@ -186,7 +207,7 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
     }).expect(200);
     const email = decisionEmail(notifyDecision.mock.calls[0]![0]);
     expect(email.text).toContain('Název stanice nesedí');
-    expect(email.text).toMatch(/pouze jednou/);
+    expect(email.text).toMatch(/zamítnutí je konečné/);
     expect(email.subject).toMatch(/zamítnut/);
   });
 
@@ -196,7 +217,7 @@ describe('UC01-APR-12..14, REJ-06/07 e-mail', () => {
     await decideRequest(app, id, { decision: 'APPROVED' }).expect(200);
     const email = decisionEmail(notifyDecision.mock.calls[0]![0]);
     expect(email.text).toMatch(/schválen/);
-    expect(email.text).not.toMatch(/pouze jednou|Důvod/);
+    expect(email.text).not.toMatch(/konečné|Důvod/);
   });
 
   it.each([
@@ -477,12 +498,23 @@ describe('UC01-APR-06 id žádosti: nevalidní / neexistující -> 404 bez 500',
     expect(notifyDecision).not.toHaveBeenCalled();
   });
 
-  it('chybně %-kódované id (URIError) je 4xx, ne 5xx', async () => {
+  it('chybně %-kódované id (URIError routeru) -> 400 Bad request, ne 5xx', async () => {
     const { app } = testApp();
     const response = await request(app)
       .get('/verification-requests/%E0%A4%A')
       .set(adminHeaders());
-    expect([400, 404]).toContain(response.status);
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'Bad request' });
+  });
+
+  it('URIError mimo dekódování cesty zůstává 500', async () => {
+    const { app, files } = testApp();
+    const id = await takeOverAndSubmit(app, 'breeder-1');
+    vi.spyOn(files, 'getMetadata').mockRejectedValueOnce(new URIError('x'));
+    const response = await request(app)
+      .get(`/verification-requests/${id}`)
+      .set(adminHeaders());
+    expect(response.status).toBe(500);
   });
 
   it('/summary není chyceno jako :id', async () => {
@@ -490,7 +522,12 @@ describe('UC01-APR-06 id žádosti: nevalidní / neexistující -> 404 bez 500',
     const response = await request(app)
       .get('/verification-requests/summary')
       .set(adminHeaders());
-    expect(response.body).toEqual({ pending: 0, approved: 0, rejected: 0 });
+    expect(response.body).toEqual({
+      pending: 0,
+      returned: 0,
+      approved: 0,
+      rejected: 0,
+    });
   });
 });
 
@@ -545,8 +582,8 @@ describe('UC01-SEC-10/11 chyby', () => {
   });
 });
 
-describe('UC01-ACC-05 GET /breeders/me ve všech čtyřech stavech', () => {
-  it('NOT_SUBMITTED, PENDING, APPROVED, REJECTED; opakované čtení nic nemění', async () => {
+describe('UC01-ACC-05 GET /breeders/me ve všech stavech', () => {
+  it('NOT_SUBMITTED, PENDING, RETURNED, APPROVED, REJECTED; opakované čtení nic nemění', async () => {
     const { app } = testApp();
     const none = await me(app, 'b-none');
     expect(none.body).toMatchObject({
@@ -560,6 +597,7 @@ describe('UC01-ACC-05 GET /breeders/me ve všech čtyřech stavech', () => {
     const pendingId = await takeOverAndSubmit(app, 'b-pending');
     const approvedId = await takeOverAndSubmit(app, 'b-approved');
     const rejectedId = await takeOverAndSubmit(app, 'b-rejected');
+    const returnedId = await takeOverAndSubmit(app, 'b-returned');
     await decideRequest(app, approvedId, { decision: 'APPROVED' }, 'admin-1');
     await decideRequest(
       app,
@@ -567,9 +605,16 @@ describe('UC01-ACC-05 GET /breeders/me ve všech čtyřech stavech', () => {
       { decision: 'REJECTED', rejectionReason: 'Nesedí' },
       'admin-2',
     );
+    await decideRequest(
+      app,
+      returnedId,
+      { decision: 'RETURNED', returnReason: 'Doplňte' },
+      'admin-3',
+    );
 
     const states = {
       pending: await me(app, 'b-pending'),
+      returned: await me(app, 'b-returned'),
       approved: await me(app, 'b-approved'),
       rejected: await me(app, 'b-rejected'),
     };
@@ -585,6 +630,22 @@ describe('UC01-ACC-05 GET /breeders/me ve všech čtyřech stavech', () => {
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
+        returnReason: null,
+        reviewHistory: [],
+      },
+    });
+    expect(states.returned.body).toMatchObject({
+      accountState: 'RETURNED',
+      isVerified: false,
+      verificationRequest: {
+        id: returnedId,
+        status: 'RETURNED',
+        reviewedBy: 'admin-3',
+        rejectionReason: null,
+        returnReason: 'Doplňte',
+        reviewHistory: [
+          { decision: 'RETURNED', reviewedBy: 'admin-3', reason: 'Doplňte' },
+        ],
       },
     });
     expect(states.approved.body).toMatchObject({
@@ -619,10 +680,10 @@ describe('UC01-ACC-05 GET /breeders/me ve všech čtyřech stavech', () => {
 });
 
 describe('UC01-APR-03/04/15 fronta, filtr, počty', () => {
-  it('filtry PENDING/APPROVED/REJECTED/bez filtru, řazení od nejstarší, počty po rozhodnutích', async () => {
+  it('bez filtru jen PENDING, filtry všech stavů, řazení podle posledního podání, počty po rozhodnutích', async () => {
     const { app } = testApp();
     const ids: string[] = [];
-    for (const breeder of ['b1', 'b2', 'b3']) {
+    for (const breeder of ['b1', 'b2', 'b3', 'b5']) {
       ids.push(await takeOverAndSubmit(app, breeder));
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
@@ -639,27 +700,39 @@ describe('UC01-APR-03/04/15 fronta, filtr, počty', () => {
       );
 
     expect((await summary()).body).toEqual({
-      pending: 3,
+      pending: 4,
+      returned: 0,
       approved: 0,
       rejected: 0,
     });
-    expect(await list()).toEqual(['b1', 'b2', 'b3']);
+    expect(await list()).toEqual(['b1', 'b2', 'b3', 'b5']);
 
     await decideRequest(app, ids[1]!, { decision: 'APPROVED' }).expect(200);
     await decideRequest(app, ids[0]!, {
       decision: 'REJECTED',
       rejectionReason: 'x',
     }).expect(200);
+    await decideRequest(app, ids[3]!, {
+      decision: 'RETURNED',
+      returnReason: 'y',
+    }).expect(200);
 
     expect((await summary()).body).toEqual({
       pending: 1,
+      returned: 1,
       approved: 1,
       rejected: 1,
     });
     expect(await list('?status=PENDING')).toEqual(['b3']);
+    expect(await list('?status=RETURNED')).toEqual(['b5']);
     expect(await list('?status=APPROVED')).toEqual(['b2']);
     expect(await list('?status=REJECTED')).toEqual(['b1']);
-    expect(await list()).toEqual(['b1', 'b2', 'b3']);
+    expect(await list()).toEqual(['b3']);
+
+    // oprava se zařadí podle nového podání, ne podle prvního
+    await submit(app, breederHeaders('b5'), { file: null }).expect(201);
+    expect(await list()).toEqual(['b3', 'b5']);
+    expect((await summary()).body).toMatchObject({ pending: 2, returned: 0 });
     for (const bad of [
       '?status=pending',
       '?status=',
@@ -700,6 +773,15 @@ describe('UC01-SEC-12 logy nesmí obsahovat data z formulářů, soubor ani dův
       decision: 'REJECTED',
       rejectionReason: 'Tajný důvod XYZ',
     }).expect(200);
+    const second = await takeOverAndSubmit(app, 'breeder-2');
+    await decideRequest(app, second, {
+      decision: 'RETURNED',
+      returnReason: 'Tajná poznámka ABC',
+    }).expect(200);
+    await submit(app, breederHeaders('breeder-2'), {
+      fields: { ...validFields(), breedingStationName: 'TajnaOprava' },
+      file: { content, fileName: 'y.pdf' },
+    }).expect(201);
     const text = log.text();
     expect(text.length).toBeGreaterThan(0);
     for (const secret of [
@@ -707,6 +789,59 @@ describe('UC01-SEC-12 logy nesmí obsahovat data z formulářů, soubor ani dův
       marker,
       'Tajný důvod XYZ',
       'TajnaStanice',
+      'Tajná poznámka ABC',
+      'TajnaOprava',
+    ]) {
+      expect(text).not.toContain(secret);
+    }
+  });
+
+  it('access log stažení certifikátu neobsahuje název souboru, identitu ani přihlašovací údaje', async () => {
+    const log = logCapture('info', { redact: LOG_REDACT_PATHS });
+    const app = serviceApp({
+      logger: log.logger,
+      breeders: inMemoryBreeders(),
+      files: inMemoryFiles(),
+      notifier: { notifyDecision: async () => undefined },
+      authenticate: fixtureAuthenticate,
+    });
+    const headers = identityHeaders('breeder-1', {
+      firstName: 'Zdenek',
+      lastName: 'Tajnovsky',
+    });
+    await request(app).get('/breeders/me').set(headers);
+    const credentials = {
+      'x-anico-identity': 'synthetic-signed-identity-secret',
+      'cf-access-jwt-assertion': 'synthetic-cloudflare-jwt-secret',
+      'cf-access-client-id': 'synthetic-cloudflare-client-id',
+      'cf-access-client-secret': 'synthetic-cloudflare-client-secret',
+      authorization: 'Bearer synthetic-authorization-secret',
+      cookie: 'session=synthetic-cookie-secret',
+    };
+    await request(app)
+      .get('/breeders/me')
+      .set(headers)
+      .set(credentials)
+      .expect(200);
+    const id = await takeOverAndSubmit(app, 'breeder-1', {
+      file: {
+        content: Buffer.from('%PDF-1.4 x'),
+        fileName: 'rodny-list-novak.pdf',
+      },
+    });
+    await request(app)
+      .get(`/verification-requests/${id}/certificate`)
+      .set(adminHeaders())
+      .expect(200);
+
+    const text = log.text();
+    expect(text).toContain('/certificate');
+    for (const secret of [
+      'rodny-list-novak',
+      'breeder-1@example.test',
+      'Zdenek',
+      'Tajnovsky',
+      ...Object.values(credentials),
     ]) {
       expect(text).not.toContain(secret);
     }

@@ -5,6 +5,13 @@ import type { WarnLogger } from '../domain/ports.js';
 export const MAX_CERTIFICATE_BYTES = 5 * 1024 * 1024;
 export const CERTIFICATE_FIELD = 'breedingStationCertificate';
 
+/** Validační chyba chybějícího certifikátu (nepovinný jen při opravě RETURNED). */
+export const MISSING_CERTIFICATE_ISSUE = {
+  code: 'custom',
+  path: [CERTIFICATE_FIELD],
+  message: 'Certificate file is required',
+} as const;
+
 /**
  * Zpracuje multipart (soubor v paměti, limity). Při chybě uploadu sám odpoví
  * (413/400) a vrátí `false`.

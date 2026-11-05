@@ -25,24 +25,7 @@ jobs:
         run: bash scripts/check-containers.sh
       - name: Build and smoke breeder runtime
         shell: bash
-        run: |
-          docker build --file apps/breeder-service/Dockerfile --tag anico/breeder-service:ci .
-          docker run --rm --read-only --entrypoint node anico/breeder-service:ci \
-            --input-type=module -e '
-              import { access } from "node:fs/promises";
-              import { constants } from "node:fs";
-              import { requestAuthenticator } from "@anico/auth";
-              import { MyAccountSchema } from "@anico/shared-schemas";
-              import { createApp } from "./apps/breeder-service/dist/app.js";
-              if (process.getuid() === 0) throw new Error("Runtime must not run as root");
-              for (const path of ["./apps/breeder-service/src", "./node_modules/typescript", "./node_modules/vitest"]) {
-                const exists = await access(path, constants.F_OK).then(() => true, () => false);
-                if (exists) throw new Error("Development files leaked into runtime");
-              }
-              if (![requestAuthenticator, createApp].every(value => typeof value === "function") || !MyAccountSchema) {
-                throw new Error("Breeder runtime dependencies are missing");
-              }
-            '
+        run: bash scripts/check-breeder-container.sh
   check:
     env:
       MONGOMS_DISABLE_POSTINSTALL: '1'

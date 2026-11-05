@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { createConnection, type Connection } from 'mongoose';
-import { pino } from 'pino';
 import request from 'supertest';
 import {
   afterAll,
@@ -15,7 +14,8 @@ import {
   it,
   vi,
 } from 'vitest';
-import { createApp } from '../../src/app.js';
+import type { createApp } from '../../src/app.js';
+import { serviceApp } from '../support/app.js';
 import type { Breeder } from '../../src/modules/breeders/domain/breeder.js';
 import type {
   BreederRepository,
@@ -68,9 +68,8 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
       Object.values(connection.models).map((model) => model.init()),
     );
     storage = gridFsFileStorage(connection);
-    app = createApp({
-      logger: pino({ level: 'silent' }),
-      isReady: () => true,
+    app = serviceApp({
+      connection,
       breeders: {
         ...repository,
         submitVerification: (id, s) =>
@@ -387,6 +386,9 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
     expect(after?.verificationRequest.submittedAt).toEqual(
       before?.verificationRequest.submittedAt,
     );
+    expect(after?.verificationRequest.lastSubmittedAt).toEqual(
+      before?.verificationRequest.lastSubmittedAt,
+    );
     expect(after?.verificationRequest.breedingStationCertificate).toEqual(
       before?.verificationRequest.breedingStationCertificate,
     );
@@ -414,20 +416,26 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
         _id: new connection.base.Types.ObjectId(),
         status: i % 3 === 0 ? 'PENDING' : 'APPROVED',
         submittedAt: new Date(2026, 0, 1, 0, 0, i),
+        lastSubmittedAt: new Date(2026, 0, 1, 0, 0, i),
         breedingStationCertificate: { fileName: 'f', fileReference: `r${i}` },
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
+        returnReason: null,
+        reviewHistory: [],
       },
     }));
     await breeders().insertMany(docs);
     const plan = await breeders()
       .find({ 'verificationRequest.status': 'PENDING' })
-      .sort({ 'verificationRequest.submittedAt': 1 })
+      .sort({ 'verificationRequest.lastSubmittedAt': 1 })
       .limit(500)
       .explain();
-    expect(JSON.stringify(plan)).toContain('IXSCAN');
-    expect(JSON.stringify(plan)).not.toContain('COLLSCAN');
+    const text = JSON.stringify(plan);
+    expect(text).toContain('IXSCAN');
+    expect(text).not.toContain('COLLSCAN');
+    // řazení obslouží index, ne blokující SORT v paměti
+    expect(text).not.toContain('"stage":"SORT"');
   });
 });
 

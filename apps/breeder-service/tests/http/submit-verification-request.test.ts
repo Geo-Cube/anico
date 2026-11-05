@@ -1,6 +1,6 @@
 import { MyAccountSchema } from '@anico/shared-schemas';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   HTML,
   JPEG,
@@ -13,6 +13,7 @@ import {
   validFields,
 } from '../support/api.js';
 import { testApp } from '../support/app.js';
+import { failingCertificate } from '../support/qa.js';
 
 const URL = '/breeders/me/verification-request';
 
@@ -40,12 +41,17 @@ describe('POST /breeders/me/verification-request', () => {
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
+        returnReason: null,
+        reviewHistory: [],
         breedingStationCertificate: {
           fileName: 'certifikát.pdf',
           contentType: 'application/pdf',
         },
       },
     });
+    expect(response.body.verificationRequest.lastSubmittedAt).toBe(
+      response.body.verificationRequest.submittedAt,
+    );
     expect(JSON.stringify(response.body)).not.toContain('fileReference');
     expect(
       (await breeders.findByBreederId('breeder-1'))?.breedingStationNumber,
@@ -74,10 +80,22 @@ describe('POST /breeders/me/verification-request', () => {
     expect(files.size()).toBe(0);
   });
 
-  it('returns 404 when the account has not been taken over yet', async () => {
-    const { app, files } = testApp();
-    await submit(app, breederHeaders()).expect(404);
-    expect(files.size()).toBe(0);
+  it('takes the profile over from the identity when submitting without a prior GET /breeders/me', async () => {
+    const { app, breeders, files } = testApp();
+    const response = await submit(app, breederHeaders());
+
+    expect(response.status).toBe(201);
+    MyAccountSchema.parse(response.body);
+    expect(response.body).toMatchObject({
+      breederId: 'breeder-1',
+      accountState: 'PENDING',
+      firstName: 'Jan',
+    });
+    expect(
+      (await breeders.findByBreederId('breeder-1'))?.verificationRequest
+        ?.status,
+    ).toBe('PENDING');
+    expect(files.size()).toBe(1);
   });
 
   it('returns 409 with the current state on a second submission', async () => {
@@ -96,7 +114,7 @@ describe('POST /breeders/me/verification-request', () => {
     expect(files.size()).toBe(1);
   });
 
-  it('returns 409 after REJECTED as well (one request only)', async () => {
+  it('returns 409 after REJECTED as well (final decision)', async () => {
     const { app } = testApp();
     const id = await takeOverAndSubmit(app, 'breeder-1');
     await request(app)
@@ -360,5 +378,27 @@ describe('GET /breeders/me/verification-request/certificate', () => {
       .get('/breeders/me/verification-request/certificate')
       .set(breederHeaders('breeder-B'))
       .expect(404);
+  });
+
+  it('answers 500 when the stream fails before data and the process survives', async () => {
+    const { app, files } = testApp();
+    await takeOverAndSubmit(app, 'breeder-1');
+    vi.spyOn(files, 'open').mockResolvedValueOnce(failingCertificate(false));
+    const own = '/breeders/me/verification-request/certificate';
+
+    const response = await request(app).get(own).set(breederHeaders());
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Internal server error' });
+    await request(app).get(own).set(breederHeaders()).expect(200);
+  });
+
+  it('aborts the connection when the stream fails after data was sent', async () => {
+    const { app, files } = testApp();
+    await takeOverAndSubmit(app, 'breeder-1');
+    vi.spyOn(files, 'open').mockResolvedValueOnce(failingCertificate(true));
+    const own = '/breeders/me/verification-request/certificate';
+
+    await expect(request(app).get(own).set(breederHeaders())).rejects.toThrow();
+    await request(app).get(own).set(breederHeaders()).expect(200);
   });
 });

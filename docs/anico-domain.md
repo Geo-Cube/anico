@@ -56,6 +56,11 @@ Bez jména UI zobrazí druh + plemeno + krátký identifikátor. Přesná adresa
 
 ### UC-01 – Ověření chovatele
 
+> **Schválená odchylka od analýzy (5. 11. 2026, [ADR-0004](adr/0004-vraceni-zadosti-k-doplneni.md)):** admin může
+> žádost ve stavu `PENDING` vrátit k doplnění (`RETURNED`, povinný důvod). Chovatel ji pak opraví a znovu odešle
+> (→ `PENDING`); body 1, 3, 5 a 8 níže a „další podání nedostupné“ v §3 proto platí jen pro `APPROVED` a `REJECTED`,
+> které zůstávají konečné. Výtah níže zachycuje původní analýzu beze změny.
+
 1. Chovatel podá **nejvýše jednu** žádost za život. Druhé podání → zobrazí se existující žádost, nová se nevytvoří (A3). Platí i po REJECTED.
 2. Podání = **jedna transakce**: úprava profilu chovatele + vytvoření žádosti + uložení přílohy. Při chybě nezůstane nic částečně uloženo.
 3. Po podání se data chovatele ani příloha žádosti nemění. `reviewed_by/at/rejection_reason` = NULL, `status=PENDING`, `is_verified` zůstává False.

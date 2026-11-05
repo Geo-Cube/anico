@@ -1,8 +1,8 @@
-import { Writable } from 'node:stream';
-import { pino } from 'pino';
+import { Readable, Writable } from 'node:stream';
+import { pino, type LoggerOptions } from 'pino';
 import request from 'supertest';
 import { vi } from 'vitest';
-import { createApp } from '../../src/app.js';
+import { serviceApp } from './app.js';
 import type { Breeder } from '../../src/modules/breeders/domain/breeder.js';
 import type {
   BreederRepository,
@@ -36,7 +36,7 @@ export const decideRequest = (
     .send(body as object);
 
 /** Zachytává řádky logu (pino) jako text. */
-export function logCapture(level = 'info') {
+export function logCapture(level = 'info', options: LoggerOptions = {}) {
   const lines: string[] = [];
   const stream = new Writable({
     write(chunk: Buffer, _enc, done) {
@@ -44,7 +44,11 @@ export function logCapture(level = 'info') {
       done();
     },
   });
-  return { logger: pino({ level }, stream), lines, text: () => lines.join('') };
+  return {
+    logger: pino({ ...options, level }, stream),
+    lines,
+    text: () => lines.join(''),
+  };
 }
 
 /**
@@ -64,13 +68,31 @@ export function faultyApp(
   const notifyDecision = vi.fn<(breeder: Breeder) => Promise<void>>(
     async () => undefined,
   );
-  const app = createApp({
+  const app = serviceApp({
     logger: log.logger,
-    isReady: () => true,
     breeders: options.wrapRepo ? options.wrapRepo(breeders) : breeders,
     files: options.wrapFiles ? options.wrapFiles(files) : files,
     notifier: { notifyDecision },
     authenticate: fixtureAuthenticate,
   });
   return { app, breeders, files, notifyDecision, log };
+}
+
+/** Otevřený certifikát, jehož stream selže před daty, nebo až po prvním bloku. */
+export function failingCertificate(failAfterData: boolean) {
+  let sent = false;
+  return {
+    stream: new Readable({
+      read() {
+        if (failAfterData && !sent) {
+          sent = true;
+          this.push(Buffer.from('%PDF-'));
+        } else {
+          this.destroy(new Error('gridfs down'));
+        }
+      },
+    }),
+    size: failAfterData ? 100 : 10,
+    contentType: 'application/pdf' as const,
+  };
 }

@@ -1,11 +1,11 @@
 import type {
   Breeder,
   NewBreeder,
+  Resubmission,
   Submission,
   VerificationRequest,
 } from '../../src/modules/breeders/domain/breeder.js';
 import type {
-  Decision,
   DecisionRecord,
   VerificationStatus,
 } from '../../src/modules/breeders/domain/internal-types.js';
@@ -18,6 +18,8 @@ import { randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
 import type { CertificateContentType } from '../../src/modules/breeders/domain/internal-types.js';
 
+const QUEUE_LIMIT = 500;
+
 // vrací kopie, aby volající nemohl mutovat uložený stav (jako databáze)
 function copy(breeder: Breeder): Breeder {
   return {
@@ -28,11 +30,15 @@ function copy(breeder: Breeder): Breeder {
           breedingStationCertificate: {
             ...breeder.verificationRequest.breedingStationCertificate,
           },
+          reviewHistory: breeder.verificationRequest.reviewHistory.map(
+            (review) => ({ ...review }),
+          ),
         }
       : null,
   };
 }
 
+/** Stejná sémantika jako MongoDB adaptér (podmíněné zápisy = atomické). */
 export function inMemoryBreeders(): BreederRepository {
   const breeders = new Map<string, Breeder>();
 
@@ -83,23 +89,24 @@ export function inMemoryBreeders(): BreederRepository {
     ): Promise<Breeder | null> {
       const breeder = breeders.get(breederId);
 
-      if (!breeder) {
+      if (!breeder || breeder.verificationRequest) {
         return null;
       }
-
-      if (breeder.verificationRequest) {
-        return null;
-      }
-      const requestId = randomBytes(12).toString('hex');
+      const now = new Date();
 
       const request: VerificationRequest = {
-        requestId: requestId,
-        submittedAt: new Date(),
+        requestId: randomBytes(12).toString('hex'),
         status: 'PENDING',
-        breedingStationCertificate: submission.breedingStationCertificate,
+        submittedAt: now,
+        lastSubmittedAt: now,
+        breedingStationCertificate: {
+          ...submission.breedingStationCertificate,
+        },
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
+        returnReason: null,
+        reviewHistory: [],
       };
 
       breeder.firstName = submission.firstName;
@@ -108,6 +115,45 @@ export function inMemoryBreeders(): BreederRepository {
       breeder.breedingStationName = submission.breedingStationName;
       breeder.breedingStationNumber = submission.breedingStationNumber;
       breeder.verificationRequest = request;
+
+      return copy(breeder);
+    },
+
+    async resubmitVerification(
+      breederId: string,
+      requestId: string,
+      resubmission: Resubmission,
+    ): Promise<Breeder | null> {
+      const breeder = breeders.get(breederId);
+      const request = breeder?.verificationRequest;
+
+      if (
+        !breeder ||
+        !request ||
+        request.requestId !== requestId ||
+        request.status !== 'RETURNED' ||
+        request.breedingStationCertificate.fileReference !==
+          resubmission.currentCertificateReference
+      ) {
+        return null;
+      }
+
+      breeder.firstName = resubmission.firstName;
+      breeder.lastName = resubmission.lastName;
+      breeder.emailAddress = resubmission.emailAddress;
+      breeder.breedingStationName = resubmission.breedingStationName;
+      breeder.breedingStationNumber = resubmission.breedingStationNumber;
+      request.status = 'PENDING';
+      request.lastSubmittedAt = new Date();
+      request.reviewedBy = null;
+      request.reviewedAt = null;
+      request.rejectionReason = null;
+      request.returnReason = null;
+      if (resubmission.breedingStationCertificate) {
+        request.breedingStationCertificate = {
+          ...resubmission.breedingStationCertificate,
+        };
+      }
 
       return copy(breeder);
     },
@@ -123,50 +169,47 @@ export function inMemoryBreeders(): BreederRepository {
         }
       }
 
-      if (!breeder) {
+      const request = breeder?.verificationRequest;
+      if (!breeder || request?.status !== 'PENDING') {
         return null;
       }
 
-      if (breeder.verificationRequest?.status !== 'PENDING') {
-        return null;
-      }
+      const reason =
+        decision.decision === 'REJECTED'
+          ? decision.rejectionReason
+          : decision.decision === 'RETURNED'
+            ? decision.returnReason
+            : null;
 
-      breeder.verificationRequest.status = decision.decision;
-      breeder.verificationRequest.reviewedBy = decision.reviewedBy;
-      breeder.verificationRequest.reviewedAt = decision.reviewedAt;
+      request.status = decision.decision;
+      request.reviewedBy = decision.reviewedBy;
+      request.reviewedAt = decision.reviewedAt;
+      request.rejectionReason =
+        decision.decision === 'REJECTED' ? reason : null;
+      request.returnReason = decision.decision === 'RETURNED' ? reason : null;
+      request.reviewHistory.push({
+        decision: decision.decision,
+        reviewedBy: decision.reviewedBy,
+        reviewedAt: decision.reviewedAt,
+        reason,
+      });
+      breeder.isVerified = decision.decision === 'APPROVED';
 
-      if (decision.decision === 'REJECTED') {
-        breeder.verificationRequest.rejectionReason = decision.rejectionReason;
-      } else {
-        breeder.verificationRequest.rejectionReason = null;
-      }
-
-      breeder.isVerified = breeder.verificationRequest.status === 'APPROVED';
       return copy(breeder);
     },
 
     async listByVerificationStatus(
-      status?: VerificationStatus,
+      status: VerificationStatus,
     ): Promise<Breeder[]> {
-      const allBreeders = Array.from(breeders.values());
-
-      const breedersWithRequest = allBreeders.filter(
-        (breeder) => breeder.verificationRequest !== null,
-      );
-
-      const bySubmission = (a: Breeder, b: Breeder) =>
-        (a.verificationRequest?.submittedAt.getTime() ?? 0) -
-        (b.verificationRequest?.submittedAt.getTime() ?? 0);
-
-      if (!status) {
-        return breedersWithRequest.sort(bySubmission).map(copy);
-      }
-
-      const breedersWithStatus = breedersWithRequest.filter(
-        (breeder) => breeder.verificationRequest?.status === status,
-      );
-
-      return breedersWithStatus.sort(bySubmission).map(copy);
+      return Array.from(breeders.values())
+        .filter((breeder) => breeder.verificationRequest?.status === status)
+        .sort(
+          (a, b) =>
+            (a.verificationRequest?.lastSubmittedAt.getTime() ?? 0) -
+            (b.verificationRequest?.lastSubmittedAt.getTime() ?? 0),
+        )
+        .slice(0, QUEUE_LIMIT)
+        .map(copy);
     },
 
     async countByVerificationStatus(): Promise<
@@ -174,6 +217,7 @@ export function inMemoryBreeders(): BreederRepository {
     > {
       const counts: Record<VerificationStatus, number> = {
         PENDING: 0,
+        RETURNED: 0,
         APPROVED: 0,
         REJECTED: 0,
       };

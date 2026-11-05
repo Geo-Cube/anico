@@ -4,7 +4,7 @@ import {
   VerificationSummarySchema,
 } from '@anico/shared-schemas';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PDF,
   PNG,
@@ -14,6 +14,7 @@ import {
   takeOverAndSubmit,
 } from '../support/api.js';
 import { testApp } from '../support/app.js';
+import { failingCertificate } from '../support/qa.js';
 
 const decision = (
   app: Parameters<typeof request>[0],
@@ -27,6 +28,10 @@ const decision = (
     .send(body as object);
 
 describe('admin verification requests API', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('returns 403 for a breeder on every endpoint and 401 without identity', async () => {
     const { app } = testApp();
     const id = await takeOverAndSubmit(app, 'breeder-1');
@@ -53,40 +58,57 @@ describe('admin verification requests API', () => {
       .expect((res) => expect(res.body.accountState).toBe('PENDING'));
   });
 
-  it('lists the queue oldest first with a status filter', async () => {
+  it('lists only PENDING requests oldest first by default, other states via the status filter', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-01T08:00:00.000Z'));
     const { app } = testApp();
     const first = await takeOverAndSubmit(app, 'b1');
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    vi.setSystemTime(new Date('2026-03-01T08:01:00.000Z'));
     await takeOverAndSubmit(app, 'b2', {
       file: { content: PNG, fileName: 'b2.png' },
     });
-    await request(app).get('/breeders/me').set(breederHeaders('b3'));
+    vi.setSystemTime(new Date('2026-03-01T08:02:00.000Z'));
+    await takeOverAndSubmit(app, 'b3');
+    const fourth = await takeOverAndSubmit(app, 'b4');
+    await request(app).get('/breeders/me').set(breederHeaders('b5'));
     await decision(app, first, { decision: 'APPROVED' }).expect(200);
+    await decision(app, fourth, {
+      decision: 'RETURNED',
+      returnReason: 'Doplňte',
+    }).expect(200);
+    const ids = (response: {
+      body: { items: { breeder: { breederId: string } }[] };
+    }) => response.body.items.map((item) => item.breeder.breederId);
 
-    const all = await request(app)
+    const queue = await request(app)
       .get('/verification-requests')
       .set(adminHeaders());
-    expect(all.status).toBe(200);
-    VerificationRequestListSchema.parse(all.body);
-    expect(
-      all.body.items.map(
-        (i: { breeder: { breederId: string } }) => i.breeder.breederId,
-      ),
-    ).toEqual(['b1', 'b2']);
-
-    const pending = await request(app)
-      .get('/verification-requests?status=PENDING')
-      .set(adminHeaders());
-    expect(pending.body.items).toHaveLength(1);
-    expect(pending.body.items[0]).toMatchObject({
+    expect(queue.status).toBe(200);
+    VerificationRequestListSchema.parse(queue.body);
+    expect(ids(queue)).toEqual(['b2', 'b3']);
+    expect(queue.body.items[0]).toMatchObject({
       status: 'PENDING',
       breeder: { breederId: 'b2', hasBreedingStation: true },
       breedingStationCertificate: { contentType: 'image/png' },
     });
+
+    const pending = await request(app)
+      .get('/verification-requests?status=PENDING')
+      .set(adminHeaders());
+    expect(pending.body).toEqual(queue.body);
     const approved = await request(app)
       .get('/verification-requests?status=APPROVED')
       .set(adminHeaders());
-    expect(approved.body.items).toHaveLength(1);
+    expect(ids(approved)).toEqual(['b1']);
+    const returned = await request(app)
+      .get('/verification-requests?status=RETURNED')
+      .set(adminHeaders());
+    expect(ids(returned)).toEqual(['b4']);
+    expect(returned.body.items[0].returnReason).toBe('Doplňte');
+    const rejected = await request(app)
+      .get('/verification-requests?status=REJECTED')
+      .set(adminHeaders());
+    expect(rejected.body.items).toEqual([]);
   });
 
   it('returns 400 for an invalid status or unknown query parameter', async () => {
@@ -106,19 +128,34 @@ describe('admin verification requests API', () => {
     const empty = await request(app)
       .get('/verification-requests/summary')
       .set(adminHeaders());
-    expect(empty.body).toEqual({ pending: 0, approved: 0, rejected: 0 });
+    expect(empty.body).toEqual({
+      pending: 0,
+      returned: 0,
+      approved: 0,
+      rejected: 0,
+    });
 
     const id = await takeOverAndSubmit(app, 'b1');
     await takeOverAndSubmit(app, 'b2');
+    const third = await takeOverAndSubmit(app, 'b3');
     await decision(app, id, {
       decision: 'REJECTED',
       rejectionReason: 'Špatně',
+    }).expect(200);
+    await decision(app, third, {
+      decision: 'RETURNED',
+      returnReason: 'Doplňte',
     }).expect(200);
     const summary = await request(app)
       .get('/verification-requests/summary')
       .set(adminHeaders());
     VerificationSummarySchema.parse(summary.body);
-    expect(summary.body).toEqual({ pending: 1, approved: 0, rejected: 1 });
+    expect(summary.body).toEqual({
+      pending: 1,
+      returned: 1,
+      approved: 0,
+      rejected: 1,
+    });
   });
 
   it('returns the detail without fileReference and 404 for unknown ids', async () => {
@@ -131,6 +168,9 @@ describe('admin verification requests API', () => {
     AdminVerificationRequestSchema.parse(detail.body);
     expect(detail.body.breeder.breederId).toBe('b1');
     expect(JSON.stringify(detail.body)).not.toContain('fileReference');
+    expect(detail.body.breedingStationCertificate.contentType).toBe(
+      'application/pdf',
+    );
 
     for (const bad of ['f'.repeat(24), 'abc', '..%2F', 'x'.repeat(25)]) {
       await request(app)
@@ -160,6 +200,44 @@ describe('admin verification requests API', () => {
       .get(`/verification-requests/${'a'.repeat(24)}/certificate`)
       .set(adminHeaders())
       .expect(404);
+  });
+
+  it('encodes RFC 5987 reserved characters in filename*', async () => {
+    const { app } = testApp();
+    const id = await takeOverAndSubmit(app, 'b1', {
+      file: { content: Buffer.from('%PDF-1.4 x'), fileName: "o'brien(1)*.pdf" },
+    });
+    const response = await request(app)
+      .get(`/verification-requests/${id}/certificate`)
+      .set(adminHeaders());
+    expect(response.headers['content-disposition']).toContain(
+      "filename*=UTF-8''o%27brien%281%29%2A.pdf",
+    );
+  });
+
+  it('answers 500 through the central handler when the certificate stream fails before data', async () => {
+    const { app, files } = testApp();
+    const id = await takeOverAndSubmit(app, 'b1');
+    vi.spyOn(files, 'open').mockResolvedValueOnce(failingCertificate(false));
+
+    const response = await request(app)
+      .get(`/verification-requests/${id}/certificate`)
+      .set(adminHeaders());
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Internal server error' });
+    expect(response.headers['content-disposition']).toBeUndefined();
+  });
+
+  it('aborts the connection when the certificate stream fails after data was sent', async () => {
+    const { app, files } = testApp();
+    const id = await takeOverAndSubmit(app, 'b1');
+    vi.spyOn(files, 'open').mockResolvedValueOnce(failingCertificate(true));
+
+    await expect(
+      request(app)
+        .get(`/verification-requests/${id}/certificate`)
+        .set(adminHeaders()),
+    ).rejects.toThrow();
   });
 
   describe('decision', () => {
@@ -225,6 +303,12 @@ describe('admin verification requests API', () => {
       [{ decision: 'APPROVED', reviewedBy: 'someone' }],
       [{ decision: 'APPROVED', isVerified: true }],
       [{ decision: 'APPROVED', rejectionReason: 'x' }],
+      [{ decision: 'RETURNED' }],
+      [{ decision: 'RETURNED', returnReason: '' }],
+      [{ decision: 'RETURNED', returnReason: ' \n\t ' }],
+      [{ decision: 'RETURNED', returnReason: 'x'.repeat(501) }],
+      [{ decision: 'RETURNED', rejectionReason: 'x' }],
+      [{ decision: 'REJECTED', returnReason: 'x' }],
     ])('returns 400 for invalid body %j and changes nothing', async (body) => {
       const { app, notifyDecision } = testApp();
       const id = await takeOverAndSubmit(app, 'b1');

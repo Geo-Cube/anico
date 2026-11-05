@@ -1,9 +1,8 @@
 import { testIdentity } from '@anico/auth/testing';
 import { MyAccountSchema } from '@anico/shared-schemas';
-import { pino } from 'pino';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { createApp } from '../../src/app.js';
+import { serviceApp } from '../support/app.js';
 import { PDF, submit, validFields } from '../support/api.js';
 import { inMemoryBreeders, inMemoryFiles } from '../support/in-memory.js';
 import { signedAuth } from '../support/signed-auth.js';
@@ -13,9 +12,7 @@ async function authenticatedApp() {
   const auth = await signedAuth();
   const breeders = inMemoryBreeders();
   const files = inMemoryFiles();
-  const app = createApp({
-    logger: pino({ level: 'silent' }),
-    isReady: () => true,
+  const app = serviceApp({
     breeders,
     files,
     notifier: { notifyDecision: async () => undefined },
@@ -53,9 +50,7 @@ describe('real @anico/auth HTTP boundary', () => {
   });
 
   it('requires req.auth even when no authenticator was configured', async () => {
-    const app = createApp({
-      logger: pino({ level: 'silent' }),
-      isReady: () => true,
+    const app = serviceApp({
       breeders: inMemoryBreeders(),
       files: inMemoryFiles(),
       notifier: { notifyDecision: async () => undefined },

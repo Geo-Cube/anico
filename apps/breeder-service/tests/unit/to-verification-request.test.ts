@@ -1,7 +1,8 @@
 import type { VerificationRequest } from '../../src/modules/breeders/domain/breeder.js';
-import type {
-  CertificateFile,
-  VerificationRequestDto,
+import {
+  VerificationRequestSchema,
+  type CertificateFile,
+  type VerificationRequestDto,
 } from '@anico/shared-schemas';
 import { toVerificationRequest } from '../../src/modules/breeders/http/breeder-mapper.js';
 import { describe, it, expect } from 'vitest';
@@ -12,6 +13,7 @@ describe('toVerificationRequest', () => {
       requestId: '123456789012345678901234',
       status: 'PENDING',
       submittedAt: new Date(),
+      lastSubmittedAt: new Date(),
       breedingStationCertificate: {
         fileName: 'certificate.pdf',
         fileReference: 'certificate-reference',
@@ -19,6 +21,8 @@ describe('toVerificationRequest', () => {
       reviewedBy: null,
       reviewedAt: null,
       rejectionReason: null,
+      returnReason: null,
+      reviewHistory: [],
     };
 
     const contentType: CertificateFile['contentType'] = 'application/pdf';
@@ -38,5 +42,64 @@ describe('toVerificationRequest', () => {
     expect(result.reviewedBy).toBe(request.reviewedBy);
     expect(result.reviewedAt).toBe(request.reviewedAt?.toISOString() ?? null);
     expect(result.rejectionReason).toBe(request.rejectionReason);
+    expect(result.lastSubmittedAt).toBe(request.lastSubmittedAt.toISOString());
+    expect(result.returnReason).toBeNull();
+    expect(result.reviewHistory).toEqual([]);
+  });
+
+  it('maps a RETURNED request with its review history as ISO strings', () => {
+    const request: VerificationRequest = {
+      requestId: '123456789012345678901234',
+      status: 'RETURNED',
+      submittedAt: new Date('2026-01-01T00:00:00Z'),
+      lastSubmittedAt: new Date('2026-01-03T00:00:00Z'),
+      breedingStationCertificate: {
+        fileName: 'certificate.pdf',
+        fileReference: 'certificate-reference',
+      },
+      reviewedBy: 'admin-2',
+      reviewedAt: new Date('2026-01-04T00:00:00Z'),
+      rejectionReason: null,
+      returnReason: 'Doplňte',
+      reviewHistory: [
+        {
+          decision: 'RETURNED',
+          reviewedBy: 'admin-1',
+          reviewedAt: new Date('2026-01-02T00:00:00Z'),
+          reason: 'Nečitelné',
+        },
+        {
+          decision: 'RETURNED',
+          reviewedBy: 'admin-2',
+          reviewedAt: new Date('2026-01-04T00:00:00Z'),
+          reason: 'Doplňte',
+        },
+      ],
+    };
+
+    const result = VerificationRequestSchema.parse(
+      toVerificationRequest(request, 'image/png'),
+    );
+
+    expect(result).toMatchObject({
+      status: 'RETURNED',
+      submittedAt: '2026-01-01T00:00:00.000Z',
+      lastSubmittedAt: '2026-01-03T00:00:00.000Z',
+      returnReason: 'Doplňte',
+      reviewHistory: [
+        {
+          decision: 'RETURNED',
+          reviewedBy: 'admin-1',
+          reviewedAt: '2026-01-02T00:00:00.000Z',
+          reason: 'Nečitelné',
+        },
+        {
+          decision: 'RETURNED',
+          reviewedBy: 'admin-2',
+          reviewedAt: '2026-01-04T00:00:00.000Z',
+          reason: 'Doplňte',
+        },
+      ],
+    });
   });
 });

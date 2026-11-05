@@ -35,6 +35,14 @@ export class InvalidCertificateError extends Error {
   }
 }
 
+/** Podání bez certifikátu tam, kde je povinný (vše kromě opravy RETURNED). */
+export class CertificateRequiredError extends Error {
+  constructor() {
+    super('Certificate file is required');
+    this.name = 'CertificateRequiredError';
+  }
+}
+
 export class InvalidDecisionError extends Error {
   constructor(message = 'Rejection reason is required') {
     super(message);
