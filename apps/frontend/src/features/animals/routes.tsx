@@ -1,3 +1,4 @@
+import { Dialog } from '@base-ui/react/dialog';
 import { useState } from 'react';
 import {
   useInfiniteQuery,
@@ -117,83 +118,84 @@ function AnimalDetailPage() {
     );
   const animal = query.data;
   return (
-    <section className="space-y-6">
-      <Link to="/zvirata" className="text-sm underline">
-        Zpět na moje zvířata
-      </Link>
-      <div className="flex flex-wrap items-center gap-4">
-        <h1 className="text-2xl font-semibold text-brand">
-          {animalLabel(animal)}
-        </h1>
-        <Link
-          to={`/zvirata/${animal.id}/upravit`}
-          className={buttonVariants({ variant: 'outline' })}
-        >
-          Upravit
+    <Dialog.Root
+      open={confirming}
+      onOpenChange={(open) => {
+        if (!remove.isPending) setConfirming(open);
+      }}
+    >
+      <section className="space-y-6">
+        <Link to="/zvirata" className="text-sm underline">
+          Zpět na moje zvířata
         </Link>
-        <Button variant="outline" onClick={() => setConfirming(true)}>
-          Smazat zvíře
-        </Button>
-      </div>
-      <Card className="p-6">
-        <dl className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <dt className="text-muted-foreground">Druh</dt>
-            <dd>{speciesLabel(animal.species)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Plemeno</dt>
-            <dd>{breedLabel(animal)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Pohlaví</dt>
-            <dd>{animal.sex === 'male' ? 'Samec' : 'Samice'}</dd>
-          </div>
-          {optionalFields.map(({ key, label }) => (
-            <div key={key}>
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="whitespace-pre-wrap break-words">
-                {animal[key] ?? 'Nevyplněno'}
-                {key === 'weightKg' && animal.weightKg !== null ? ' kg' : ''}
-              </dd>
+        <div className="flex flex-wrap items-center gap-4">
+          <h1 className="text-2xl font-semibold text-brand">
+            {animalLabel(animal)}
+          </h1>
+          <Link
+            to={`/zvirata/${animal.id}/upravit`}
+            className={buttonVariants({ variant: 'outline' })}
+          >
+            Upravit
+          </Link>
+          <Dialog.Trigger render={<Button variant="outline" />}>
+            Smazat zvíře
+          </Dialog.Trigger>
+        </div>
+        <Card className="p-6">
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Druh</dt>
+              <dd>{speciesLabel(animal.species)}</dd>
             </div>
+            <div>
+              <dt className="text-muted-foreground">Plemeno</dt>
+              <dd>{breedLabel(animal)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Pohlaví</dt>
+              <dd>{animal.sex === 'male' ? 'Samec' : 'Samice'}</dd>
+            </div>
+            {optionalFields.map(({ key, label }) => (
+              <div key={key}>
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="whitespace-pre-wrap break-words">
+                  {animal[key] ?? 'Nevyplněno'}
+                  {key === 'weightKg' && animal.weightKg !== null ? ' kg' : ''}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+        <h2 className="text-lg font-semibold">Fotografie</h2>
+        {animal.photos.length === 0 && <p>Žádné fotografie.</p>}
+        <ul className="grid gap-4 sm:grid-cols-3">
+          {animal.photos.map((photo) => (
+            <li key={photo.id}>
+              <a href={photoUrl(animal.id, photo.id)}>
+                <img
+                  src={photoUrl(animal.id, photo.id)}
+                  alt={photo.fileName}
+                  className="h-56 w-full rounded-xl object-cover"
+                />
+              </a>
+              <p>
+                {photo.isPrimary ? 'Hlavní fotografie · ' : ''}
+                {photo.fileName}
+              </p>
+            </li>
           ))}
-        </dl>
-      </Card>
-      <h2 className="text-lg font-semibold">Fotografie</h2>
-      {animal.photos.length === 0 && <p>Žádné fotografie.</p>}
-      <ul className="grid gap-4 sm:grid-cols-3">
-        {animal.photos.map((photo) => (
-          <li key={photo.id}>
-            <a href={photoUrl(animal.id, photo.id)}>
-              <img
-                src={photoUrl(animal.id, photo.id)}
-                alt={photo.fileName}
-                className="h-56 w-full rounded-xl object-cover"
-              />
-            </a>
-            <p>
-              {photo.isPrimary ? 'Hlavní fotografie · ' : ''}
-              {photo.fileName}
-            </p>
-          </li>
-        ))}
-      </ul>
-      {confirming && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
-        >
-          <Card className="max-w-lg space-y-4 p-6">
-            <h2 id="delete-title" className="text-lg font-semibold">
+        </ul>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-40 bg-foreground/30" />
+          <Dialog.Popup className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-xl outline-none">
+            <Dialog.Title className="text-lg font-semibold">
               Opravdu smazat zvíře?
-            </h2>
-            <p>
+            </Dialog.Title>
+            <Dialog.Description>
               Tento krok je nevratný. Smaže profil, všechny fotografie i všechny
               doklady zvířete.
-            </p>
+            </Dialog.Description>
             {remove.isError && <AnimalError error={remove.error} />}
             <div className="flex gap-3">
               <Button
@@ -210,10 +212,10 @@ function AnimalDetailPage() {
                 Nenávratně smazat
               </Button>
             </div>
-          </Card>
-        </div>
-      )}
-    </section>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </section>
+    </Dialog.Root>
   );
 }
 

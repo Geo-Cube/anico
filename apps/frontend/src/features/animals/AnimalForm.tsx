@@ -69,6 +69,7 @@ function AnimalForm({ animal }: { animal?: Animal }) {
   const session = useCurrentSession();
   const client = useQueryClient();
   const navigate = useNavigate();
+  const [initialAnimal] = useState(animal);
   const [species, setSpecies] = useState<AnimalSpecies>(
     animal?.species ?? 'dog',
   );
@@ -116,15 +117,47 @@ function AnimalForm({ animal }: { animal?: Animal }) {
     };
     const primaryChoice = primary.startsWith('new:')
       ? { primaryUploadIndex: Number(primary.slice(4)) }
-      : primary && existing.some((photo) => photo.id === primary)
+      : primary &&
+          primary !==
+            initialAnimal?.photos.find((photo) => photo.isPrimary)?.id &&
+          existing.some((photo) => photo.id === primary)
         ? { primaryPhotoId: primary }
         : {};
-    const result = animal
-      ? UpdateAnimalSchema.safeParse({
-          ...profile,
-          removePhotoIds: removed,
+    const changes = initialAnimal
+      ? {
+          ...(species !== initialAnimal.species ||
+          breedId !== initialAnimal.breedId
+            ? { species, breedId }
+            : {}),
+          ...(sex !== initialAnimal.sex ? { sex } : {}),
+          ...Object.fromEntries(
+            optionalFields
+              .filter(
+                ({ key }) => values[key] !== String(initialAnimal[key] ?? ''),
+              )
+              .map(({ key }) => [
+                key,
+                values[key]?.trim()
+                  ? key === 'weightKg'
+                    ? Number(values[key])
+                    : values[key]
+                  : null,
+              ]),
+          ),
+          ...(removed.length ? { removePhotoIds: removed } : {}),
           ...primaryChoice,
-        })
+        }
+      : {};
+    if (
+      initialAnimal &&
+      Object.keys(changes).length === 0 &&
+      files.length === 0
+    ) {
+      void navigate(`/zvirata/${initialAnimal.id}`);
+      return;
+    }
+    const result = animal
+      ? UpdateAnimalSchema.safeParse(changes)
       : CreateAnimalSchema.safeParse({
           ...profile,
           ...(primary.startsWith('new:') ? primaryChoice : {}),

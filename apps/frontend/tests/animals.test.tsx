@@ -166,11 +166,59 @@ describe('zvířata', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Uložit zvíře' }));
     expect(await screen.findByRole('heading', { name: 'Argo' })).toBeVisible();
-    expect(payload).toMatchObject({
+    expect(payload).toEqual({
       city: null,
       removePhotoIds: [animal.photos[0]!.id],
     });
     expect(payload).not.toHaveProperty('primaryPhotoId');
+  });
+
+  it('posílá při změně jediného údaje pouze tento klíč a nesahá na hlavní fotografii', async () => {
+    let payload: unknown;
+    server.use(
+      http.patch('/api/animal/animals/:id', async ({ request }) => {
+        payload = await request.json();
+        return HttpResponse.json({ ...animal, city: null });
+      }),
+    );
+    renderApp(`/zvirata/${animal.id}/upravit`);
+    await userEvent.clear(await screen.findByLabelText('Město'));
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.click(screen.getByRole('button', { name: 'Uložit zvíře' }));
+    expect(await screen.findByRole('heading', { name: 'Argo' })).toBeVisible();
+    expect(payload).toEqual({ city: null });
+  });
+
+  it('bez změn se vrátí na detail bez PATCH požadavku', async () => {
+    const patch = vi.fn(() => HttpResponse.json(animal));
+    server.use(http.patch('/api/animal/animals/:id', patch));
+    const router = renderApp(`/zvirata/${animal.id}/upravit`);
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.click(screen.getByRole('button', { name: 'Uložit zvíře' }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/zvirata/${animal.id}`),
+    );
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('posílá při změně plemene současně druh i plemeno', async () => {
+    const nextBreed = animalBreeds('dog')[1]!;
+    let payload: unknown;
+    server.use(
+      http.patch('/api/animal/animals/:id', async ({ request }) => {
+        payload = await request.json();
+        return HttpResponse.json({ ...animal, breedId: nextBreed.id });
+      }),
+    );
+    renderApp(`/zvirata/${animal.id}/upravit`);
+    await screen.findByRole('option', { name: nextBreed.name });
+    await userEvent.selectOptions(
+      screen.getByLabelText('Plemeno'),
+      nextBreed.id,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Uložit zvíře' }));
+    expect(await screen.findByRole('heading', { name: 'Argo' })).toBeVisible();
+    expect(payload).toEqual({ species: 'dog', breedId: nextBreed.id });
   });
 
   it('vysvětluje nutnost ověření chovatele bez odhlášení', async () => {
@@ -222,6 +270,24 @@ describe('zvířata', () => {
       expect(router.state.location.pathname).toBe('/zvirata'),
     );
     expect(calls).toBe(1);
+  });
+
+  it('Escape zavře potvrzení bez smazání a vrátí focus na spouštěč', async () => {
+    const remove = vi.fn(() => new HttpResponse(null, { status: 204 }));
+    server.use(http.delete('/api/animal/animals/:id', remove));
+    renderApp(`/zvirata/${animal.id}`);
+    const trigger = await screen.findByRole('button', { name: 'Smazat zvíře' });
+    await userEvent.click(trigger);
+    const dialog = screen.getByRole('dialog');
+    await waitFor(() =>
+      expect(dialog).toContainElement(document.activeElement as HTMLElement),
+    );
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it.each([413, 415])('zobrazuje chybu uploadu %s', async (status) => {
