@@ -7,6 +7,7 @@ import {
   RequireSession,
 } from '@/features/auth';
 import { breedersRoutes } from '@/features/breeders';
+import { animalsRoutes } from '@/features/animals/routes';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { ProfileGate } from '@/features/profile/ProfileGate';
 import { buttonVariants } from '@/shared/ui/button';
@@ -36,6 +37,7 @@ export const routes: RouteObject[] = [
             children: [
               { index: true, element: <DashboardPage /> },
               { path: 'ucet', element: <AccountPage /> },
+              ...animalsRoutes,
               {
                 path: 'administrace/chovatele',
                 element: <RequireRole roles={['admin', 'owner']} />,

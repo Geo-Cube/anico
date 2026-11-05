@@ -14,6 +14,7 @@ export class ApiError extends Error {
     readonly kind: ApiErrorKind,
     readonly status?: number,
     readonly code?: string,
+    readonly issues?: unknown,
   ) {
     super(code ?? kind);
     this.name = 'ApiError';
@@ -28,7 +29,7 @@ export function isApiError(
 }
 
 type RequestOptions<T> = {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** Required by the gateway for every state-changing request. */
   csrfToken?: string;
   body?: unknown;
@@ -37,17 +38,20 @@ type RequestOptions<T> = {
   schema?: ZodType<T>;
 };
 
-async function errorCode(response: Response) {
+async function errorBody(
+  response: Response,
+): Promise<{ code?: string; issues?: unknown }> {
   try {
     const body: unknown = await response.json();
-    return body &&
-      typeof body === 'object' &&
-      'error' in body &&
-      typeof body.error === 'string'
-      ? body.error
-      : undefined;
+    if (!body || typeof body !== 'object') return {};
+    return {
+      ...('error' in body && typeof body.error === 'string'
+        ? { code: body.error }
+        : {}),
+      ...('issues' in body ? { issues: body.issues } : {}),
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -61,7 +65,9 @@ export async function apiRequest<T = undefined>(
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const multipart = body instanceof FormData;
+  if (body !== undefined && !multipart)
+    headers['Content-Type'] = 'application/json';
   let response: Response;
   try {
     response = await fetch(path, {
@@ -70,20 +76,23 @@ export async function apiRequest<T = undefined>(
       credentials: 'same-origin',
       redirect: 'error',
       ...(signal ? { signal } : {}),
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(body === undefined
+        ? {}
+        : { body: multipart ? body : JSON.stringify(body) }),
     });
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new ApiError('unavailable');
   }
   if (!response.ok) {
-    const code = await errorCode(response);
+    const { code, issues } = await errorBody(response);
     if (response.status === 401 && code !== 'RECENT_LOGIN_REQUIRED')
-      throw new ApiError('unauthorized', 401, code);
-    if (response.status === 403) throw new ApiError('forbidden', 403, code);
+      throw new ApiError('unauthorized', 401, code, issues);
+    if (response.status === 403)
+      throw new ApiError('forbidden', 403, code, issues);
     if (response.status >= 400 && response.status < 500)
-      throw new ApiError('rejected', response.status, code);
-    throw new ApiError('unavailable', response.status, code);
+      throw new ApiError('rejected', response.status, code, issues);
+    throw new ApiError('unavailable', response.status, code, issues);
   }
   if (!schema) return undefined as T;
   try {
