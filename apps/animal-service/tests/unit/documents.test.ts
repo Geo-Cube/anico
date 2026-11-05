@@ -61,20 +61,45 @@ const uploads = async () => [
 ];
 
 describe('document submission keeps files and records consistent', () => {
-  it('removes already stored files when the database write fails', async () => {
-    const { files, stored } = fakeFiles();
-    const documents = useCases(
-      {
-        saveVersions: async () => {
-          throw new Error('write failed');
-        },
+  it('keeps stored files when a failed write cannot be shown to be absent', async () => {
+    for (const load of [
+      // po chybě zápisu verze ve stavu chybí – zápis ale může ještě doběhnout
+      async () => ({
+        animalId: ANIMAL_ID,
+        ownerUserId: owner.userId,
+        revision: 0,
+        versions: [],
+      }),
+      // stav nelze vůbec zjistit
+      async () => {
+        throw new Error('connection lost');
       },
-      files,
-    );
-    await expect(
-      documents.submit(owner, 'token', ANIMAL_ID, uploads),
-    ).rejects.toThrow('write failed');
-    expect(stored.size).toBe(0);
+    ]) {
+      const { files, stored } = fakeFiles();
+      let loads = 0;
+      const documents = useCases(
+        {
+          // kontrola vlastnictví a plán zápisu uspějí; třetí načtení (po chybě zápisu) je testované
+          load: async () =>
+            loads++ < 2
+              ? {
+                  animalId: ANIMAL_ID,
+                  ownerUserId: owner.userId,
+                  revision: 0,
+                  versions: [],
+                }
+              : load(),
+          saveVersions: async () => {
+            throw new Error('acknowledgement lost');
+          },
+        },
+        files,
+      );
+      await expect(
+        documents.submit(owner, 'token', ANIMAL_ID, uploads),
+      ).rejects.toThrow('acknowledgement lost');
+      expect(stored.size).toBe(2);
+    }
   });
 
   it('gives up after repeated concurrent changes with 409 and no stored files', async () => {

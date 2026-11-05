@@ -43,6 +43,13 @@ function requireActor(actor: Identity | undefined): Identity {
   return actor;
 }
 
+/** Interní obálka: zápis mohl proběhnout, uložené soubory se proto nesmí uklidit. */
+class UnknownWriteOutcome extends Error {
+  constructor(cause: unknown) {
+    super('Document write outcome unknown', { cause });
+  }
+}
+
 const isReviewer = (identity: Identity) =>
   REVIEWER_ROLES.some((role) => identity.roles.includes(role));
 
@@ -149,8 +156,37 @@ export function documentUseCases(dependencies: {
   }
 
   /**
+   * Výjimka ze `saveVersions` nemusí znamenat neprovedený zápis (ztracené potvrzení, timeout).
+   * Uložené verze se proto dohledají; chybí-li, soubory se nemažou, protože zápis může ještě
+   * doběhnout. Osiřelý soubor je neškodný, smazaný soubor uložené verze je ztráta dat.
+   */
+  async function reconcileUnknownWrite(
+    animalId: string,
+    created: readonly DocumentVersion[],
+    stored: readonly NewVersionInput[],
+  ): Promise<DocumentVersion[] | null> {
+    try {
+      const ids = new Set(
+        (await repository.load(animalId))?.versions.map(({ id }) => id),
+      );
+      if (created.every(({ id }) => ids.has(id))) return [...created];
+    } catch {
+      // stav nelze zjistit: stejně jako u chybějících verzí soubory ponechat
+    }
+    logger.warn(
+      {
+        animalId,
+        fileReferences: stored.map(({ file }) => file.fileReference),
+      },
+      'Document write outcome unknown; files kept for deferred cleanup',
+    );
+    return null;
+  }
+
+  /**
    * Zapíše novou podobu verzí optimisticky (ADR-0005): při souběžné změně se plán sestaví
-   * znovu nad čerstvým stavem. Při jakékoli chybě se uložené soubory smažou.
+   * znovu nad čerstvým stavem. Soubory se mažou jen tehdy, když jisté je, že je žádný zápis
+   * nepoužil (odmítnutí před zápisem nebo nepřijatá revize).
    */
   async function writeVersions(
     identity: Identity,
@@ -172,18 +208,28 @@ export function documentUseCases(dependencies: {
             submittedBy: identity.userId,
           },
         );
-        if (
-          await repository.saveVersions(
+        let saved: boolean;
+        try {
+          saved = await repository.saveVersions(
             animalId,
             identity.userId,
             documents.revision,
             next.versions,
-          )
-        )
-          return next.created;
+          );
+        } catch (error) {
+          const persisted = await reconcileUnknownWrite(
+            animalId,
+            next.created,
+            stored,
+          );
+          if (persisted) return persisted;
+          throw new UnknownWriteOutcome(error);
+        }
+        if (saved) return next.created;
       }
       throw new DocumentError(409, 'Documents changed concurrently; retry');
     } catch (error) {
+      if (error instanceof UnknownWriteOutcome) throw error.cause;
       await removeFiles(stored);
       throw error;
     }

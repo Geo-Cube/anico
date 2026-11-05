@@ -17,13 +17,17 @@ verzí dokladů a souborů v jedné transakci (UC-02/6). Repozitář nepoužív�
 1. **Umístění (R1):** modul `documents` v `animal-service`. Vlastnictví i existence zvířete jsou ve stejné databázi.
 2. **Model (R3):** verze dokladů jsou pole `documents[]` přímo v dokumentu zvířete (`animals`). Každá operace je
    jeden podmíněný zápis do jednoho dokumentu, takže je atomická bez transakcí:
-   - podání: `findOneAndUpdate` s filtrem `_id`, `ownerUserId` a `documentsRevision` (optimistická kontrola);
+   - podání: `updateOne` s filtrem `_id`, `ownerUserId` a `documentsRevision` (optimistická kontrola);
      při souběhu se operace zopakuje nad čerstvým stavem (nejvýše 3×);
    - rozhodnutí: filtr na `_id` verze, `isCurrent: true` a `assessmentStatus: PENDING`;
    - „nejvýše jeden nástupce“ (UC-03/5) vynucuje databáze tímto podmíněným zápisem: nástupce lze přidat jen
      k verzi, která je v okamžiku zápisu aktuální. Unikátní index uvnitř pole jednoho dokumentu MongoDB neumí.
    - odstranění zvířete smaže i všechny verze jedním `findOneAndDelete`; soubory z GridFS se mažou až potom
      (selhání úklidu se jen zaloguje, osiřelý soubor nemá žádný záznam, přes který by šel otevřít).
+   - nahrané soubory se při neúspěchu mažou jen tehdy, když je jisté, že je žádný zápis nepoužil (odmítnutí před
+     zápisem, nepřijatá revize). Výjimka ze samotného zápisu může znamenat ztracené potvrzení: služba proto stav
+     znovu načte. Jsou-li nové verze uložené, operace uspěla. Jinak (nebo když stav nelze zjistit) soubory ponechá
+     a zaloguje jejich reference k odloženému úklidu, protože zápis může ještě doběhnout.
 3. **Řada verzí podle typu (R7, odchylka od UC-03/4):** zvíře má pro každý typ dokladu nejvýše jednu řadu verzí.
    Podání dokladu typu, který už existuje, vytvoří novou verzi téže řady (`versionNumber + 1`,
    `previousDocumentId` = dosud aktuální verze) bez ohledu na stav předchozí verze. Původní soubor i rozhodnutí

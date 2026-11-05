@@ -28,14 +28,14 @@ Pole `documents[]` a `documentsRevision` v dokumentu kolekce `animals` (ADR-0005
 `animalDocuments`. `fileReference` a `submittedBy` API nevrací. Migrace
 `20261105160825-animal-documents` přidává index fronty.
 
-| Invariant                                   | Vynucení                                                                                       |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Podání uloženo celé nebo vůbec              | soubory se ověří (formát) dřív, než se cokoli uloží; jeden `updateOne` s revizí; úklid souborů |
-| Nejvýše jeden nástupce verze, verze +1      | plán ze čerstvého stavu + zápis jen při nezměněné `documentsRevision`                          |
-| Rozhodnutí jen o aktuální `PENDING`, jednou | `findOneAndUpdate` s `$elemMatch {_id, isCurrent: true, assessmentStatus: PENDING}`            |
-| Rozhodnutí se nepřepíše podáním             | rozhodnutí zvyšuje `documentsRevision`; podání ze starší revize se zopakuje                    |
-| Fronta jen aktuální `PENDING`               | agregace přes `documents.isCurrent` + `documents.assessmentStatus`, řazení `submittedAt`       |
-| Soubor bez záznamu / záznam bez souboru     | soubor se ukládá před zápisem a při chybě maže; při mazání zvířete se maže až po záznamu       |
+| Invariant                                   | Vynucení                                                                                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Podání uloženo celé nebo vůbec              | soubory se ověří (formát) dřív, než se cokoli uloží; jeden `updateOne` s revizí; úklid souborů                                                               |
+| Nejvýše jeden nástupce verze, verze +1      | plán ze čerstvého stavu + zápis jen při nezměněné `documentsRevision`                                                                                        |
+| Rozhodnutí jen o aktuální `PENDING`, jednou | `findOneAndUpdate` s `$elemMatch {_id, isCurrent: true, assessmentStatus: PENDING}`                                                                          |
+| Rozhodnutí se nepřepíše podáním             | rozhodnutí zvyšuje `documentsRevision`; podání ze starší revize se zopakuje                                                                                  |
+| Fronta jen aktuální `PENDING`               | agregace přes `documents.isCurrent` + `documents.assessmentStatus`, řazení `submittedAt`                                                                     |
+| Soubor bez záznamu / záznam bez souboru     | soubor se ukládá před zápisem; maže se jen při jistě neprovedeném zápisu, při nejistém výsledku zůstává (ADR-0005); při mazání zvířete se maže až po záznamu |
 
 ## 3. Oprávnění a pořadí kontrol
 

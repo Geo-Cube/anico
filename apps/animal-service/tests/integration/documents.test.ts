@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import mongoose, { type Connection } from 'mongoose';
+import mongoose, { Types, type Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { pino } from 'pino';
 import request from 'supertest';
@@ -29,6 +29,9 @@ import { createApp } from '../../src/app.js';
 import { createModules } from '../../src/modules/index.js';
 import { migrateDatabase } from '../../src/database/engine.js';
 import { loadMigrations } from '../../src/database/registry.js';
+import { documentUseCases } from '../../src/modules/documents/application/documents.js';
+import { gridFsDocumentStorage } from '../../src/modules/documents/infrastructure/gridfs-document-storage.js';
+import { mongooseDocumentsRepository } from '../../src/modules/documents/infrastructure/mongoose-documents-repository.js';
 
 const owner = testIdentity({ roles: ['breeder'] });
 const stranger = testIdentity({ roles: ['breeder'] });
@@ -604,6 +607,42 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
       .get(`/animals/${animalId}/documents`)
       .set(await auth(admin))
       .expect(404);
+  });
+
+  it('keeps files of versions whose write succeeded but whose acknowledgement was lost', async () => {
+    const repository = mongooseDocumentsRepository(connection);
+    const documents = documentUseCases({
+      // zápis proběhne, ale klient dostane chybu spojení (ztracené potvrzení)
+      repository: {
+        ...repository,
+        async saveVersions(...args) {
+          await repository.saveVersions(...args);
+          throw new Error('connection closed before acknowledgement');
+        },
+      },
+      files: gridFsDocumentStorage(connection),
+      verification: { isVerified: async () => true },
+      newId: () => new Types.ObjectId().toString(),
+      logger: { warn: () => undefined },
+    });
+    const animalId = await createAnimal();
+
+    const [v1] = await documents.submit(owner, 'token', animalId, async () => [
+      { documentType: 'PEDIGREE', fileName: 'rodokmen.pdf', content: PDF },
+    ]);
+    expect((await download(animalId, v1!.id).expect(200)).body).toEqual(PDF);
+
+    await reject(animalId, v1!.id);
+    const v2 = await documents.replace(
+      owner,
+      'token',
+      animalId,
+      v1!.id,
+      async () => ({ fileName: 'nova.png', content: PNG }),
+    );
+    expect(v2.previousDocumentId).toBe(v1!.id);
+    expect((await download(animalId, v2.id).expect(200)).body).toEqual(PNG);
+    expect(await storedFiles()).toBe(2);
   });
 
   it('accepts upper-case IDs the contract allows on every document operation', async () => {
