@@ -204,3 +204,5 @@ export {
   type ListAnimalsQuery,
   type AnimalList,
 } from './animal.js';
+
+export * from './document.js';
