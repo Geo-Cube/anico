@@ -1,6 +1,6 @@
 import type { Session } from '@anico/shared-schemas';
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
-import { forgetUser } from '@/features/auth/session';
+import { discardUserData, forgetUser } from '@/features/auth/session';
 import { isApiError } from '@/shared/lib/http';
 
 export function createQueryClient() {
@@ -30,8 +30,8 @@ export function createQueryClient() {
     const data = event.query.state.data as Session | null | undefined;
     if (data === undefined) return;
     const next = data?.identity.userId ?? null;
-    if (userId !== undefined && next !== userId)
-      client.removeQueries({ predicate: (q) => q.queryKey[0] !== 'session' });
+    // New generation: requests started for the previous user are ignored.
+    if (userId !== undefined && next !== userId) discardUserData(client);
     userId = next;
   });
   return client;
