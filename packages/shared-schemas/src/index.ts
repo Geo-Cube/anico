@@ -8,19 +8,18 @@ export const BreedingPlanSchema = CreateBreedingPlanSchema.extend({
   id: z.string().regex(/^[a-f\d]{24}$/i),
 });
 
+export type CreateBreedingPlanInput = z.infer<typeof CreateBreedingPlanSchema>;
+export type BreedingPlanResponse = z.infer<typeof BreedingPlanSchema>;
+
 export const ServiceHealthResponseSchema = z.strictObject({
   status: z.literal('ok'),
   service: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-service$/),
 });
+export type ServiceHealthResponse = z.infer<typeof ServiceHealthResponseSchema>;
 
 export const HealthResponseSchema = ServiceHealthResponseSchema.extend({
   service: z.literal('breeding-service'),
 });
-
-export type ServiceHealthResponse = z.infer<typeof ServiceHealthResponseSchema>;
-
-export type CreateBreedingPlanInput = z.infer<typeof CreateBreedingPlanSchema>;
-export type BreedingPlanResponse = z.infer<typeof BreedingPlanSchema>;
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 
 // Starter contract for generated modules. Add domain-specific contracts when
@@ -34,6 +33,130 @@ export const NamedRecordSchema = CreateNamedRecordSchema.extend({
 export type CreateNamedRecordInput = z.infer<typeof CreateNamedRecordSchema>;
 export type NamedRecord = z.infer<typeof NamedRecordSchema>;
 
+// Shared structure for stored files (used for documents and photos)
+export const StoredFileSchema = z.strictObject({
+  fileName: z.string(),
+  fileReference: z.string(),
+});
+export type StoredFile = z.infer<typeof StoredFileSchema>;
+
+export const CertificateFileSchema = z.strictObject({
+  fileName: z.string(),
+  contentType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+});
+export type CertificateFile = z.infer<typeof CertificateFileSchema>;
+
+export const ObjectIdSchema = z.string().regex(/^[a-fA-F0-9]{24}$/);
+
+// Verification-related schemas and types
+export const VerificationStatusSchema = z.enum([
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+]);
+export type VerificationStatus = z.infer<typeof VerificationStatusSchema>;
+
+export const VerificationRequestSchema = z.strictObject({
+  id: ObjectIdSchema,
+  status: VerificationStatusSchema,
+  submittedAt: z.iso.datetime(),
+  breedingStationCertificate: CertificateFileSchema,
+  reviewedBy: z.string().nullable(),
+  reviewedAt: z.iso.datetime().nullable(),
+  rejectionReason: z.string().nullable(),
+});
+export type VerificationRequestDto = z.infer<typeof VerificationRequestSchema>;
+
+// Profile-related schemas and types
+export const accountSchema = z.enum([
+  'NOT_SUBMITTED',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+]);
+export type AccountState = z.infer<typeof accountSchema>;
+
+export const MyAccountSchema = z.strictObject({
+  accountState: accountSchema,
+  breederId: z.string(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  emailAddress: z.email().nullable(),
+  breedingStationName: z.string().nullable(),
+  breedingStationNumber: z.string().nullable(),
+  hasBreedingStation: z.literal(true),
+  isVerified: z.boolean(),
+  verificationRequest: VerificationRequestSchema.nullable(),
+});
+export type MyAccount = z.infer<typeof MyAccountSchema>;
+
+// Submitting a verification request (text part of the multipart body)
+export const SubmitVerificationRequestSchema = z.strictObject({
+  firstName: z.string().trim().min(1).max(100),
+  lastName: z.string().trim().min(1).max(100),
+  emailAddress: z.email().max(254),
+  breedingStationName: z.string().trim().min(1).max(150),
+  breedingStationNumber: z.string().trim().min(1).max(50),
+});
+export type SubmitVerificationRequestInput = z.infer<
+  typeof SubmitVerificationRequestSchema
+>;
+
+// Admin decision
+export const DecideVerificationRequestSchema = z.discriminatedUnion(
+  'decision',
+  [
+    z.strictObject({ decision: z.literal('APPROVED') }),
+    z.strictObject({
+      decision: z.literal('REJECTED'),
+      rejectionReason: z.string().trim().min(1).max(500),
+    }),
+  ],
+);
+export type DecideVerificationRequestInput = z.infer<
+  typeof DecideVerificationRequestSchema
+>;
+
+export const ListVerificationRequestsQuerySchema = z.strictObject({
+  status: VerificationStatusSchema.optional(),
+});
+export type ListVerificationRequestsQuery = z.infer<
+  typeof ListVerificationRequestsQuerySchema
+>;
+
+// Breeder profile (without account state and verification request)
+export const BreederProfileSchema = z.strictObject({
+  breederId: z.string(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  emailAddress: z.email().nullable(),
+  breedingStationName: z.string().nullable(),
+  breedingStationNumber: z.string().nullable(),
+  hasBreedingStation: z.literal(true),
+  isVerified: z.boolean(),
+});
+export type BreederProfile = z.infer<typeof BreederProfileSchema>;
+
+export const AdminVerificationRequestSchema = VerificationRequestSchema.extend({
+  breeder: BreederProfileSchema,
+});
+export type AdminVerificationRequest = z.infer<
+  typeof AdminVerificationRequestSchema
+>;
+
+export const VerificationRequestListSchema = z.strictObject({
+  items: z.array(AdminVerificationRequestSchema),
+});
+export type VerificationRequestList = z.infer<
+  typeof VerificationRequestListSchema
+>;
+
+export const VerificationSummarySchema = z.strictObject({
+  pending: z.number().int().min(0),
+  approved: z.number().int().min(0),
+  rejected: z.number().int().min(0),
+});
+export type VerificationSummary = z.infer<typeof VerificationSummarySchema>;
 export {
   IdentitySchema,
   RoleSchema,

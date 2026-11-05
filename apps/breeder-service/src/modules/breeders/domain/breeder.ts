@@ -1,0 +1,54 @@
+import type { StoredFile } from '@anico/shared-schemas';
+import type { VerificationStatus, AccountState } from './internal-types.js';
+
+//interfaces
+export interface VerificationRequest {
+  requestId: string;
+  status: VerificationStatus;
+  submittedAt: Date;
+  breedingStationCertificate: StoredFile;
+  reviewedBy: string | null;
+  reviewedAt: Date | null;
+  rejectionReason: string | null;
+}
+
+export interface Breeder {
+  breederId: string;
+  firstName: string | null;
+  lastName: string | null;
+  emailAddress: string | null;
+  breedingStationName: string | null;
+  breedingStationNumber: string | null;
+  hasBreedingStation: true;
+  isVerified: boolean;
+  verificationRequest: VerificationRequest | null;
+}
+
+export interface NewBreeder {
+  breederId: string;
+  firstName: string | null;
+  lastName: string | null;
+  emailAddress: string | null;
+}
+
+export interface Submission {
+  firstName: string;
+  lastName: string;
+  emailAddress: string;
+  breedingStationName: string;
+  breedingStationNumber: string;
+  breedingStationCertificate: StoredFile;
+}
+
+//functions
+export function accountState(breeder: Breeder): AccountState {
+  if (!breeder.verificationRequest) {
+    return 'NOT_SUBMITTED';
+  }
+  return breeder.verificationRequest.status;
+}
+
+export function canSubmitVerificationRequest(breeder: Breeder): boolean {
+  const state = accountState(breeder);
+  return state === 'NOT_SUBMITTED'; //přidat || state === 'REJECTED' ? (podle analýzy lze submit jen jednou a po rejectu nelze zopakovat)
+}

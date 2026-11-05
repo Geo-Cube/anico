@@ -1,6 +1,6 @@
 # Co máme a co zbývá
 
-**Stav k 3. 11. 2026, po ověření lokálního přihlášení.**
+**Stav k 5. 11. 2026; lokální UC-01 není ověřené cloudové nasazení.**
 Připravený kód nebo uložené credentials nejsou totéž jako ověřené nasazení.
 
 ## Funguje a je ověřené
@@ -18,15 +18,16 @@ Připravený kód nebo uložené credentials nejsou totéž jako ověřené nasa
 
 ## Připravené, ale ještě nedokončené
 
-| Oblast         | Stav a co chybí                                                                                                                                                                                               |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Role           | Nový účet dostává `breeder`. První Google vlastník je jmenovaný a audit ověřený. Volitelné propojení je nasazené; vlastník si zvolil účty ponechat oddělené; API pro jmenování admina existuje a je testované |
-| Další backendy | Kontrakt identity a `@anico/auth` jsou dostupné. Každá služba musí zapojit ověření JWT, kontrolu rolí/vlastnictví a vlastní cloudovou routu, image a DB účet                                                  |
+| Oblast            | Stav a co chybí                                                                                                                                                                                                                                                                                           |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Role              | Nový účet dostává `breeder`. První Google vlastník je jmenovaný a audit ověřený. Volitelné propojení je nasazené; vlastník si zvolil účty ponechat oddělené; API pro jmenování admina existuje a je testované                                                                                             |
+| Další backendy    | Kontrakt identity a `@anico/auth` jsou dostupné. Každá služba musí zapojit ověření JWT, kontrolu rolí/vlastnictví a vlastní cloudovou routu, image a DB účet                                                                                                                                              |
+| Ověření chovatele | `breeder-service` přidává lokální backend UC-01 (převzetí profilu, žádost, certifikát, administrátorské rozhodnutí) s JWT identitou přes `@anico/auth`. Nenahrazuje `breeding-service` ani `auth-service`; není nasazený ani propojený s frontendem. Notifikátor pouze loguje, skutečné e-maily neodesílá |
 
 ## Ještě zbývá
 
 - Základ `animal-service` je v `dev` od PR #27: vlastní DB připojení, CRUD vlastních zvířat a sdílená validace druhů/plemen. Není nasazený na cloudovém devu a neobsahuje meziservisní komunikaci.
-- [Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md): nedokončený profil → formulář dalších údajů, dokončený → dashboard. Dohodnuté, zatím neimplementované; frontend má připravené místo `ProfileGate` v chráněném toku. Povinná pole včetně IČO je potřeba upřesnit.
+- [Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md): nedokončený profil → formulář dalších údajů, dokončený → dashboard. Backend UC-01 už poskytuje `GET /breeders/me` a podání žádosti, ale endpoint pro uložení onboardingových údajů a označení dokončení zatím neexistuje. Frontend má jen připravené místo `ProfileGate`; povinná pole včetně IČO je potřeba upřesnit.
 
 - Apple je odložený dle domluvy; není součástí aktuálního dokončení auth.
 - Business obrazovky: nahradit simulace skutečným API a daty. Přihlašovací stránka, chráněné routy a stránka účtu už skutečné jsou; administrace chovatelů je simulace na vlastních URL.

@@ -15,6 +15,10 @@ Frontend: http://127.0.0.1:5173 · API a data: týmový dev · Ukončení: **Ctr
 Jen backend s osobní DB: `npm run dev:backend -- --service animal`.
 UI s vybraným lokálním backendem: `npm run dev:fullstack -- --service animal`.
 
+Lokální [backend UC-01 `breeder-service`](apps/breeder-service/README.md) přidává
+ověření chovatele vedle stávajících služeb. Není nasazený ani propojený s frontendem;
+onboardingové dokončení a skutečné e-maily zatím neposkytuje.
+
 | Potřebuji                            | Kam jít                                         |
 | ------------------------------------ | ----------------------------------------------- |
 | Spustit projekt a udělat změnu       | [Vývojářský návod](docs/MANUAL-PRO-VYVOJARE.md) |

@@ -1,7 +1,12 @@
 # Dokončení profilu po prvním přihlášení
 
-**Domluvené chování, zatím neimplementované v breeder-service; frontend má jen připravené místo.**
+**Domluvený onboardingový tok, zatím neimplementovaný; frontend má jen připravené místo.**
 Tento dokument uchovává rozhodnutí pro další práci; nevytváří nový registrační formulář s heslem.
+Lokální `breeder-service` už obsahuje backend UC-01 pro ověření chovatele:
+`GET /breeders/me` idempotentně převezme profil podle ověřeného `req.auth.userId`
+a vrátí stav žádosti. To není dokončení onboardingu. Endpoint pro uložení
+doplňujících údajů a označení profilu jako dokončeného zatím neexistuje.
+Služba není nasazená a frontendové simulace na její API nejsou napojené.
 
 ## Cesta uživatele
 
@@ -43,7 +48,7 @@ Existující registrační publisher tímto dokumentem nevypínáme ani nemažem
 ## Před implementací dohodnout
 
 - Přesný seznam údajů, pravidla jejich změn a povinnost IČO pro jednotlivé typy chovatelů.
-- API pro načtení a uložení vlastního profilu; cesta `/api/breeder/me` je pouze návrh.
+- API pro uložení vlastního onboardingového profilu a dokončení; existující `GET /breeders/me` slouží UC-01. Cesta `/api/breeder/me` je pouze návrh budoucího gateway routingu, nikoli dostupný onboardingový endpoint.
 - Stav rozepsaného, dokončeného a případně schvalovaného profilu.
 - Chování dashboardu a dostupné operace při čekání na schválení.
 
