@@ -11,7 +11,9 @@ try {
   let changes = 0;
   for (const account of accounts) {
     if (
-      !/^anico_(?:breeding(?:_[a-z0-9_]+)?|auth)$/.test(account.database) ||
+      !/^anico_(?:breeding(?:_[a-z0-9_]+)?|auth|animal|breeder)$/.test(
+        account.database,
+      ) ||
       !/^[a-z][a-z0-9_]+$/.test(account.username)
     )
       throw new Error('Invalid account');

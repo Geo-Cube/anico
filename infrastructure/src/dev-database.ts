@@ -75,6 +75,10 @@ export function databaseProvisioningAccounts(
         throw new Error('Personal database identifier exceeds MongoDB limits');
       return { ...member, databases };
     }),
+    ...Object.values(credentials.services ?? {}).map((service) => ({
+      ...service,
+      databases: [service.database],
+    })),
   ];
 }
 
@@ -116,11 +120,36 @@ const account = z.strictObject({
   database: z.string().regex(/^anico_breeding(?:_[a-z0-9_]+)?$/),
   password,
 });
+/** Nasazené doménové služby se sdílenou dev DB: vlastní DB a účet každé služby. */
+export const DEPLOYED_SERVICE_ACCOUNTS = {
+  'animal-service': {
+    username: 'anico_animal_dev_app',
+    database: 'anico_animal',
+  },
+  'breeder-service': {
+    username: 'anico_breeder_dev_app',
+    database: 'anico_breeder',
+  },
+} as const;
+type DeployedService = keyof typeof DEPLOYED_SERVICE_ACCOUNTS;
+const deployedServices = Object.keys(DEPLOYED_SERVICE_ACCOUNTS) as [
+  DeployedService,
+  ...DeployedService[],
+];
+const serviceAccount = z.strictObject({
+  username: z.string().regex(/^anico_[a-z]+_dev_app$/),
+  database: z.string().regex(/^anico_[a-z]+$/),
+  password,
+});
 export const databaseCredentialsSchema = z
   .strictObject({
     version: z.literal(1),
     root: z.strictObject({ username: z.literal('anico_root'), password }),
     app: account,
+    // Starší konfigurace pole nemá; doplní ho další `init:dev-database`.
+    services: z
+      .partialRecord(z.enum(deployedServices), serviceAccount)
+      .optional(),
     developers: z.array(
       account.extend({
         login: databaseMemberSchema.shape.login,
@@ -130,7 +159,12 @@ export const databaseCredentialsSchema = z
     ),
   })
   .superRefine((credentials, context) => {
-    const accounts = [credentials.app, ...credentials.developers];
+    const services = Object.entries(credentials.services ?? {});
+    const accounts = [
+      credentials.app,
+      ...services.map(([, value]) => value),
+      ...credentials.developers,
+    ];
     if (
       new Set(accounts.map((a) => a.database)).size !== accounts.length ||
       new Set(accounts.map((a) => a.username)).size !== accounts.length ||
@@ -142,6 +176,17 @@ export const databaseCredentialsSchema = z
         code: 'custom',
         message: 'Database accounts must be independent',
       });
+    for (const [name, value] of services) {
+      const expected = DEPLOYED_SERVICE_ACCOUNTS[name as DeployedService];
+      if (
+        value.username !== expected.username ||
+        value.database !== expected.database
+      )
+        context.addIssue({
+          code: 'custom',
+          message: 'Unexpected deployed service account',
+        });
+    }
     for (const member of credentials.developers) {
       const suffix = member.login.toLowerCase().replaceAll('-', '_');
       if (
@@ -207,6 +252,15 @@ export function reconcileDatabaseCredentials(
       database: 'anico_breeding',
       password: generatePassword(),
     },
+    services: Object.fromEntries(
+      deployedServices.map((name) => [
+        name,
+        existing?.services?.[name] ?? {
+          ...DEPLOYED_SERVICE_ACCOUNTS[name],
+          password: generatePassword(),
+        },
+      ]),
+    ),
     developers,
   });
 }

@@ -15,7 +15,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [breeding-service, frontend, auth-service]
+        service:
+          [
+            breeding-service,
+            frontend,
+            auth-service,
+            animal-service,
+            breeder-service,
+          ]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
