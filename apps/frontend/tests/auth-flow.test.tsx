@@ -23,14 +23,14 @@ const signedIn = (session = sessionFor()) =>
   server.use(http.get('/api/auth/session', () => HttpResponse.json(session)));
 
 const providerLinks = async () =>
-  (await screen.findAllByRole('link', { name: /Pokračovat přes/ })).map(
-    (link) => link.getAttribute('href'),
+  (await screen.findAllByRole('link', { name: /Přihlásit přes/ })).map((link) =>
+    link.getAttribute('href'),
   );
 
 describe('login', () => {
   it('sends an anonymous visitor to the login page and keeps the requested page as returnTo', async () => {
     const { router } = renderApp('/ucet?zalozka=1');
-    await screen.findByRole('heading', { name: 'Vítej v AniCo' });
+    await screen.findByRole('heading', { name: 'Přihlášení' });
     expect(router.state.location.pathname).toBe('/prihlaseni');
     // Apple is hidden on plain HTTP: its callback requires HTTPS.
     expect(await providerLinks()).toEqual([
@@ -57,7 +57,7 @@ describe('login', () => {
 
   it('ignores unknown error codes in the URL', async () => {
     renderApp('/prihlaseni?error=%3Cscript%3E');
-    await screen.findAllByRole('link', { name: /Pokračovat přes/ });
+    await screen.findAllByRole('link', { name: /Přihlásit přes/ });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -188,6 +188,14 @@ describe('logout and cached user data', () => {
     expect(router.state.location.pathname).toBe('/prihlaseni');
     expect(client.getQueryData(['animals'])).toBeUndefined();
     expect(screen.queryByText(/vypršelo/)).not.toBeInTheDocument();
+    // Closing clears the history state, so a reload cannot show it again.
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Zavřít oznámení' }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('Odhlášení proběhlo.')).not.toBeInTheDocument(),
+    );
+    expect(router.state.location.state).toBeNull();
   });
 
   it('keeps the session and reports a logout that did not reach the server', async () => {
