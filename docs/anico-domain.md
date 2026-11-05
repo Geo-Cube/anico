@@ -83,6 +83,11 @@ Bez jména UI zobrazí druh + plemeno + krátký identifikátor. Přesná adresa
 
 ### UC-03 – Doklady
 
+> **Schválená odchylka od analýzy (5. 11. 2026, [ADR-0005](adr/0005-doklady-zvirat-vnorene-ve-zvireti.md)):** zvíře má
+> pro každý typ dokladu nejvýše jednu řadu verzí. Nové podání dokladu existujícího typu vytvoří další verzi této řady
+> i nad `PENDING` nebo `APPROVED` verzí; starší verze, její soubor i rozhodnutí zůstávají v historii. Bod 4 níže
+> (nová verze jen nad `REJECTED`) platí pro explicitní náhradu konkrétní verze. Tím je rozhodnuta i otevřená otázka §6/1.
+
 1. Podání obsahuje ≥ 1 přílohu; ke každé povinný typ. Doklady PDF/JPEG/PNG. Každá příloha = **samostatný doklad** s v1, `previous_document_id=NULL`, `PENDING`. Celé podání v jedné transakci.
 2. Admin posuzuje **každý doklad zvlášť**; rozhodnutí se týká konkrétní verze. Schválení/zamítnutí jen ze `PENDING` a jen u **aktuální** verze; atomicky (A4 jako u UC-01). Zamítnutí vyžaduje důvod.
 3. Výsledek posouzení verze se **už nemění**. `is_verified` účtu se doklady **nedotýká**.

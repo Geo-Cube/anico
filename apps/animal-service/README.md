@@ -35,6 +35,7 @@ src/
       application/          # use cases
       infrastructure/       # Mongoose adaptér
       http/                 # Express + sdílená Zod validace
+    documents/              # doklady zvířat UC-03 (stejné vrstvy)
     index.ts                # propojení modulů a adaptérů
   app.ts                    # HTTP aplikace bez listen
   server.ts                 # konfigurace, DB spojení, start a shutdown
@@ -65,15 +66,36 @@ Změna druhu vyžaduje odpovídající plemeno; PATCH validuje celý výsledný 
 
 ## API
 
-| Metoda a cesta ve službě               | Co dělá                                     |
-| -------------------------------------- | ------------------------------------------- |
-| `GET /health`, `GET /ready`            | Veřejný liveness a DB readiness             |
-| `GET /breeds/dog`, `GET /breeds/horse` | Číselník ID/názvů; také vyžaduje přihlášení |
-| `POST /animals`                        | Vytvoří vlastní zvíře, vrací 201 a entitu   |
-| `GET /animals`                         | Výpis pouze mých zvířat                     |
-| `GET /animals/:id`                     | Detail vlastního zvířete                    |
-| `PATCH /animals/:id`                   | Změní povolená pole vlastního zvířete       |
-| `DELETE /animals/:id`                  | Odstraní vlastní zvíře, vrací 204           |
+| Metoda a cesta ve službě               | Co dělá                                                            |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| `GET /health`, `GET /ready`            | Veřejný liveness a DB readiness                                    |
+| `GET /breeds/dog`, `GET /breeds/horse` | Číselník ID/názvů; také vyžaduje přihlášení                        |
+| `POST /animals`                        | Vytvoří vlastní zvíře, vrací 201 a entitu                          |
+| `GET /animals`                         | Výpis pouze mých zvířat                                            |
+| `GET /animals/:id`                     | Detail vlastního zvířete                                           |
+| `PATCH /animals/:id`                   | Změní povolená pole vlastního zvířete                              |
+| `DELETE /animals/:id`                  | Odstraní vlastní zvíře i všechny jeho doklady a soubory, vrací 204 |
+
+### Doklady zvířat (UC-03)
+
+Kontrakt je [`openapi.json`](openapi.json) (`npm run openapi -w @anico/animal-service`),
+návrh v [`docs/design/uc-03-doklady.md`](../../docs/design/uc-03-doklady.md).
+
+| Metoda a cesta ve službě                                 | Co dělá                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `POST /animals/:animalId/documents`                      | Multipart `documentTypes` + `files` (1–10, PDF/JPEG/PNG, ≤ 10 MiB) |
+| `GET /animals/:animalId/documents`                       | Aktuální verze a odvozený stav dokladů                             |
+| `GET /animals/:animalId/documents/:documentId/history`   | Všechny verze řady, nejstarší první                                |
+| `GET /animals/:animalId/documents/:documentId/file`      | Stažení verze jako `attachment`                                    |
+| `POST /animals/:animalId/documents/:documentId/versions` | Nová verze aktuálního zamítnutého dokladu (multipart `file`)       |
+| `POST /animals/:animalId/documents/:documentId/decision` | Admin: `APPROVED`, nebo `REJECTED` s `rejectionReason`             |
+| `GET /document-reviews`                                  | Admin: fronta aktuálních `PENDING` verzí                           |
+
+Operace chovatele vyžadují ověřený účet: služba se při každém požadavku zeptá
+breeder-service (`GET /breeders/me`, adresa `BREEDER_SERVICE_URL`). Bez této
+proměnné nebo při nedostupnosti breeder-service vracejí 503. Cizí nebo
+neexistující zvíře/doklad je 404, neověřený chovatel a chybějící role 403.
+Posuzovatel (`admin` | `owner`) čte a rozhoduje bez vlastnictví i ověření.
 
 Z lokálního frontendu používej prefix **`/api/animal`**, například
 `fetch('/api/animal/animals')`. Vlastní server běží na portu **3002**;
@@ -100,11 +122,11 @@ automatickou výjimku z vlastnictví. Systémová pole nelze měnit přes body/q
 
 ## Rozsah tohoto základu
 
-Služba nevolá jiné business služby a neodebírá zprávy z brokeru. Obsahuje pouze
-existující ověření identity a vlastní MongoDB. Fotky, dokumenty, schvalování chovatele,
-kontrola dokončení profilu a další údaje o zvířeti se doplní podle domluvených use cases.
-Tento základ tedy ještě neimplementuje všechny podmínky UC-02. Není zapojený
-do cloudového publish/deploymentu ani do frontendového formuláře.
+Služba volá breeder-service jen kvůli ověření chovatele u dokladů a neodebírá
+zprávy z brokeru. Fotky, schvalování chovatele u CRUD zvířat, číslo čipu,
+kontrola dokončení profilu a další údaje o zvířeti se doplní podle domluvených
+use cases. Tento základ tedy ještě neimplementuje všechny podmínky UC-02. Není
+zapojený do cloudového publish/deploymentu ani do frontendového formuláře.
 
 Ve společném lokálním běhu je frontend na http://127.0.0.1:5173,
 API na `/api/animal`, health na `/api/animal/health`.

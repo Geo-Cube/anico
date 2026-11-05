@@ -28,7 +28,8 @@
         "APP_ENV",
         "ANICO_DEV_SERVICE",
         "MIGRATE_ON_START",
-        "ANICO_API_MODE"
+        "ANICO_API_MODE",
+        "BREEDER_SERVICE_URL"
       ]
     },
     "typecheck": {

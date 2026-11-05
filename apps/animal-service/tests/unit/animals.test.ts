@@ -58,13 +58,14 @@ function fakeRepository() {
       return changed;
     },
     async deleteOwned(id, ownerUserId) {
-      return records.get(id)?.ownerUserId === ownerUserId
-        ? records.delete(id)
-        : false;
+      return records.get(id)?.ownerUserId === ownerUserId && records.delete(id)
+        ? { fileReferences: [] }
+        : null;
     },
   };
   return { repository, records };
 }
+const noFiles = { deleteFiles: async () => undefined };
 describe('animal contracts and independent use cases', () => {
   it('accepts every existing catalog ID only for its species and keeps IDs unique', () => {
     for (const species of ['dog', 'horse'] as const) {
@@ -112,7 +113,7 @@ describe('animal contracts and independent use cases', () => {
   });
   it('normalizes names, assigns identity ownership and rejects unauthenticated or foreign callers', async () => {
     const { repository } = fakeRepository();
-    const use = animalUseCases(repository);
+    const use = animalUseCases(repository, noFiles);
     expect(() => use.create(undefined, dog)).toThrow('Authentication required');
     const record = await use.create(actor, dog);
     expect(record.name).toBe('Luna');
@@ -129,7 +130,7 @@ describe('animal contracts and independent use cases', () => {
   });
   it('validates merged patches and handles concurrent update/delete conflicts', async () => {
     const { repository } = fakeRepository();
-    const use = animalUseCases(repository);
+    const use = animalUseCases(repository, noFiles);
     const record = await use.create(actor, dog);
     await expect(
       use.update(actor, record.id, { species: 'horse' }),
@@ -138,17 +139,17 @@ describe('animal contracts and independent use cases', () => {
       (await use.update(actor, record.id, { birthDate: null, name: ' New ' }))
         .name,
     ).toBe('New');
-    const conflicting = animalUseCases({
-      ...repository,
-      updateOwned: async () => null,
-    });
+    const conflicting = animalUseCases(
+      { ...repository, updateOwned: async () => null },
+      noFiles,
+    );
     await expect(
       conflicting.update(actor, record.id, { name: 'Race' }),
     ).rejects.toMatchObject({ status: 409 });
-    const deleted = animalUseCases({
-      ...repository,
-      deleteOwned: async () => false,
-    });
+    const deleted = animalUseCases(
+      { ...repository, deleteOwned: async () => null },
+      noFiles,
+    );
     await expect(deleted.remove(actor, record.id)).rejects.toMatchObject({
       status: 404,
     });

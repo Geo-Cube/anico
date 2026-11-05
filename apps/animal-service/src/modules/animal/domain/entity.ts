@@ -16,7 +16,15 @@ export interface AnimalRepository {
     input: UpdateAnimalInput,
     expected: Pick<Animal, 'species' | 'breedId'>,
   ): Promise<Animal | null>;
-  deleteOwned(id: string, ownerUserId: string): Promise<boolean>;
+  /** Smaže zvíře včetně všech verzí dokladů; vrátí reference jejich souborů, nebo `null`. */
+  deleteOwned(
+    id: string,
+    ownerUserId: string,
+  ): Promise<{ fileReferences: string[] } | null>;
+}
+/** Úklid souborů odstraněného zvířete (GridFS dokladů). */
+export interface AnimalFileCleanup {
+  deleteFiles(fileReferences: readonly string[]): Promise<void>;
 }
 export class AnimalError extends Error {
   constructor(

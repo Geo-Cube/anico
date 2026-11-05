@@ -1,29 +1,17 @@
-import {
-  Schema,
-  Types,
-  type Connection,
-  type Model,
-  type FilterQuery,
-} from 'mongoose';
-import {
-  AnimalSchema,
-  AnimalSpeciesSchema,
-  AnimalSexSchema,
-  type Animal,
-} from '@anico/shared-schemas';
+import { Types, type Connection, type FilterQuery } from 'mongoose';
+import { AnimalSchema, type Animal } from '@anico/shared-schemas';
 import type { AnimalRepository } from '../domain/entity.js';
+import {
+  animalModel,
+  WITHOUT_DOCUMENTS,
+  type StoredAnimal,
+} from './animal-model.js';
 
-interface StoredAnimal {
-  ownerUserId: string;
-  name: string;
-  species: Animal['species'];
-  breedId: string;
-  sex: Animal['sex'];
-  birthDate: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-function response(document: StoredAnimal & { _id: Types.ObjectId }): Animal {
+type StoredProfile = Omit<StoredAnimal, 'documents' | 'documentsRevision'> & {
+  _id: Types.ObjectId;
+};
+
+function response(document: StoredProfile): Animal {
   const parsed = AnimalSchema.safeParse({
     id: document._id.toString(),
     ownerUserId: document.ownerUserId,
@@ -41,36 +29,13 @@ function response(document: StoredAnimal & { _id: Types.ObjectId }): Animal {
 export function mongooseAnimalRepository(
   connection: Connection,
 ): AnimalRepository {
-  const schema = new Schema<StoredAnimal>(
-    {
-      ownerUserId: { type: String, required: true, maxlength: 36 },
-      name: { type: String, required: true, trim: true, maxlength: 120 },
-      species: {
-        type: String,
-        required: true,
-        enum: AnimalSpeciesSchema.options,
-      },
-      breedId: { type: String, required: true, maxlength: 160 },
-      sex: { type: String, required: true, enum: AnimalSexSchema.options },
-      birthDate: { type: String, default: null },
-    },
-    {
-      timestamps: true,
-      versionKey: false,
-      autoIndex: false,
-      autoCreate: false,
-      strict: 'throw',
-    },
-  );
-  const model =
-    (connection.models.Animal as Model<StoredAnimal> | undefined) ??
-    connection.model<StoredAnimal>('Animal', schema, 'animals');
+  const model = animalModel(connection);
   return {
     async create(input) {
       return response(await model.create(input));
     },
     async find(id) {
-      const doc = await model.findById(id).lean();
+      const doc = await model.findById(id, WITHOUT_DOCUMENTS).lean();
       return doc ? response(doc) : null;
     },
     async list(ownerUserId, query) {
@@ -80,7 +45,7 @@ export function mongooseAnimalRepository(
       if (query.sex) filter.sex = query.sex;
       if (query.before) filter._id = { $lt: new Types.ObjectId(query.before) };
       const docs = await model
-        .find(filter)
+        .find(filter, WITHOUT_DOCUMENTS)
         .sort({ _id: -1 })
         .limit(query.limit + 1)
         .lean();
@@ -100,15 +65,26 @@ export function mongooseAnimalRepository(
             breedId: expected.breedId,
           },
           { $set: input },
-          { new: true, runValidators: true },
+          { new: true, runValidators: true, projection: WITHOUT_DOCUMENTS },
         )
         .lean();
       return doc ? response(doc) : null;
     },
     async deleteOwned(id, ownerUserId) {
-      return (
-        (await model.deleteOne({ _id: id, ownerUserId })).deletedCount === 1
-      );
+      // Zvíře i všechny verze jeho dokladů zmizí jedním zápisem (UC-02/6).
+      const doc = await model
+        .findOneAndDelete(
+          { _id: id, ownerUserId },
+          { projection: { 'documents.file.fileReference': 1 } },
+        )
+        .lean();
+      return doc
+        ? {
+            fileReferences: (doc.documents ?? []).map(
+              (version) => version.file.fileReference,
+            ),
+          }
+        : null;
     },
   };
 }

@@ -10,13 +10,20 @@ import {
   assertResourceOwner,
   type Identity,
 } from '@anico/auth';
-import { AnimalError, type AnimalRepository } from '../domain/entity.js';
+import {
+  AnimalError,
+  type AnimalFileCleanup,
+  type AnimalRepository,
+} from '../domain/entity.js';
 
 function requireActor(actor: Identity | undefined): Identity {
   if (!actor) throw new AuthorizationError(401);
   return actor;
 }
-export function animalUseCases(repository: AnimalRepository) {
+export function animalUseCases(
+  repository: AnimalRepository,
+  files: AnimalFileCleanup,
+) {
   async function get(actor: Identity | undefined, id: string) {
     const identity = requireActor(actor);
     const animal = await repository.find(id);
@@ -64,8 +71,10 @@ export function animalUseCases(repository: AnimalRepository) {
     },
     async remove(actor: Identity | undefined, id: string) {
       const current = await get(actor, id);
-      if (!(await repository.deleteOwned(id, current.ownerUserId)))
-        throw new AnimalError(404, 'Animal not found');
+      const deleted = await repository.deleteOwned(id, current.ownerUserId);
+      if (!deleted) throw new AnimalError(404, 'Animal not found');
+      // Soubory až po smazání záznamu: osiřelý soubor nemá cestu k otevření.
+      await files.deleteFiles(deleted.fileReferences);
     },
   };
 }
