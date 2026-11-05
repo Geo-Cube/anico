@@ -74,7 +74,10 @@ describe('animal API with verified identity and actual MongoDB', () => {
     app = createApp({
       logger: pino({ level: 'silent' }),
       authenticate: requireAuth(verify),
-      modules: createModules(connection),
+      modules: createModules(connection, {
+        logger: pino({ level: 'silent' }),
+        verification: { isVerified: async () => true },
+      }),
       isReady: () => connection.readyState === 1,
     });
   });

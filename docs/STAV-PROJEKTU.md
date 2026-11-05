@@ -26,7 +26,8 @@ Připravený kód nebo uložené credentials nejsou totéž jako ověřené nasa
 
 ## Ještě zbývá
 
-- Základ `animal-service` je v `dev` od PR #27: vlastní DB připojení, CRUD vlastních zvířat a sdílená validace druhů/plemen. Není nasazený na cloudovém devu a neobsahuje meziservisní komunikaci.
+- Základ `animal-service` je v `dev` od PR #27: vlastní DB připojení, CRUD vlastních zvířat a sdílená validace druhů/plemen. Není nasazený na cloudovém devu.
+- Doklady zvířat UC-03 jsou modul `animal-service` ([návrh](design/uc-03-doklady.md), [ADR-0005](adr/0005-doklady-zvirat-vnorene-ve-zvireti.md)): podání více dokladů, verze, stažení, fronta a posouzení adminem, OpenAPI. Ověření chovatele volá breeder-service (`BREEDER_SERVICE_URL`); dokud není nasazená, operace chovatele s doklady vracejí 503. Před nasazením je povinná migrace `20261105160825-animal-documents`. Chybějící části (nasazení, úklid osiřelých souborů, číslo čipu, filtr podle stavu dokladů, frontend a další) jsou sepsané v [návrhu §5](design/uc-03-doklady.md#5-co-chybí-možná-budoucí-rozšíření).
 - [Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md): nedokončený profil → formulář dalších údajů, dokončený → dashboard. Backend UC-01 už poskytuje `GET /breeders/me` a podání žádosti, ale endpoint pro uložení onboardingových údajů a označení dokončení zatím neexistuje. Frontend má jen připravené místo `ProfileGate`; povinná pole včetně IČO je potřeba upřesnit.
 
 - Apple je odložený dle domluvy; není součástí aktuálního dokončení auth.

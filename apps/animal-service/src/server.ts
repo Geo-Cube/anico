@@ -7,6 +7,7 @@ import { createModules } from './modules/index.js';
 import { migrateDatabase } from './database/engine.js';
 import { loadMigrations } from './database/registry.js';
 import { databaseTarget } from './database/policy.js';
+import { httpBreederVerification } from './modules/documents/infrastructure/http-breeder-verification.js';
 
 const env = z
   .object({
@@ -17,6 +18,8 @@ const env = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
+    /** breeder-service pro ověření chovatele u dokladů (UC-03, ADR-0005); bez něj doklady chovatelů 503. */
+    BREEDER_SERVICE_URL: z.url({ protocol: /^https?$/ }).optional(),
   })
   .parse(process.env);
 
@@ -56,10 +59,23 @@ try {
   }
   let stopping = false;
   const authenticate = requestAuthenticator(process.env);
+  if (!env.BREEDER_SERVICE_URL)
+    logger.warn(
+      'BREEDER_SERVICE_URL is not set: breeder document operations answer 503 (fail closed)',
+    );
   const app = createApp({
     ...(authenticate ? { authenticate } : {}),
     logger,
-    modules: createModules(connection),
+    modules: createModules(connection, {
+      logger,
+      verification: env.BREEDER_SERVICE_URL
+        ? httpBreederVerification({ baseUrl: env.BREEDER_SERVICE_URL })
+        : {
+            isVerified: async () => {
+              throw new Error('BREEDER_SERVICE_URL is not configured');
+            },
+          },
+    }),
     isReady: () => !stopping && connection.readyState === 1,
   });
   const server = app.listen(env.PORT, env.HOST, () =>

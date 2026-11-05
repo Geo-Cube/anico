@@ -10,11 +10,14 @@ import {
   animalBreeds,
 } from '@anico/shared-schemas';
 import { animalUseCases } from '../application/animals.js';
-import type { AnimalRepository } from '../domain/entity.js';
+import type { AnimalFileCleanup, AnimalRepository } from '../domain/entity.js';
 
-export function AnimalRouter(repository: AnimalRepository) {
+export function AnimalRouter(
+  repository: AnimalRepository,
+  files: AnimalFileCleanup,
+) {
   const router = Router();
-  const animals = animalUseCases(repository);
+  const animals = animalUseCases(repository, files);
   router.get('/breeds/:species', (req, res) => {
     const species = AnimalSpeciesSchema.parse(req.params.species);
     res.json({ species, breeds: animalBreeds(species) });

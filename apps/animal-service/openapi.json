@@ -1,0 +1,774 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AniCo animal-service – doklady zvířat",
+    "version": "0.1.0",
+    "description": "Doklady zvířat (UC-03, ADR-0005): chovatel podá doklady ke svému zvířeti, administrátor je posoudí. Popisuje doklady a health; CRUD zvířat (UC-02) tento dokument zatím nezahrnuje.\n\nKaždá příloha je samostatný doklad s řadou verzí. Zvíře má pro každý typ nejvýše jednu řadu: nový doklad stejného typu vytvoří další verzi (`versionNumber + 1`, `previousDocumentId`) a starší verze zůstává v historii včetně souboru a rozhodnutí. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.\n\nOperace chovatele vyžadují ověřený účet z breeder-service, ověřuje se při každém požadavku. Identitu doplňuje gateway do hlavičky `x-anico-identity`."
+  },
+  "servers": [
+    {
+      "url": ".",
+      "description": "Relativně k umístění dokumentu (za gateway prefixem /api/animal)."
+    }
+  ],
+  "tags": [
+    { "name": "documents", "description": "Doklady vlastního zvířete." },
+    {
+      "name": "document-review",
+      "description": "Posuzování dokladů (role `admin` | `owner`)."
+    },
+    { "name": "health", "description": "Stav služby (veřejné)." }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getHealth",
+        "summary": "Liveness",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Služba běží.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getReadiness",
+        "summary": "Readiness (připojení k databázi)",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Služba přijímá provoz.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceHealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Služba není připravena – `{\"error\":\"Service unavailable\"}`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/animals/{animalId}/documents": {
+      "parameters": [
+        {
+          "name": "animalId",
+          "in": "path",
+          "required": true,
+          "description": "ID zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalId" }
+        }
+      ],
+      "post": {
+        "tags": ["documents"],
+        "operationId": "submitAnimalDocuments",
+        "summary": "Podat doklady",
+        "description": "Jen vlastník zvířete s ověřeným účtem. 1–10 souborů; každý je samostatný doklad `PENDING`. Typ, který zvíře už má, pokračuje ve své řadě novou verzí (i nad `PENDING` či `APPROVED`). Podání se uloží celé, nebo vůbec.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitAnimalDocumentsForm"
+              },
+              "encoding": {
+                "files": {
+                  "contentType": "application/pdf, image/jpeg, image/png"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Vytvořené verze (`documents` obsahuje jen nově podané doklady).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnimalDocumentList" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": {
+            "description": "Doklady zvířete se opakovaně souběžně měnily – `Documents changed concurrently; retry`. Nic se neuložilo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimalDocumentConflict"
+                }
+              }
+            }
+          },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      },
+      "get": {
+        "tags": ["documents"],
+        "operationId": "listAnimalDocuments",
+        "summary": "Aktuální doklady zvířete",
+        "description": "Vlastník zvířete s ověřeným účtem, nebo posuzovatel (role `admin` | `owner`), který ověření ani vlastnictví nepotřebuje. Vrací aktuální verzi každé řady a odvozený stav: `PENDING` > `APPROVED` > `REJECTED`, bez dokladů `NOT_SUBMITTED`.",
+        "responses": {
+          "200": {
+            "description": "Aktuální verze.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnimalDocumentList" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
+    "/animals/{animalId}/documents/{documentId}/history": {
+      "parameters": [
+        {
+          "name": "animalId",
+          "in": "path",
+          "required": true,
+          "description": "ID zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalId" }
+        },
+        {
+          "name": "documentId",
+          "in": "path",
+          "required": true,
+          "description": "ID konkrétní verze dokladu.",
+          "schema": { "$ref": "#/components/schemas/AnimalDocumentId" }
+        }
+      ],
+      "get": {
+        "tags": ["documents"],
+        "operationId": "getAnimalDocumentHistory",
+        "summary": "Historie verzí dokladu",
+        "description": "Vlastník zvířete s ověřeným účtem, nebo posuzovatel (role `admin` | `owner`), který ověření ani vlastnictví nepotřebuje. Všechny verze řady, do které `documentId` patří, nejstarší první.",
+        "responses": {
+          "200": {
+            "description": "Verze řady.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimalDocumentHistory"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
+    "/animals/{animalId}/documents/{documentId}/file": {
+      "parameters": [
+        {
+          "name": "animalId",
+          "in": "path",
+          "required": true,
+          "description": "ID zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalId" }
+        },
+        {
+          "name": "documentId",
+          "in": "path",
+          "required": true,
+          "description": "ID konkrétní verze dokladu.",
+          "schema": { "$ref": "#/components/schemas/AnimalDocumentId" }
+        }
+      ],
+      "get": {
+        "tags": ["documents"],
+        "operationId": "downloadAnimalDocument",
+        "summary": "Stáhnout soubor verze",
+        "description": "Vlastník zvířete s ověřeným účtem, nebo posuzovatel (role `admin` | `owner`), který ověření ani vlastnictví nepotřebuje. Libovolná verze včetně historické, pod uloženým očištěným názvem.",
+        "responses": {
+          "200": {
+            "description": "Soubor ke stažení (`attachment`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`).",
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment; filename=\"<ASCII>\"; filename*=UTF-8''<uložený název>`",
+                "schema": { "type": "string" }
+              },
+              "Content-Length": {
+                "schema": { "type": "integer", "minimum": 1 }
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf"
+                }
+              },
+              "image/jpeg": {
+                "schema": { "type": "string", "contentMediaType": "image/jpeg" }
+              },
+              "image/png": {
+                "schema": { "type": "string", "contentMediaType": "image/png" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
+    "/animals/{animalId}/documents/{documentId}/versions": {
+      "parameters": [
+        {
+          "name": "animalId",
+          "in": "path",
+          "required": true,
+          "description": "ID zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalId" }
+        },
+        {
+          "name": "documentId",
+          "in": "path",
+          "required": true,
+          "description": "ID konkrétní verze dokladu.",
+          "schema": { "$ref": "#/components/schemas/AnimalDocumentId" }
+        }
+      ],
+      "post": {
+        "tags": ["documents"],
+        "operationId": "replaceRejectedAnimalDocument",
+        "summary": "Nová verze zamítnutého dokladu",
+        "description": "Jen vlastník zvířete s ověřeným účtem a jen nad aktuální verzí ve stavu `REJECTED`. Každou verzi lze nahradit jen jednou; druhý pokus vrátí 409 s aktuální verzí. Typ a zvíře se přebírají, původní soubor i rozhodnutí zůstávají.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceAnimalDocumentForm"
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/pdf, image/jpeg, image/png"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Nová aktuální verze `PENDING`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnimalDocument" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": {
+            "description": "`Only a rejected document can be replaced`, `Document version was already replaced`, nebo `Documents changed concurrently; retry`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimalDocumentConflict"
+                }
+              }
+            }
+          },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
+    "/animals/{animalId}/documents/{documentId}/decision": {
+      "parameters": [
+        {
+          "name": "animalId",
+          "in": "path",
+          "required": true,
+          "description": "ID zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalId" }
+        },
+        {
+          "name": "documentId",
+          "in": "path",
+          "required": true,
+          "description": "ID konkrétní verze dokladu.",
+          "schema": { "$ref": "#/components/schemas/AnimalDocumentId" }
+        }
+      ],
+      "post": {
+        "tags": ["document-review"],
+        "operationId": "decideAnimalDocument",
+        "summary": "Posoudit doklad",
+        "description": "Vyžaduje roli `admin` nebo `owner`. Rozhodnout lze jen aktuální verzi `PENDING` (atomicky); `REJECTED` vyžaduje `rejectionReason`. Rozhodnutí je konečné, druhý administrátor dostane 409 s uloženým výsledkem.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DecideAnimalDocument" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rozhodnutá verze.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnimalDocument" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/ReviewerForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": {
+            "description": "`Document already decided`, nebo `Document version is not current` (mezitím podána novější verze).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnimalDocumentConflict"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Tělo přesahuje limit – `{\"error\":\"Payload too large\"}`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/document-reviews": {
+      "get": {
+        "tags": ["document-review"],
+        "operationId": "listDocumentReviews",
+        "summary": "Fronta dokladů k posouzení",
+        "description": "Vyžaduje roli `admin` nebo `owner`. Jen aktuální verze `PENDING`, nejdéle čekající první, nejvýše 500 položek, včetně údajů o zvířeti.",
+        "responses": {
+          "200": {
+            "description": "Doklady k posouzení.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DocumentReviewList" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/ReviewerForbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnimalId": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+      "AnimalDocumentId": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+      "AnimalDocumentType": {
+        "type": "string",
+        "enum": ["PEDIGREE", "HEALTH_RESULTS", "BREEDING_APPROVAL"]
+      },
+      "AssessmentStatus": {
+        "type": "string",
+        "enum": ["PENDING", "APPROVED", "REJECTED"]
+      },
+      "AnimalDocumentsState": {
+        "type": "string",
+        "enum": ["NOT_SUBMITTED", "PENDING", "APPROVED", "REJECTED"]
+      },
+      "AnimalDocumentFile": {
+        "type": "object",
+        "properties": {
+          "fileName": { "type": "string", "minLength": 1, "maxLength": 150 },
+          "contentType": {
+            "type": "string",
+            "enum": ["application/pdf", "image/jpeg", "image/png"]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["fileName", "contentType", "size"],
+        "additionalProperties": false
+      },
+      "AnimalDocument": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/AnimalDocumentId" },
+          "animalId": { "$ref": "#/components/schemas/AnimalId" },
+          "documentType": { "$ref": "#/components/schemas/AnimalDocumentType" },
+          "versionNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "previousDocumentId": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/AnimalDocumentId" },
+              { "type": "null" }
+            ]
+          },
+          "isCurrent": { "type": "boolean" },
+          "file": { "$ref": "#/components/schemas/AnimalDocumentFile" },
+          "assessmentStatus": {
+            "$ref": "#/components/schemas/AssessmentStatus"
+          },
+          "submittedAt": { "type": "string", "format": "date-time" },
+          "reviewedBy": { "type": ["string", "null"] },
+          "reviewedAt": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "rejectionReason": { "type": ["string", "null"] }
+        },
+        "required": [
+          "id",
+          "animalId",
+          "documentType",
+          "versionNumber",
+          "previousDocumentId",
+          "isCurrent",
+          "file",
+          "assessmentStatus",
+          "submittedAt",
+          "reviewedBy",
+          "reviewedAt",
+          "rejectionReason"
+        ],
+        "additionalProperties": false
+      },
+      "AnimalDocumentList": {
+        "type": "object",
+        "properties": {
+          "animalId": { "$ref": "#/components/schemas/AnimalId" },
+          "documentsState": {
+            "$ref": "#/components/schemas/AnimalDocumentsState"
+          },
+          "documents": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AnimalDocument" }
+          }
+        },
+        "required": ["animalId", "documentsState", "documents"],
+        "additionalProperties": false
+      },
+      "AnimalDocumentHistory": {
+        "type": "object",
+        "properties": {
+          "animalId": { "$ref": "#/components/schemas/AnimalId" },
+          "documentType": { "$ref": "#/components/schemas/AnimalDocumentType" },
+          "versions": {
+            "minItems": 1,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AnimalDocument" }
+          }
+        },
+        "required": ["animalId", "documentType", "versions"],
+        "additionalProperties": false
+      },
+      "DecideAnimalDocument": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "decision": { "type": "string", "const": "APPROVED" }
+            },
+            "required": ["decision"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "decision": { "type": "string", "const": "REJECTED" },
+              "rejectionReason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": ["decision", "rejectionReason"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "DocumentReview": {
+        "type": "object",
+        "properties": {
+          "document": { "$ref": "#/components/schemas/AnimalDocument" },
+          "animal": {
+            "type": "object",
+            "properties": {
+              "id": { "$ref": "#/components/schemas/AnimalId" },
+              "ownerUserId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": { "type": "string" },
+              "species": { "type": "string", "enum": ["dog", "horse"] },
+              "breedId": { "type": "string" },
+              "sex": { "type": "string", "enum": ["male", "female", "unknown"] }
+            },
+            "required": [
+              "id",
+              "ownerUserId",
+              "name",
+              "species",
+              "breedId",
+              "sex"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["document", "animal"],
+        "additionalProperties": false
+      },
+      "DocumentReviewList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DocumentReview" }
+          }
+        },
+        "required": ["items"],
+        "additionalProperties": false
+      },
+      "SubmitAnimalDocumentsForm": {
+        "type": "object",
+        "properties": {
+          "documentTypes": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AnimalDocumentType" },
+            "description": "Typ i-tého souboru v `files` (stejné pořadí a počet). Každý typ nejvýše jednou."
+          },
+          "files": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "binary",
+              "contentMediaType": "application/octet-stream"
+            },
+            "description": "PDF, JPEG nebo PNG (typ se ověřuje podle obsahu, ne podle přípony či hlavičky), nejvýše 10 MiB."
+          }
+        },
+        "required": ["documentTypes", "files"],
+        "additionalProperties": false
+      },
+      "ReplaceAnimalDocumentForm": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "PDF, JPEG nebo PNG (typ se ověřuje podle obsahu, ne podle přípony či hlavičky), nejvýše 10 MiB.",
+            "contentMediaType": "application/octet-stream"
+          }
+        },
+        "required": ["file"],
+        "additionalProperties": false
+      },
+      "AnimalDocumentConflict": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "Only a rejected document can be replaced",
+              "Document version was already replaced",
+              "Document already decided",
+              "Document version is not current",
+              "Documents changed concurrently; retry"
+            ],
+            "description": "Důvod konfliktu. `current` (aktuální verze téže řady) chybí jen u `Documents changed concurrently; retry`."
+          },
+          "current": { "$ref": "#/components/schemas/AnimalDocument" }
+        },
+        "required": ["error"],
+        "additionalProperties": false
+      },
+      "ServiceHealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "const": "ok" },
+          "service": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-service$"
+          }
+        },
+        "required": ["status", "service"],
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "string" } },
+        "required": ["error"],
+        "additionalProperties": false
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "const": "Validation failed" },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": { "type": "string" },
+                "path": {
+                  "type": "array",
+                  "items": { "type": ["string", "number"] }
+                },
+                "message": { "type": "string" }
+              },
+              "required": ["code", "path", "message"],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": ["error", "issues"],
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Neplatné ID, tělo nebo dotaz (`Validation failed`), případně nečitelný multipart (`{\"error\":\"Invalid upload\"}`).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                { "$ref": "#/components/schemas/ValidationError" },
+                { "$ref": "#/components/schemas/Error" }
+              ]
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Chybí platná identita (`x-anico-identity`) – `{\"error\":\"Authentication required\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "BreederForbidden": {
+        "description": "Chovatel nemá ověřený účet (UC-01) – `{\"error\":\"Breeder is not verified\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "ReviewerForbidden": {
+        "description": "Identita nemá roli `admin` ani `owner` – `{\"error\":\"Insufficient permissions\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Zvíře nebo doklad neexistuje, nebo patří jinému chovateli – `{\"error\":\"Animal not found\"}` / `{\"error\":\"Document not found\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Soubor je větší než 10 MiB – `{\"error\":\"Payload too large\"}`. Nic se neuloží.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Obsah souboru není PDF, JPEG ani PNG – `{\"error\":\"Document must be a PDF, JPEG or PNG file\"}`. Nic se neuloží.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "VerificationUnavailable": {
+        "description": "Stav ověření chovatele nelze zjistit (breeder-service nedostupná) – `{\"error\":\"Breeder verification unavailable\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Neočekávaná chyba – `{\"error\":\"Internal server error\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "identity": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-anico-identity",
+        "description": "Krátkodobý podepsaný token identity. Doplňuje ho gateway, v lokálním vývoji vývojový most; klient ho nikdy nevkládá."
+      }
+    }
+  },
+  "security": [{ "identity": [] }]
+}

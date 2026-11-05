@@ -1,15 +1,15 @@
 # Kde má být nový kód
 
-| Složka                    | Odpovědnost                                                                         |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| `apps/frontend`           | React UI, TypeScript, Vite                                                          |
-| `apps/auth-service`       | OIDC přihlášení, účty, relace a role                                                |
-| `apps/animal-service`     | Základ CRUD vlastních zvířat a validace druhů/plemen; zatím bez cloudového nasazení |
-| `apps/breeder-service`    | Lokální backend UC-01: profil a ověření chovatele; bez nasazení a napojení UI       |
-| `packages/auth`           | Ověření aplikační identity v backendových službách                                  |
-| `apps/tvoje-service`      | Tvoje samostatná Express mikroservisa, Mongoose, Pino                               |
-| `packages/shared-schemas` | Zod schémata a odvozené typy pro API                                                |
-| `infrastructure`          | Cloud, server a nasazování; není aplikační doména                                   |
+| Složka                    | Odpovědnost                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `apps/frontend`           | React UI, TypeScript, Vite                                                               |
+| `apps/auth-service`       | OIDC přihlášení, účty, relace a role                                                     |
+| `apps/animal-service`     | CRUD vlastních zvířat a doklady zvířat UC-03 (verze, posouzení); bez cloudového nasazení |
+| `apps/breeder-service`    | Lokální backend UC-01: profil a ověření chovatele; bez nasazení a napojení UI            |
+| `packages/auth`           | Ověření aplikační identity v backendových službách                                       |
+| `apps/tvoje-service`      | Tvoje samostatná Express mikroservisa, Mongoose, Pino                                    |
+| `packages/shared-schemas` | Zod schémata a odvozené typy pro API                                                     |
+| `infrastructure`          | Cloud, server a nasazování; není aplikační doména                                        |
 
 `tvoje-service` je zástupný název vlastní služby. Ukázková `breeding-service`
 slouží jako příklad; nové mikroservisy vytvářej samostatně v `apps/` generátorem.

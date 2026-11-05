@@ -39,7 +39,10 @@ describe('HTTP and database integration', () => {
     let stopping = false;
     const app = createApp({
       logger: pino({ level: 'silent' }),
-      modules: createModules(connection),
+      modules: createModules(connection, {
+        logger: pino({ level: 'silent' }),
+        verification: { isVerified: async () => true },
+      }),
       isReady: () => !stopping && connection.readyState === 1,
     });
     expect((await request(app).get('/health').expect(200)).body.service).toBe(
