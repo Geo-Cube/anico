@@ -17,16 +17,28 @@ def inspect(name):
 
 REPOSITORIES = {'backend': 'breeding-service', 'frontend': 'frontend', 'auth': 'auth-service',
                 'animal': 'animal-service', 'breeder': 'breeder-service'}
-# Doménové služby jsou součástí jen pětisložkového releasu; ověřují se, pokud existují.
-names = ['backend', 'frontend', 'auth'] + [name for name in ['animal', 'breeder'] if inspect(name + '-' + identity)]
-containers = None
-for attempt in range(40):
-    containers = {name: inspect(name + '-' + identity) for name in names}
-    if all(value and value['State'].get('Health', {}).get('Status') == 'healthy' for value in containers.values()):
-        break
-    time.sleep(3)
-else:
+
+
+def request(path):
+    return subprocess.check_output(['docker', 'exec', 'coolify-proxy', 'wget', '-qO-',
+                                    '--header=Host: dev.anico.online', 'http://127.0.0.1' + path], text=True)
+
+
+def wait_healthy(names):
+    for attempt in range(40):
+        found = {name: inspect(name + '-' + identity) for name in names}
+        if all(value and value['State'].get('Health', {}).get('Status') == 'healthy' for value in found.values()):
+            return found
+        time.sleep(3)
     raise RuntimeError('Development containers did not become healthy; inspect Coolify')
+
+
+# Povinné komponenty určuje release manifest požadované revize, ne existence kontejnerů.
+frontend = wait_healthy(['frontend'])['frontend']
+release = json.loads(request('/anico-release-' + frontend['Config']['Labels']['com.anico.revision'] + '.json'))
+names = [name for name, repository in REPOSITORIES.items() if repository in release['images']]
+assert {'backend', 'frontend', 'auth'} <= set(names), 'Release manifest misses a required component'
+containers = wait_healthy(names)
 
 revisions = set()
 for name, container in containers.items():
@@ -81,21 +93,12 @@ for name, container in containers.items():
         assert not any(value.startswith(('NATS_PASSWORD=', 'NATS_URL=')) for value in container['Config']['Env'])
 assert len(revisions) == 1, 'Mixed release revisions'
 
-
-def request(path):
-    return subprocess.check_output(['docker', 'exec', 'coolify-proxy', 'wget', '-qO-',
-                                    '--header=Host: dev.anico.online', 'http://127.0.0.1' + path], text=True)
-
-
 assert '<html' in request('/').lower()
 assert json.loads(request('/api/ready'))['status'] == 'ok'
-release = json.loads(request('/anico-release-' + next(iter(revisions)) + '.json'))
 assert release['revision'] in revisions
-assert release['images']['frontend'] == containers['frontend']['Config']['Image']
-assert release['images']['breeding-service'] == containers['backend']['Config']['Image']
-assert release['images']['auth-service'] == containers['auth']['Config']['Image']
+for name, container in containers.items():
+    assert release['images'][REPOSITORIES[name]] == container['Config']['Image']
 for name in ('animal', 'breeder'):
     if name in containers:
         assert json.loads(request('/api/' + name + '/ready'))['status'] == 'ok'
-        assert release['images'][REPOSITORIES[name]] == containers[name]['Config']['Image']
 print('Verified healthy matching dev images, frontend and API readiness routing, non-root/read-only containers, private ports and separate DB credentials/networks.')

@@ -228,6 +228,8 @@ function addDomainServices(compose, images, common) {
         NODE_ENV: 'production',
         APP_ENV: 'dev',
         MIGRATE_ON_START: 'true',
+        // DB CLI (`status`, `seed --shared`) v kontejneru čte URI ze souboru, server z exportu.
+        MONGODB_URI_FILE: `/run/secrets/${name}-mongodb-uri`,
         HOST: '0.0.0.0',
         PORT: '3000',
         LOG_LEVEL: '${LOG_LEVEL:-debug}',

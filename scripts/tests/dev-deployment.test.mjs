@@ -248,6 +248,10 @@ test('domain release routes animal and breeder behind the session gateway with o
     assert.equal(service.environment.AUTH_AUDIENCE, 'anico-api-dev');
     assert.equal(service.environment.APP_ENV, 'dev');
     assert.equal(service.environment.MIGRATE_ON_START, 'true');
+    assert.equal(
+      service.environment.MONGODB_URI_FILE,
+      `/run/secrets/${name}-mongodb-uri`,
+    );
     // Chráněné API jen přes ověřenou relaci; health/ready bez ní, ale nad přísnějším prefixem.
     assert.equal(
       service.labels[`${router}.middlewares`],
