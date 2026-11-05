@@ -64,8 +64,7 @@ nebo index bez nahraného souboru → 400, více než 10 fotografií → 400.
 
 ## 6. Co chybí
 
-- **Nasazení:** animal-service ani breeder-service nejsou v cloudovém publish/deploy; bez routy a
-  `BREEDER_SERVICE_URL` vrací správa zvířat 503 (viz [návrh UC-03 §5](uc-03-doklady.md)).
-- **Frontend** formuláře zvířete a fotografií.
+- **Ověření UC-02 na devu v prohlížeči:** služby běží na devu (`/api/animal`, `/api/breeder`, PR #35);
+  verze s UC-02 se nasadí po merge do `dev`.
 - **Odložený úklid osiřelých souborů** v `animalPhotos` (stejně jako u dokladů).
 - **Náhledy/zmenšeniny fotografií:** soubor se vrací v původní velikosti.

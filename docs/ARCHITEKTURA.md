@@ -4,8 +4,8 @@
 | ------------------------- | ------------------------------------------------------------------------------------- |
 | `apps/frontend`           | React UI, TypeScript, Vite                                                            |
 | `apps/auth-service`       | OIDC přihlášení, účty, relace a role                                                  |
-| `apps/animal-service`     | Zvířata a fotografie UC-02, doklady UC-03 (verze, posouzení); bez cloudového nasazení |
-| `apps/breeder-service`    | Lokální backend UC-01: profil a ověření chovatele; bez nasazení a napojení UI         |
+| `apps/animal-service`     | Zvířata a fotografie UC-02, doklady UC-03 (verze, posouzení); nasazená na devu        |
+| `apps/breeder-service`    | Backend UC-01: profil a ověření chovatele; nasazený na devu, UI administrace simulace |
 | `packages/auth`           | Ověření aplikační identity v backendových službách                                    |
 | `apps/tvoje-service`      | Tvoje samostatná Express mikroservisa, Mongoose, Pino                                 |
 | `packages/shared-schemas` | Zod schémata a odvozené typy pro API                                                  |

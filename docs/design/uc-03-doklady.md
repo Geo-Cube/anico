@@ -58,13 +58,11 @@ Stav k 5. 11. 2026 po PR #33. Nic z toho neblokuje DoD UC-03; pořadí není zá
 
 **Provoz a nasazení**
 
-1. **Nasazení animal-service:** image v matici `publish-images.yml`, deploy, DB účet a migrace
-   `20261105160825-animal-documents`, `BREEDER_SERVICE_URL` v konfiguraci prostředí.
-2. **Nasazení breeder-service:** chybí routa gateway `/api/breeder`; do té doby operace chovatele s doklady na devu
-   vracejí 503. Ověřit, že produkční gateway vydává identitu se stejnou audience pro obě služby (přeposílání
-   `x-anico-identity` do breeder-service na tom závisí; na devu je společná `anico-api-dev`).
-3. **`dev:remote` pro doklady:** launcher spouští jednu službu; pro přihlášený lokální běh dokladů musí běžet
-   i breeder-service a animal-service musí dostat `BREEDER_SERVICE_URL`.
+1. ~~**Nasazení animal-service a breeder-service**~~ – hotovo v PR #35: publish, deploy, vlastní DB účty,
+   routy `/api/animal` a `/api/breeder` přes ověření relace, interní `BREEDER_SERVICE_URL`. Ověřit, že
+   produkční gateway vydává identitu se stejnou audience pro obě služby (na devu společná `anico-api-dev`).
+2. ~~**`dev:remote` pro doklady**~~ – hotovo v PR #35: launcher s `--service animal-service` spustí i
+   breeder-service a nastaví `BREEDER_SERVICE_URL`.
 
 **Konzistence souborů**
 
