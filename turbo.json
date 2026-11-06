@@ -17,7 +17,9 @@
         "AUTH_ISSUER",
         "AUTH_AUDIENCE",
         "ANICO_DEV_AUTH_RELAY",
-        "ANICO_DEV_AUTH_KEY"
+        "ANICO_DEV_AUTH_KEY",
+        "BREEDER_VERIFICATION_BROKER_FILE",
+        "ANIMAL_VERIFICATION_BROKER_FILE"
       ],
       "env": [
         "HOST",
