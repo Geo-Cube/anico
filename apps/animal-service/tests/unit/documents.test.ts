@@ -13,6 +13,19 @@ import {
 const owner = testIdentity({ roles: ['breeder'] });
 const ANIMAL_ID = '000000000000000000000001';
 const PDF = Buffer.from('%PDF-1.7');
+const emptyDocuments = () => ({
+  animal: {
+    id: ANIMAL_ID,
+    ownerUserId: owner.userId,
+    name: 'Luna',
+    species: 'dog' as const,
+    breedId: 'aljassky-malamut',
+    sex: 'female' as const,
+    microchipNumber: null,
+  },
+  revision: 0,
+  versions: [],
+});
 
 function fakeFiles() {
   const stored = new Set<string>();
@@ -40,12 +53,7 @@ function useCases(
   let id = 0;
   return documentUseCases({
     repository: {
-      load: async () => ({
-        animalId: ANIMAL_ID,
-        ownerUserId: owner.userId,
-        revision: 0,
-        versions: [],
-      }),
+      load: async () => emptyDocuments(),
       saveVersions: async () => true,
       decide: async () => null,
       reviewQueue: async () => [],
@@ -67,12 +75,7 @@ describe('document submission keeps files and records consistent', () => {
   it('keeps stored files when a failed write cannot be shown to be absent', async () => {
     for (const load of [
       // po chybě zápisu verze ve stavu chybí – zápis ale může ještě doběhnout
-      async () => ({
-        animalId: ANIMAL_ID,
-        ownerUserId: owner.userId,
-        revision: 0,
-        versions: [],
-      }),
+      async () => emptyDocuments(),
       // stav nelze vůbec zjistit
       async () => {
         throw new Error('connection lost');
@@ -83,15 +86,7 @@ describe('document submission keeps files and records consistent', () => {
       const documents = useCases(
         {
           // kontrola vlastnictví a plán zápisu uspějí; třetí načtení (po chybě zápisu) je testované
-          load: async () =>
-            loads++ < 2
-              ? {
-                  animalId: ANIMAL_ID,
-                  ownerUserId: owner.userId,
-                  revision: 0,
-                  versions: [],
-                }
-              : load(),
+          load: async () => (loads++ < 2 ? emptyDocuments() : load()),
           saveVersions: async () => {
             throw new Error('acknowledgement lost');
           },

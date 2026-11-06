@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   AnimalDocumentFileSchema,
   AnimalDocumentHistorySchema,
+  DocumentAnimalSchema,
   AnimalDocumentIdSchema,
   AnimalDocumentListSchema,
   AnimalDocumentSchema,
@@ -124,6 +125,7 @@ const components = [
   ['AnimalDocumentFile', AnimalDocumentFileSchema],
   ['AnimalDocument', AnimalDocumentSchema],
   ['AnimalDocumentList', AnimalDocumentListSchema],
+  ['DocumentAnimal', DocumentAnimalSchema],
   ['AnimalDocumentHistory', AnimalDocumentHistorySchema],
   ['DecideAnimalDocument', DecideAnimalDocumentSchema],
   ['DocumentReview', DocumentReviewSchema],

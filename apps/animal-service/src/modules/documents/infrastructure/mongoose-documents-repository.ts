@@ -1,5 +1,5 @@
 import { isValidObjectId, Types, type Connection } from 'mongoose';
-import type { Animal } from '@anico/shared-schemas';
+import type { Animal, DocumentAnimal } from '@anico/shared-schemas';
 import {
   animalModel,
   type StoredDocumentVersion,
@@ -39,6 +39,38 @@ function toStored(version: DocumentVersion): StoredDocumentVersion {
   };
 }
 
+/** Údaje zvířete, které posuzovatel vidí u dokladu (fronta i historie). */
+const ANIMAL_FIELDS = {
+  ownerUserId: 1,
+  name: 1,
+  species: 1,
+  breedId: 1,
+  sex: 1,
+  microchipNumber: 1,
+} as const;
+
+type StoredAnimalFields = {
+  _id: Types.ObjectId;
+  ownerUserId: string;
+  name: string;
+  species: Animal['species'];
+  breedId: string;
+  sex: Animal['sex'];
+  microchipNumber?: string | null;
+};
+
+function toDocumentAnimal(row: StoredAnimalFields): DocumentAnimal {
+  return {
+    id: row._id.toString(),
+    ownerUserId: row.ownerUserId,
+    name: row.name,
+    species: row.species,
+    breedId: row.breedId,
+    sex: row.sex,
+    microchipNumber: row.microchipNumber ?? null,
+  };
+}
+
 /** Doklady jsou pole `documents` v dokumentu zvířete; každý zápis je jeden atomický update (ADR-0005). */
 export function mongooseDocumentsRepository(
   connection: Connection,
@@ -49,15 +81,14 @@ export function mongooseDocumentsRepository(
       if (!isValidObjectId(animalId)) return null;
       const doc = await model
         .findById(animalId, {
-          ownerUserId: 1,
+          ...ANIMAL_FIELDS,
           documents: 1,
           documentsRevision: 1,
         })
         .lean();
       if (!doc) return null;
       return {
-        animalId,
-        ownerUserId: doc.ownerUserId,
+        animal: toDocumentAnimal(doc),
         revision: doc.documentsRevision ?? 0,
         versions: (doc.documents ?? []).map(toDomain),
       };
@@ -138,16 +169,9 @@ export function mongooseDocumentsRepository(
     },
 
     async reviewQueue(limit) {
-      const rows = await model.aggregate<{
-        _id: Types.ObjectId;
-        ownerUserId: string;
-        name: string;
-        species: Animal['species'];
-        breedId: string;
-        sex: Animal['sex'];
-        microchipNumber?: string | null;
-        document: StoredDocumentVersion;
-      }>([
+      const rows = await model.aggregate<
+        StoredAnimalFields & { document: StoredDocumentVersion }
+      >([
         {
           $match: {
             documents: {
@@ -164,29 +188,11 @@ export function mongooseDocumentsRepository(
         },
         { $sort: { 'documents.submittedAt': 1, 'documents._id': 1 } },
         { $limit: limit },
-        {
-          $project: {
-            ownerUserId: 1,
-            name: 1,
-            species: 1,
-            breedId: 1,
-            sex: 1,
-            microchipNumber: 1,
-            document: '$documents',
-          },
-        },
+        { $project: { ...ANIMAL_FIELDS, document: '$documents' } },
       ]);
       return rows.map((row) => ({
         version: toDomain(row.document),
-        animal: {
-          id: row._id.toString(),
-          ownerUserId: row.ownerUserId,
-          name: row.name,
-          species: row.species,
-          breedId: row.breedId,
-          sex: row.sex,
-          microchipNumber: row.microchipNumber ?? null,
-        },
+        animal: toDocumentAnimal(row),
       }));
     },
   };

@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { sessionGeneration, useCurrentSession } from '@/features/auth';
 import { isApiError } from '@/shared/lib/http';
+import { useFileDownload } from '@/shared/lib/file-download';
 import { Alert } from '@/shared/ui/alert';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
@@ -17,11 +18,11 @@ import {
   decideRequest,
   decisionConflict,
   downloadCertificate,
-  formatDateTime,
   requestDetailKey,
   requestDetailQuery,
   verificationKey,
 } from './api';
+import { formatDateTime } from '@/shared/lib/format';
 import {
   isQueueLocationState,
   PENDING_QUEUE_SEARCH,
@@ -184,33 +185,11 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
     },
   });
 
-  const certificateDownload = useMutation({
-    mutationFn: (tab: Window | null) =>
-      downloadCertificate(request.id).then((blob) => ({ blob, tab })),
-    onSuccess: ({ blob, tab }) => {
-      // Typ ze schématu API (PDF/JPEG/PNG), nikdy z odpovědi souboru.
-      const url = URL.createObjectURL(
-        new Blob([blob], { type: certificate.contentType }),
-      );
-      if (tab) {
-        tab.location.href = url;
-      } else {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = certificate.fileName;
-        link.click();
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    },
-    onError: (_error, tab) => tab?.close(),
+  const certificateFile = useFileDownload({
+    load: () => downloadCertificate(request.id),
+    fileName: certificate.fileName,
+    contentType: certificate.contentType,
   });
-
-  const openCertificate = () => {
-    // Okno se otevírá synchronně při kliknutí, jinak ho prohlížeč zablokuje.
-    const tab = window.open('', '_blank');
-    if (tab) tab.opener = null;
-    certificateDownload.mutate(tab);
-  };
 
   const isSaving = decide.isPending;
   const decisionError =
@@ -323,24 +302,24 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
                 </p>
               </div>
             </div>
-            {certificateDownload.isError && (
+            {certificateFile.error && (
               <p role="alert" className="text-sm text-destructive">
-                {certificateErrorText(certificateDownload.error)}
+                {certificateErrorText(certificateFile.error)}
               </p>
             )}
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <Button
               variant="outline"
-              onClick={openCertificate}
-              disabled={certificateDownload.isPending}
+              onClick={certificateFile.open}
+              disabled={certificateFile.isPending}
             >
               Otevřít dokument
             </Button>
             <Button
               variant="outline"
-              onClick={() => certificateDownload.mutate(null)}
-              disabled={certificateDownload.isPending}
+              onClick={certificateFile.download}
+              disabled={certificateFile.isPending}
             >
               Stáhnout
             </Button>
@@ -414,7 +393,13 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
       <ApproveRequestDialog
         open={dialog?.kind === 'approve'}
         isSaving={isSaving}
-        breederName={fullName}
+        title="Schválit ověření"
+        description={
+          <>
+            Opravdu chcete ověřit chovatele <strong>{fullName}</strong>?
+            Rozhodnutí je konečné a nelze ho změnit.
+          </>
+        }
         error={
           dialog?.kind === 'approve' && decisionError !== null
             ? decisionErrorText(decisionError)
@@ -434,6 +419,9 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
             ? decisionErrorText(decisionError)
             : null
         }
+        title="Zamítnout žádost"
+        placeholder="Např.: Na certifikátu není čitelné registrační číslo stanice."
+        note="Důvod se zobrazí u výsledku posouzení a v e-mailu pro chovatele."
         onClose={() => setOpenDialog(null)}
         onConfirm={(reason) =>
           dialog &&

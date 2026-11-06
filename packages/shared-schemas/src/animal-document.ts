@@ -57,9 +57,25 @@ export const AnimalDocumentListSchema = z.strictObject({
 });
 export type AnimalDocumentList = z.infer<typeof AnimalDocumentListSchema>;
 
-/** Historie jedné propojené řady dokladu, nejstarší první. */
+/**
+ * Zvíře, ke kterému doklad patří, pro posouzení (fronta, historie). Bez čísla čipu
+ * (`microchipNumber: null`) admin doklad ověřit nemůže (UC-02/2, jen informace).
+ */
+export const DocumentAnimalSchema = z.strictObject({
+  id: AnimalIdSchema,
+  ownerUserId: z.uuid(),
+  name: z.string().trim().min(1).max(120),
+  species: AnimalSpeciesSchema,
+  breedId: z.string(),
+  sex: AnimalSexSchema,
+  microchipNumber: z.string().nullable(),
+});
+export type DocumentAnimal = z.infer<typeof DocumentAnimalSchema>;
+
+/** Historie jedné propojené řady dokladu, nejstarší první, se zvířetem, ke kterému patří. */
 export const AnimalDocumentHistorySchema = z.strictObject({
   animalId: AnimalIdSchema,
+  animal: DocumentAnimalSchema,
   documentType: AnimalDocumentTypeSchema,
   versions: z.array(AnimalDocumentSchema).min(1),
 });
@@ -90,21 +106,10 @@ export type DecideAnimalDocumentInput = z.infer<
   typeof DecideAnimalDocumentSchema
 >;
 
-/**
- * Položka fronty admina: aktuální `PENDING` verze a zvíře, ke kterému patří. Bez čísla čipu
- * (`microchipNumber: null`) admin doklad ověřit nemůže (UC-02/2, jen informace).
- */
+/** Položka fronty admina: aktuální `PENDING` verze a zvíře, ke kterému patří. */
 export const DocumentReviewSchema = z.strictObject({
   document: AnimalDocumentSchema,
-  animal: z.strictObject({
-    id: AnimalIdSchema,
-    ownerUserId: z.uuid(),
-    name: z.string().trim().min(1).max(120),
-    species: AnimalSpeciesSchema,
-    breedId: z.string(),
-    sex: AnimalSexSchema,
-    microchipNumber: z.string().nullable(),
-  }),
+  animal: DocumentAnimalSchema,
 });
 export type DocumentReview = z.infer<typeof DocumentReviewSchema>;
 

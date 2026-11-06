@@ -3,10 +3,10 @@ import { Link } from 'react-router';
 import { cn } from '@/shared/lib/cn';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
+import { reviewQueueQuery } from '@/features/documents/api';
 import {
   formatPendingCountText,
   formatPendingDocumentsText,
-  pendingDocumentsQuery,
   summaryQuery,
 } from './api';
 import { PENDING_QUEUE_SEARCH } from './queue-location';
@@ -48,7 +48,7 @@ function CountText({
 
 export function BreedersOverview() {
   const summary = useQuery(summaryQuery);
-  const documents = useQuery(pendingDocumentsQuery);
+  const documents = useQuery(reviewQueueQuery);
 
   return (
     <section
@@ -96,22 +96,9 @@ export function BreedersOverview() {
               }
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled
-              aria-describedby="document-queue-note"
-            >
-              Zobrazit doklady
-            </Button>
-            <p
-              id="document-queue-note"
-              className="text-xs text-muted-foreground"
-            >
-              Fronta dokladů zvířat (US-03) zatím v aplikaci není.
-            </p>
-          </div>
+          <Link to="doklady" className={cn(buttonVariants(), 'w-full')}>
+            Zobrazit doklady
+          </Link>
         </Card>
       </div>
     </section>

@@ -68,7 +68,7 @@ export function documentUseCases(dependencies: {
   async function ownedAnimal(actor: Identity | undefined, animalId: string) {
     const identity = await breeder(actor);
     const documents = await repository.load(animalId);
-    if (!documents || documents.ownerUserId !== identity.userId)
+    if (!documents || documents.animal.ownerUserId !== identity.userId)
       throw new DocumentError(404, 'Animal not found');
     return { identity, documents };
   }
@@ -180,7 +180,7 @@ export function documentUseCases(dependencies: {
     try {
       for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
         const documents = await repository.load(animalId);
-        if (!documents || documents.ownerUserId !== identity.userId)
+        if (!documents || documents.animal.ownerUserId !== identity.userId)
           throw new DocumentError(404, 'Animal not found');
         const submission = {
           id: dependencies.newId,
@@ -266,13 +266,17 @@ export function documentUseCases(dependencies: {
       return documents.versions.filter((version) => version.isCurrent);
     },
 
+    /** UC-03/8: verze řady a zvíře, ke kterému patří (posuzovatel nemá přístup ke správě zvířat). */
     async history(
       actor: Identity | undefined,
       animalId: string,
       documentId: string,
     ) {
       const documents = await readableAnimal(actor, animalId);
-      return historyOf(documents.versions, documentId);
+      return {
+        animal: documents.animal,
+        versions: historyOf(documents.versions, documentId),
+      };
     },
 
     /** Stažení libovolné verze (i historické) po kontrole oprávnění. */

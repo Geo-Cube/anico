@@ -2,6 +2,7 @@ import type {
   AnimalDocumentsState,
   AnimalDocumentType,
   AssessmentStatus,
+  DocumentAnimal,
 } from '@anico/shared-schemas';
 import type { FileContentType } from '../../../files/file-content.js';
 
@@ -29,10 +30,12 @@ export interface DocumentVersion {
   rejectionReason: string | null;
 }
 
-/** Doklady jednoho zvířete; `revision` slouží optimistické kontrole souběhu. */
+/**
+ * Doklady jednoho zvířete a jeho údaje pro posouzení (vlastník, čip); `revision` slouží
+ * optimistické kontrole souběhu.
+ */
 export interface AnimalDocuments {
-  animalId: string;
-  ownerUserId: string;
+  animal: DocumentAnimal;
   revision: number;
   versions: DocumentVersion[];
 }

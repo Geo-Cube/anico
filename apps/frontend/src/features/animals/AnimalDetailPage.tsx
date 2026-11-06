@@ -27,20 +27,13 @@ import {
   speciesLabel,
 } from './api';
 import { AnimalError } from './AnimalError';
-import { DocumentsStateChip } from './DocumentsStateChip';
+import { AnimalDocuments } from '@/features/documents/AnimalDocuments';
 import { optionalFields } from './fields';
 import type { ResultState } from './ResultMessage';
 import { ResultMessage } from './ResultMessage';
 
 const dateFormat = new Intl.DateTimeFormat('cs-CZ', { dateStyle: 'long' });
 const numberFormat = new Intl.NumberFormat('cs-CZ');
-
-const DOCUMENTS_HINT: Record<Animal['documentsState'], string> = {
-  NOT_SUBMITTED: 'Zvíře zatím nemá nahrané žádné doklady.',
-  PENDING: 'Doklady čekají na posouzení administrátorem.',
-  APPROVED: 'Doklady zvířete byly schváleny.',
-  REJECTED: 'Některý doklad byl zamítnut.',
-};
 
 function displayValue(
   animal: Animal,
@@ -213,50 +206,40 @@ export function AnimalDetailPage() {
         <ResultMessage />
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <Gallery animal={animal} />
-          <div className="space-y-6">
-            <Card className="rounded-2xl p-6">
-              <h2 className="mb-5 text-base font-semibold text-brand">
-                Základní údaje
-              </h2>
-              <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
-                {[
-                  { label: 'Druh', value: speciesLabel(animal.species) },
-                  { label: 'Plemeno', value: breedLabel(animal) },
-                  { label: 'Pohlaví', value: sexLabel(animal.sex) },
-                  ...optionalFields.map(({ key, label }) => ({
-                    label,
-                    value: displayValue(animal, key),
-                    wide: key === 'description',
-                  })),
-                ].map(({ label, value, ...item }) => (
-                  <div
-                    key={label}
-                    className={
-                      'wide' in item && item.wide ? 'sm:col-span-2' : ''
-                    }
+          <Card className="rounded-2xl p-6">
+            <h2 className="mb-5 text-base font-semibold text-brand">
+              Základní údaje
+            </h2>
+            <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+              {[
+                { label: 'Druh', value: speciesLabel(animal.species) },
+                { label: 'Plemeno', value: breedLabel(animal) },
+                { label: 'Pohlaví', value: sexLabel(animal.sex) },
+                ...optionalFields.map(({ key, label }) => ({
+                  label,
+                  value: displayValue(animal, key),
+                  wide: key === 'description',
+                })),
+              ].map(({ label, value, ...item }) => (
+                <div
+                  key={label}
+                  className={'wide' in item && item.wide ? 'sm:col-span-2' : ''}
+                >
+                  <dt className={eyebrowClassName}>{label}</dt>
+                  <dd
+                    className={cn(
+                      'mt-1 text-sm break-words whitespace-pre-wrap',
+                      value === null && 'text-muted-foreground italic',
+                    )}
                   >
-                    <dt className={eyebrowClassName}>{label}</dt>
-                    <dd
-                      className={cn(
-                        'mt-1 text-sm break-words whitespace-pre-wrap',
-                        value === null && 'text-muted-foreground italic',
-                      )}
-                    >
-                      {value ?? 'Nevyplněno'}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
-            <Card className="space-y-3 rounded-2xl p-6">
-              <h2 className="text-base font-semibold text-brand">Doklady</h2>
-              <DocumentsStateChip state={animal.documentsState} />
-              <p className="text-sm text-muted-foreground">
-                {DOCUMENTS_HINT[animal.documentsState]}
-              </p>
-            </Card>
-          </div>
+                    {value ?? 'Nevyplněno'}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
         </div>
+        <AnimalDocuments animalId={animal.id} />
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 z-40 bg-foreground/30" />
           <Dialog.Popup className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-xl outline-none">

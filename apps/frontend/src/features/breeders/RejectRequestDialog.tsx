@@ -7,7 +7,7 @@ import { Button } from '@/shared/ui/button';
 const REASON_INPUT_ID = 'rejection-reason-input';
 const REASON_ERROR_ID = 'rejection-reason-error';
 const REASON_NOTE_ID = 'rejection-reason-note';
-/** Same limit as `DecideVerificationRequestSchema.rejectionReason`. */
+/** Same limit as `rejectionReason` in the decision schemas (requests and documents). */
 const REASON_MAX_LENGTH = 500;
 
 /**
@@ -18,6 +18,9 @@ export function RejectRequestDialog({
   open,
   isSaving,
   error: saveError,
+  title,
+  placeholder,
+  note,
   onClose,
   onConfirm,
 }: {
@@ -25,6 +28,10 @@ export function RejectRequestDialog({
   isSaving: boolean;
   /** Failed save, shown inside the dialog so the typed reason stays visible. */
   error: string | null;
+  title: string;
+  placeholder: string;
+  /** Where the breeder will see the reason. */
+  note: string;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }) {
@@ -62,7 +69,7 @@ export function RejectRequestDialog({
         <Dialog.Popup className="fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-border bg-card text-card-foreground shadow-xl outline-none">
           <div className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
             <Dialog.Title className="text-lg font-semibold">
-              Zamítnout žádost
+              {title}
             </Dialog.Title>
             <Dialog.Close
               render={
@@ -98,7 +105,7 @@ export function RejectRequestDialog({
                 setReason(event.target.value);
                 if (error) setError('');
               }}
-              placeholder="Např.: Na certifikátu není čitelné registrační číslo stanice."
+              placeholder={placeholder}
               className={cn(
                 'w-full resize-y rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
                 error && 'border-destructive',
@@ -110,7 +117,7 @@ export function RejectRequestDialog({
               </p>
             )}
             <p id={REASON_NOTE_ID} className="text-sm text-muted-foreground">
-              Důvod se zobrazí u výsledku posouzení a v e-mailu pro chovatele.
+              {note}
             </p>
             {saveError && (
               <p role="alert" className="text-sm text-destructive">
