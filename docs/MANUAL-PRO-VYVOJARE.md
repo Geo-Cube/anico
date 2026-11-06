@@ -102,7 +102,7 @@ Diagnostika UI: `npm run doctor -- --frontend`.
 Diagnostika backendu i UI: `npm run doctor -- --service animal --frontend`.
 V PowerShellu můžeš používat `npm.cmd` místo `npm`.
 
-**Současný stav:** business obrazovky jsou zatím simulace; jejich napojení na API doplní vývojáři.
+**Současný stav:** business obrazovky (zvířata UC-02, administrace ověření chovatelů UC-01) volají skutečné API; UI dokladů UC-03 zatím chybí.
 Google/Microsoft login na týmovém devu i pro lokální nástroje je nasazený a ověřený,
 včetně předání identity do lokálního i sdíleného API a odhlášení.
 Samotný GitHub Access nestačí pro business API. [Co máme a co zbývá](STAV-PROJEKTU.md).

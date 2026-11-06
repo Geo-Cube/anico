@@ -40,16 +40,14 @@ describe('toVerificationRequest', () => {
       request.breedingStationCertificate.fileName,
     );
     expect(result.breedingStationCertificate.contentType).toBe(contentType);
-    expect(result.reviewedBy).toBe(request.reviewedBy);
     expect(result.reviewedAt).toBe(request.reviewedAt?.toISOString() ?? null);
     expect(result.rejectionReason).toBe(request.rejectionReason);
     expect(result.lastSubmittedAt).toBe(request.lastSubmittedAt.toISOString());
     expect(result.revision).toBe(1);
     expect(result.returnReason).toBeNull();
-    expect(result.reviewHistory).toEqual([]);
   });
 
-  it('maps a RETURNED request with its review history as ISO strings', () => {
+  it('maps a decided request for the breeder without the reviewer identity or history', () => {
     const request: VerificationRequest = {
       requestId: '123456789012345678901234',
       status: 'RETURNED',
@@ -86,28 +84,19 @@ describe('toVerificationRequest', () => {
       toVerificationRequest(request, 'image/png'),
     );
 
-    expect(result).toMatchObject({
+    expect(result).toEqual({
+      id: '123456789012345678901234',
       status: 'RETURNED',
       submittedAt: '2026-01-01T00:00:00.000Z',
       lastSubmittedAt: '2026-01-03T00:00:00.000Z',
       revision: 2,
+      breedingStationCertificate: {
+        fileName: 'certificate.pdf',
+        contentType: 'image/png',
+      },
+      reviewedAt: '2026-01-04T00:00:00.000Z',
+      rejectionReason: null,
       returnReason: 'Doplňte',
-      reviewHistory: [
-        {
-          decision: 'RETURNED',
-          revision: 1,
-          reviewedBy: 'admin-1',
-          reviewedAt: '2026-01-02T00:00:00.000Z',
-          reason: 'Nečitelné',
-        },
-        {
-          decision: 'RETURNED',
-          revision: 2,
-          reviewedBy: 'admin-2',
-          reviewedAt: '2026-01-04T00:00:00.000Z',
-          reason: 'Doplňte',
-        },
-      ],
     });
   });
 });

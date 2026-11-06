@@ -38,11 +38,9 @@ describe('POST /breeders/me/verification-request', () => {
       verificationRequest: {
         status: 'PENDING',
         revision: 1,
-        reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
         returnReason: null,
-        reviewHistory: [],
         breedingStationCertificate: {
           fileName: 'certifikát.pdf',
           contentType: 'application/pdf',

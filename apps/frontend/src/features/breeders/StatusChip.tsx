@@ -1,11 +1,10 @@
+import type { VerificationStatus } from '@anico/shared-schemas';
 import { cn } from '@/shared/lib/cn';
-import {
-  formatRequestStatusLabel,
-  type VerificationStatus,
-} from './simulation';
+import { STATUS_LABEL } from './api';
 
 const STATUS_TONE: Record<VerificationStatus, string> = {
   PENDING: 'bg-warning-soft text-warning',
+  RETURNED: 'bg-warning-soft text-warning',
   APPROVED: 'bg-accent text-accent-foreground',
   REJECTED: 'bg-destructive-soft text-destructive',
 };
@@ -25,7 +24,7 @@ export function StatusChip({
         className,
       )}
     >
-      {formatRequestStatusLabel(status)}
+      {STATUS_LABEL[status]}
     </span>
   );
 }

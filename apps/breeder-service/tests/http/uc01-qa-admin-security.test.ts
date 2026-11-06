@@ -673,11 +673,9 @@ describe('UC01-ACC-05 GET /breeders/me ve všech stavech', () => {
       verificationRequest: {
         id: pendingId,
         status: 'PENDING',
-        reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
         returnReason: null,
-        reviewHistory: [],
       },
     });
     expect(states.returned.body).toMatchObject({
@@ -686,17 +684,8 @@ describe('UC01-ACC-05 GET /breeders/me ve všech stavech', () => {
       verificationRequest: {
         id: returnedId,
         status: 'RETURNED',
-        reviewedBy: 'admin-3',
         rejectionReason: null,
         returnReason: 'Doplňte',
-        reviewHistory: [
-          {
-            decision: 'RETURNED',
-            revision: 1,
-            reviewedBy: 'admin-3',
-            reason: 'Doplňte',
-          },
-        ],
       },
     });
     expect(states.approved.body).toMatchObject({
@@ -704,7 +693,6 @@ describe('UC01-ACC-05 GET /breeders/me ve všech stavech', () => {
       isVerified: true,
       verificationRequest: {
         status: 'APPROVED',
-        reviewedBy: 'admin-1',
         rejectionReason: null,
       },
     });
@@ -714,10 +702,19 @@ describe('UC01-ACC-05 GET /breeders/me ve všech stavech', () => {
       isVerified: false,
       verificationRequest: {
         status: 'REJECTED',
-        reviewedBy: 'admin-2',
         rejectionReason: 'Nesedí',
       },
     });
+    // chovatel nikdy nevidí, kdo rozhodl (jen admin a vlastník)
+    for (const response of Object.values(states)) {
+      expect(response.body.verificationRequest).not.toHaveProperty(
+        'reviewedBy',
+      );
+      expect(response.body.verificationRequest).not.toHaveProperty(
+        'reviewHistory',
+      );
+      expect(JSON.stringify(response.body)).not.toMatch(/admin-\d/);
+    }
     // invariant: isVerified <=> APPROVED
     for (const response of [none, ...Object.values(states)]) {
       expect(response.body.isVerified).toBe(
