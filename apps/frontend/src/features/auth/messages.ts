@@ -7,15 +7,15 @@ export const providerNames: Record<AuthProvider, string> = {
 };
 
 export const loginErrorMessages: Record<LoginErrorCode, string> = {
-  LOGIN_CANCELLED: 'Přihlášení bylo zrušeno. Můžeš to zkusit znovu.',
+  LOGIN_CANCELLED: 'Přihlášení bylo zrušeno. Můžete to zkusit znovu.',
   LOGIN_EXPIRED:
-    'Přihlašovací odkaz vypršel nebo už byl použitý. Začni přihlášení znovu.',
-  LOGIN_FAILED: 'Přihlášení se nepodařilo. Zkus to prosím znovu.',
-  ACCOUNT_DISABLED: 'Tento účet AniCo je zablokovaný. Obrať se na správce.',
+    'Přihlašovací odkaz vypršel nebo už byl použitý. Začněte přihlášení znovu.',
+  LOGIN_FAILED: 'Přihlášení se nepodařilo. Zkuste to prosím znovu.',
+  ACCOUNT_DISABLED: 'Tento účet AniCo je zablokovaný. Obraťte se na správce.',
   IDENTITY_ALREADY_LINKED:
     'Tento účet poskytovatele už patří jinému účtu AniCo. Účty se automaticky neslučují.',
   RECENT_LOGIN_REQUIRED:
-    'Pro propojení se nejdřív odhlas a znovu přihlas ke svému stávajícímu účtu AniCo; propojení pak spusť do pěti minut.',
+    'Pro propojení se nejdřív odhlaste a znovu přihlaste ke svému stávajícímu účtu AniCo; propojení pak spusťte do pěti minut.',
   PROVIDER_UNAVAILABLE:
-    'Tento způsob přihlášení teď není dostupný. Zkus jiný nebo to zkus později.',
+    'Tento způsob přihlášení teď není dostupný. Zkuste jiný nebo to zkuste později.',
 };

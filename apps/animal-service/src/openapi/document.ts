@@ -11,6 +11,7 @@ import {
   AnimalListSchema,
   AnimalPhotoIdSchema,
   AnimalPhotoSchema,
+  AnimalPhotoSizeSchema,
   AnimalSchema,
   AnimalSexSchema,
   AnimalSpeciesSchema,
@@ -465,7 +466,15 @@ export function openApiDocument(): JsonObject {
           tags: ['animals'],
           operationId: 'getAnimalPhoto',
           summary: 'Soubor fotografie',
-          description: 'Jen vlastník zvířete s ověřeným účtem.',
+          description:
+            'Jen vlastník zvířete s ověřeným účtem. Bez `size` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin vrací originál i se `size`.',
+          parameters: [
+            queryParameter(
+              'size',
+              '`thumbnail` (delší strana nejvýše 800 px) pro karty a náhledy, `preview` (nejvýše 1920 px) pro detail.',
+              { type: 'string', enum: [...AnimalPhotoSizeSchema.options] },
+            ),
+          ],
           responses: {
             '200': {
               description:

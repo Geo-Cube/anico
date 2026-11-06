@@ -320,7 +320,16 @@
         "tags": ["animals"],
         "operationId": "getAnimalPhoto",
         "summary": "Soubor fotografie",
-        "description": "Jen vlastník zvířete s ověřeným účtem.",
+        "description": "Jen vlastník zvířete s ověřeným účtem. Bez `size` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin vrací originál i se `size`.",
+        "parameters": [
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "`thumbnail` (delší strana nejvýše 800 px) pro karty a náhledy, `preview` (nejvýše 1920 px) pro detail.",
+            "schema": { "type": "string", "enum": ["thumbnail", "preview"] }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Fotografie k zobrazení (`inline`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`).",
@@ -768,7 +777,10 @@
             "items": { "$ref": "#/components/schemas/AnimalPhoto" }
           },
           "createdAt": { "type": "string", "format": "date-time" },
-          "updatedAt": { "type": "string", "format": "date-time" }
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "documentsState": {
+            "$ref": "#/components/schemas/AnimalDocumentsState"
+          }
         },
         "required": [
           "id",
@@ -786,7 +798,8 @@
           "description",
           "photos",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "documentsState"
         ],
         "additionalProperties": false
       },

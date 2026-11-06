@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  AnimalDocumentsStateSchema,
   AnimalIdSchema,
   AnimalSexSchema,
   AnimalSpeciesSchema,
@@ -21,15 +22,6 @@ export const AssessmentStatusSchema = z.enum([
   'REJECTED',
 ]);
 export type AssessmentStatus = z.infer<typeof AssessmentStatusSchema>;
-
-/** Odvozený „stav dokladů“ zvířete (UC-03/7); neukládá se. */
-export const AnimalDocumentsStateSchema = z.enum([
-  'NOT_SUBMITTED',
-  'PENDING',
-  'APPROVED',
-  'REJECTED',
-]);
-export type AnimalDocumentsState = z.infer<typeof AnimalDocumentsStateSchema>;
 
 export const AnimalDocumentIdSchema = z.string().regex(/^[a-f0-9]{24}$/i);
 

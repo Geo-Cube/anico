@@ -129,7 +129,7 @@ describe('session availability', () => {
     );
     const { router } = renderApp('/ucet');
     expect(
-      await screen.findByText('Přihlášení vypršelo. Přihlas se znovu.'),
+      await screen.findByText('Přihlášení vypršelo. Přihlaste se znovu.'),
     ).toBeInTheDocument();
     expect(router.state.location.search).toBe('?returnTo=%2Fucet');
   });
@@ -139,7 +139,7 @@ describe('roles', () => {
   it('lets an administrator use the regular application', async () => {
     signedIn(sessionFor(['breeder', 'admin']));
     const { router } = renderApp('/');
-    await screen.findByRole('heading', { name: /Vítej, Jana Nováková/ });
+    await screen.findByRole('heading', { name: /Vítejte, Jana Nováková/ });
     expect(router.state.location.pathname).toBe('/');
     expect(
       screen.getByRole('link', { name: 'Administrace' }),
@@ -168,7 +168,7 @@ describe('logout and cached user data', () => {
       }),
     );
     const { client, router } = renderApp('/');
-    await screen.findByRole('heading', { name: /Vítej/ });
+    await screen.findByRole('heading', { name: /Vítejte/ });
     client.setQueryData(['animals'], [{ name: 'Brix' }]);
     server.use(http.get('/api/auth/session', anonymous));
     await userEvent.click(
@@ -196,7 +196,7 @@ describe('logout and cached user data', () => {
     signedIn();
     server.use(http.post('/api/auth/logout', () => HttpResponse.error()));
     const { router } = renderApp('/');
-    await screen.findByRole('heading', { name: /Vítej/ });
+    await screen.findByRole('heading', { name: /Vítejte/ });
     await userEvent.click(
       screen.getByRole('button', { name: /Uživatelská nabídka/ }),
     );
@@ -233,7 +233,7 @@ describe('account linking', () => {
       await screen.findByRole('button', { name: 'Propojit Microsoft' }),
     );
     expect(
-      await screen.findByText('Přihlášení vypršelo. Přihlas se znovu.'),
+      await screen.findByText('Přihlášení vypršelo. Přihlaste se znovu.'),
     ).toBeInTheDocument();
     expect(router.state.location.search).toBe('?returnTo=%2Fucet');
   });
@@ -250,7 +250,7 @@ describe('account linking', () => {
       await screen.findByRole('button', { name: 'Propojit Microsoft' }),
     );
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'nejdřív odhlas a znovu přihlas',
+      'nejdřív odhlaste a znovu přihlaste',
     );
     expect(router.state.location.pathname).toBe('/ucet');
   });

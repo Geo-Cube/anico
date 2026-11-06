@@ -27,6 +27,11 @@ const upload: PhotoUpload = {
   fileName: 'photo.png',
   content: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]),
 };
+/** Správná hlavička PNG, ale obsah nejde dekódovat. */
+const broken: PhotoUpload = {
+  fileName: 'broken.png',
+  content: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0xde, 0xad]),
+};
 function setup() {
   const records = new Map<string, AnimalRecord>();
   const repository: AnimalRepository = {
@@ -36,6 +41,7 @@ function setup() {
         revision: 0,
         createdAt: new Date('2026-01-01'),
         updatedAt: new Date('2026-01-01'),
+        documentsState: 'NOT_SUBMITTED' as const,
       };
       records.set(record.id, record);
       return record;
@@ -64,31 +70,57 @@ function setup() {
       return {
         documentFiles: [],
         photoFiles: current.photos.map((p) => p.file.fileReference),
+        photoVariantFiles: current.photos.flatMap((p) =>
+          p.variants
+            ? [
+                p.variants.thumbnail.fileReference,
+                p.variants.preview.fileReference,
+              ]
+            : [],
+        ),
       };
     }),
   };
-  const files = new Map<string, Buffer>();
   let sequence = 0;
-  const photos: FileStorage = {
-    save: vi.fn(async ({ content }) => {
-      const id = `file-${++sequence}`;
-      files.set(id, content);
-      return id;
-    }),
-    open: vi.fn(async (id) =>
-      files.has(id)
-        ? { stream: Readable.from(files.get(id)!), size: files.get(id)!.length }
-        : null,
+  const memoryStorage = () => {
+    const files = new Map<string, Buffer>();
+    const storage: FileStorage = {
+      save: vi.fn(async ({ content }) => {
+        const id = `file-${++sequence}`;
+        files.set(id, content);
+        return id;
+      }),
+      open: vi.fn(async (id) =>
+        files.has(id)
+          ? {
+              stream: Readable.from(files.get(id)!),
+              size: files.get(id)!.length,
+            }
+          : null,
+      ),
+      delete: vi.fn(async (id) => {
+        files.delete(id);
+      }),
+    };
+    return { files, storage };
+  };
+  const originals = memoryStorage();
+  const variants = memoryStorage();
+  const photos = originals.storage;
+  const resizer = {
+    variants: vi.fn(async (content: Buffer) =>
+      content.equals(broken.content)
+        ? null
+        : { thumbnail: Buffer.from('thumb'), preview: Buffer.from('preview') },
     ),
-    delete: vi.fn(async (id) => {
-      files.delete(id);
-    }),
   };
   const logger = { warn: vi.fn() };
   const verification = { isVerified: vi.fn(async () => true) };
   const use = animalUseCases({
     repository,
     photos,
+    photoVariants: variants.storage,
+    resizer,
     documentFiles: photos,
     verification,
     logger,
@@ -102,8 +134,10 @@ function setup() {
   return {
     records,
     repository,
-    files,
+    files: originals.files,
+    variantFiles: variants.files,
     photos,
+    resizer,
     logger,
     verification,
     use,
@@ -135,6 +169,7 @@ describe('animal profile write consistency', () => {
     const s = setup();
     const animal = await s.create([upload]);
     const previous = [...s.files.keys()];
+    const previousVariants = [...s.variantFiles.keys()];
     vi.mocked(s.repository.update).mockResolvedValue(null);
     await expect(
       s.use.update(actor, animal.id, async () => ({
@@ -144,6 +179,7 @@ describe('animal profile write consistency', () => {
     ).rejects.toMatchObject({ status: 409 });
     expect(s.repository.update).toHaveBeenCalledTimes(3);
     expect([...s.files.keys()]).toEqual(previous);
+    expect([...s.variantFiles.keys()]).toEqual(previousVariants);
     expect(s.records.get(animal.id)).toEqual(animal);
   });
 
@@ -215,7 +251,59 @@ describe('animal profile write consistency', () => {
       .mockRejectedValueOnce(new Error('storage down'));
     await expect(s.create([upload, upload])).rejects.toThrow('storage down');
     expect(s.files.size).toBe(0);
+    // první fotografie už měla uložené i zmenšeniny
+    expect(vi.mocked(s.photos.save)).toHaveBeenCalledTimes(2);
+    expect(s.variantFiles.size).toBe(0);
     expect(s.repository.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an undecodable image with 415 before storing anything', async () => {
+    const s = setup();
+    await expect(s.create([upload, broken])).rejects.toMatchObject({
+      status: 415,
+    });
+    expect(s.files.size).toBe(0);
+    expect(s.variantFiles.size).toBe(0);
+    expect(s.repository.create).not.toHaveBeenCalled();
+  });
+
+  it('serves a stored variant and deletes variants with their photo', async () => {
+    const s = setup();
+    const animal = await s.create([upload, upload]);
+    expect(s.variantFiles.size).toBe(4);
+    const first = animal.photos[0];
+    const thumbnail = await s.use.openPhoto(
+      actor,
+      animal.id,
+      first!.id,
+      'thumbnail',
+    );
+    expect(thumbnail.file.contentType).toBe('image/jpeg');
+    expect(thumbnail.size).toBe('thumb'.length);
+    await s.use.update(actor, animal.id, async () => ({
+      input: { removePhotoIds: [first!.id] },
+      uploads: [],
+    }));
+    expect(s.variantFiles.size).toBe(2);
+    expect(s.files.size).toBe(1);
+    await s.use.remove(actor, animal.id);
+    expect(s.variantFiles.size).toBe(0);
+    expect(s.files.size).toBe(0);
+  });
+
+  it('falls back to the original for photos uploaded before variants existed', async () => {
+    const s = setup();
+    const animal = await s.create([upload]);
+    const legacy = { ...animal.photos[0]!, variants: null };
+    s.records.set(animal.id, { ...animal, photos: [legacy] });
+    const opened = await s.use.openPhoto(
+      actor,
+      animal.id,
+      legacy.id,
+      'preview',
+    );
+    expect(opened.file).toEqual(legacy.file);
+    expect(opened.size).toBe(upload.content.length);
   });
 
   it('does not read requests or write files before breeder verification', async () => {
@@ -250,6 +338,20 @@ describe('animal profile write consistency', () => {
           }).success,
         ).toBe(false);
       }
+    }
+  });
+});
+
+describe('birth date is judged by the Czech calendar day', () => {
+  it('accepts today right after Czech midnight while UTC is still yesterday', () => {
+    vi.useFakeTimers({ now: new Date('2026-11-06T23:30:00Z') }); // 00:30 v Praze
+    try {
+      const at = (birthDate: string) =>
+        CreateAnimalSchema.safeParse({ ...dog, birthDate }).success;
+      expect(at('2026-11-07')).toBe(true);
+      expect(at('2026-11-08')).toBe(false);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

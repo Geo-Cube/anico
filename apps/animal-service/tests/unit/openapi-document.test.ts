@@ -58,6 +58,8 @@ describe('OpenAPI document of animal-service', () => {
             deleteOwned: unused,
           },
           photos: files,
+          photoVariants: files,
+          resizer: { variants: unused },
           documentFiles: files,
           verification: { isVerified: unused },
           newId: () => '',

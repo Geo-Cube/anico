@@ -146,7 +146,7 @@ export function assertReplaceable(
 
 /** Odvozený stav dokladů zvířete (UC-03/7): PENDING > APPROVED > REJECTED, bez dokladů NOT_SUBMITTED. */
 export function documentsState(
-  versions: readonly DocumentVersion[],
+  versions: readonly Pick<DocumentVersion, 'isCurrent' | 'assessmentStatus'>[],
 ): AnimalDocumentsState {
   const statuses = new Set(
     versions

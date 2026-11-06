@@ -5,6 +5,7 @@ import type { WarnLogger } from './animal/application/verified-breeder.js';
 import type { BreederVerification } from './animal/domain/entity.js';
 import { AnimalRouter } from './animal/http/router.js';
 import { mongooseAnimalRepository } from './animal/infrastructure/mongoose-repository.js';
+import { sharpPhotoResizer } from './animal/infrastructure/sharp-photo-resizer.js';
 import { DocumentsRouter } from './documents/http/documents-router.js';
 import { mongooseDocumentsRepository } from './documents/infrastructure/mongoose-documents-repository.js';
 // anico:module-imports
@@ -22,6 +23,8 @@ export function createModules(
     AnimalRouter({
       repository: mongooseAnimalRepository(connection),
       photos: gridFsFileStorage(connection, 'animalPhotos'),
+      photoVariants: gridFsFileStorage(connection, 'animalPhotoVariants'),
+      resizer: sharpPhotoResizer(),
       documentFiles,
       verification: dependencies.verification,
       newId,

@@ -1,4 +1,5 @@
 import { Types, type Connection, type FilterQuery } from 'mongoose';
+import { documentsState } from '../../documents/domain/animal-documents.js';
 import type {
   AnimalPhoto,
   AnimalRecord,
@@ -7,13 +8,15 @@ import type {
 } from '../domain/entity.js';
 import {
   animalModel,
-  WITHOUT_DOCUMENTS,
+  PROFILE_WITH_DOCUMENT_STATUSES,
   type StoredAnimal,
+  type StoredDocumentVersion,
   type StoredPhoto,
 } from './animal-model.js';
 
 type StoredProfile = Omit<StoredAnimal, 'documents' | 'documentsRevision'> & {
   _id: Types.ObjectId;
+  documents?: Pick<StoredDocumentVersion, 'isCurrent' | 'assessmentStatus'>[];
 };
 
 /** Záznamy z doby před UC-02 nová pole nemají; chybějící údaj je `null`. */
@@ -40,11 +43,18 @@ function toRecord(doc: StoredProfile): AnimalRecord {
         contentType: photo.file.contentType,
         size: photo.file.size,
       },
+      variants: photo.variants
+        ? {
+            thumbnail: { ...photo.variants.thumbnail },
+            preview: { ...photo.variants.preview },
+          }
+        : null,
       isPrimary: photo.isPrimary,
     })),
     revision: doc.profileRevision ?? 0,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
+    documentsState: documentsState(doc.documents ?? []),
   };
 }
 
@@ -52,6 +62,7 @@ function toStoredPhoto(photo: AnimalPhoto): StoredPhoto {
   return {
     _id: new Types.ObjectId(photo.id),
     file: photo.file,
+    variants: photo.variants,
     isPrimary: photo.isPrimary,
   };
 }
@@ -73,7 +84,9 @@ export function mongooseAnimalRepository(
       return toRecord(doc.toObject());
     },
     async find(id) {
-      const doc = await model.findById(id, WITHOUT_DOCUMENTS).lean();
+      const doc = await model
+        .findById(id, PROFILE_WITH_DOCUMENT_STATUSES)
+        .lean();
       return doc ? toRecord(doc) : null;
     },
     async list(ownerUserId, query) {
@@ -83,7 +96,7 @@ export function mongooseAnimalRepository(
       if (query.sex) filter.sex = query.sex;
       if (query.before) filter._id = { $lt: new Types.ObjectId(query.before) };
       const docs = await model
-        .find(filter, WITHOUT_DOCUMENTS)
+        .find(filter, PROFILE_WITH_DOCUMENT_STATUSES)
         .sort({ _id: -1 })
         .limit(query.limit + 1)
         .lean();
@@ -111,7 +124,11 @@ export function mongooseAnimalRepository(
               profileRevision: expectedRevision + 1,
             },
           },
-          { new: true, runValidators: true, projection: WITHOUT_DOCUMENTS },
+          {
+            new: true,
+            runValidators: true,
+            projection: PROFILE_WITH_DOCUMENT_STATUSES,
+          },
         )
         .lean();
       return doc ? toRecord(doc) : null;
@@ -125,6 +142,7 @@ export function mongooseAnimalRepository(
             projection: {
               'documents.file.fileReference': 1,
               'photos.file.fileReference': 1,
+              'photos.variants': 1,
             },
           },
         )
@@ -136,6 +154,14 @@ export function mongooseAnimalRepository(
             ),
             photoFiles: (doc.photos ?? []).map(
               (photo) => photo.file.fileReference,
+            ),
+            photoVariantFiles: (doc.photos ?? []).flatMap((photo) =>
+              photo.variants
+                ? [
+                    photo.variants.thumbnail.fileReference,
+                    photo.variants.preview.fileReference,
+                  ]
+                : [],
             ),
           }
         : null;

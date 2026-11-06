@@ -23,8 +23,12 @@ Stav: implementováno v modulu `apps/animal-service/src/modules/animal`. Závazn
 Dokument kolekce `animals`: `ownerUserId` (= `breeder_id`, neměnný), `species`, `breedId`, `sex`
 (`male` | `female`), povinné `name`, volitelné `birthDate`, `coatColor`, `weightKg`, `city`, `pedigreeNumber`,
 `microchipNumber`, `description` (nevyplněné `null`), `photos[]` (`_id` = `photo_id`, `file { fileName,
-fileReference, contentType, size }`, `isPrimary`), `profileRevision`, `documents[]` a `documentsRevision`
-(UC-03). Soubory fotografií jsou v GridFS bucketu `animalPhotos`; `fileReference` API nevrací.
+fileReference, contentType, size }`, `variants { thumbnail, preview } | null`, `isPrimary`), `profileRevision`,
+`documents[]` a `documentsRevision` (UC-03). Originály fotografií jsou v GridFS bucketu `animalPhotos`,
+zmenšeniny v `animalPhotoVariants`; `fileReference` API nevrací.
+Odpověď zvířete (seznam, detail, přidání, úprava) nese odvozený `documentsState` (UC-03/7, stejná funkce
+jako `GET /animals/:id/documents`) pro kartu WF 01; čtení projektuje z dokladů jen `isCurrent` a
+`assessmentStatus`, doklady samotné API zvířete nevrací.
 
 | Invariant                                           | Vynucení                                                                                     |
 | --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -34,8 +38,8 @@ fileReference, contentType, size }`, `isPrimary`), `profileRevision`, `documents
 | Neprázdný seznam má právě jednu hlavní fotografii   | doménová funkce `planPhotos`, kontrola v `AnimalSchema` odpovědi                             |
 | Profil + fotografie + soubory jedna transakce       | validace před uložením souborů, jeden `findOneAndUpdate` s `profileRevision`, úklid souborů  |
 | Úprava zachovává ID, vlastníka, ID fotek, doklady   | zápis jen `$set` profilu/`photos`, filtr `ownerUserId`, zachované fotky nesou svůj `_id`     |
-| Odebrané fotografie mažou soubory                   | po úspěšném zápisu `animalPhotos.delete`; selhání se zaloguje                                |
-| Odstranění smaže profil, fotky, všechny doklady     | jeden `findOneAndDelete`, potom soubory obou bucketů                                         |
+| Odebrané fotografie mažou soubory                   | po úspěšném zápisu originál i zmenšeniny; selhání se zaloguje                                |
+| Odstranění smaže profil, fotky, všechny doklady     | jeden `findOneAndDelete`, potom soubory všech tří bucketů                                    |
 
 ## 3. Oprávnění a pořadí kontrol
 
@@ -46,7 +50,8 @@ fileReference, contentType, size }`, `isPrimary`), `profileRevision`, `documents
    Výpadek brokeru neblokuje čtení již uložené projekce; žádný HTTP dotaz do breeder-service.
 3. Vlastnictví zvířete z uloženého `ownerUserId`; cizí i neexistující zvíře nebo fotografie 404.
 4. Teprve potom se čte tělo (JSON, nebo multipart: pole `animal` + soubory `photos`), validuje profil,
-   pravidla fotografií a formát souborů (415). Až pak se ukládají soubory a zapisuje dokument.
+   formát souborů podle obsahu (415) a pravidla fotografií; pak se fotografie dekódují do zmenšenin (obrázek,
+   který nejde dekódovat, je také 415). Až pak se ukládají soubory a zapisuje dokument.
 
 Role `admin` | `owner` nemá u správy zvířat výjimku z vlastnictví.
 
@@ -56,6 +61,15 @@ Výsledné pořadí: zachované fotografie v původním pořadí, za nimi nové 
 `primaryPhotoId` (zachovaná fotografie), nebo `primaryUploadIndex` (nová), jinak dosavadní hlavní, pokud
 zůstala, jinak první. Neexistující `removePhotoIds`/`primaryPhotoId` → 404, odebíraná fotografie jako hlavní
 nebo index bez nahraného souboru → 400, více než 10 fotografií → 400.
+
+### Zmenšeniny
+
+Při nahrání vznikají přes `sharp` (libvips) dvě JPEG zmenšeniny: `thumbnail` (delší strana nejvýše 800 px, karty a
+náhledy) a `preview` (nejvýše 1920 px, hlavní fotografie v detailu). Otáčí se podle EXIF, metadata včetně polohy
+GPS se nepřenáší, průhlednost PNG je na bílém pozadí, malé obrázky se nezvětšují, vstup nad 100 Mpx se odmítne.
+`GET /animals/:id/photos/:photoId/file?size=thumbnail|preview` vrací zmenšeninu, bez `size` originál. Fotografie
+nahrané před zavedením zmenšenin (`variants: null`) vracejí originál i se `size`; nové zmenšeniny dostanou až po
+opětovném nahrání.
 
 ## 5. Limity a odchylky
 
@@ -67,9 +81,29 @@ nebo index bez nahraného souboru → 400, více než 10 fotografií → 400.
 - Délky textových údajů (jméno 120, barva 60, obec 120, číslo průkazu původu 60, čip 64, popis 2000 znaků) a
   horní mez hmotnosti 2000 kg určuje implementace; analýza je neuvádí.
 
-## 6. Co chybí
+## 6. Frontend (WF 01–08)
+
+`apps/frontend/src/features/animals`, routy `/zvirata`, `/zvirata/nove`, `/zvirata/:id`, `/zvirata/:id/upravit`
+pod `VerifiedBreederGate` (neověřený účet podle `GET /api/breeder/breeders/me` vidí výzvu k ověření; výpadek
+breeder-service správu neblokuje a rozhodne 403 animal-service).
+
+- WF 01: karty (zmenšenina `thumbnail`, štítek stavu dokladů přes fotografii, plemeno a věk, obec) a boční filtr
+  druh/plemeno/pohlaví v adrese (`?species=&breedId=&sex=`), plemeno jen z číselníku zvoleného druhu, změna druhu
+  plemeno zruší. Vzhled podle návrhu z v0 (nadpis s malým popiskem, karty `rounded-2xl`, sdílený `PageHeader`).
+- WF 02/03 a 05/06: kroky Údaje a Fotografie; přidání jde krokem údajů, úprava přepíná kroky volně. Vše se ukládá
+  jedním požadavkem (ADR-0006); Zrušit ani přechod mezi kroky nic neukládá.
+- Validace u polí česky (povinné jméno a plemeno, datum narození ≤ dnes, hmotnost > 0 a ≤ 2000 s desetinnou
+  čárkou), fotografie JPEG/PNG do 10 MiB a nejvýše 10 už při výběru; server kontroluje znovu.
+- „Dnes“ je kalendářní den v Česku (`todayInCzechia` ze sdílených schémat, pásmo `Europe/Prague`) pro formulář
+  i API, takže po půlnoci se dnešní datum neodmítne kvůli UTC.
+- WF 04 detail s galerií (hlavní fotografie `preview`, náhledy `thumbnail`, originál „Otevřít v plné velikosti“),
+  WF 07 potvrzení smazání, WF 08 zavíratelná zpráva o výsledku na seznamu (výsledky se předávají stavem navigace).
+- Texty vykají.
+
+## 7. Co chybí
 
 - **Ověření UC-02 na devu v prohlížeči:** služby běží na devu (`/api/animal`, `/api/breeder`, PR #35);
-  verze s UC-02 se nasadí po merge do `dev`.
-- **Odložený úklid osiřelých souborů** v `animalPhotos` (stejně jako u dokladů).
-- **Náhledy/zmenšeniny fotografií:** soubor se vrací v původní velikosti.
+  verze s UC-02 se nasadí po merge do `dev`. Frontend vyžaduje `documentsState`, proto se nasazuje spolu s animal-service.
+- **Odložený úklid osiřelých souborů** v `animalPhotos` a `animalPhotoVariants` (stejně jako u dokladů).
+- **Zmenšeniny starších fotografií:** dávkové doplnění pro fotografie nahrané před zavedením zmenšenin.
+- **Filtr podle stavu dokladů** (UC-03 §5).

@@ -9,8 +9,27 @@ export const AnimalIdSchema = z.string().regex(/^[a-f0-9]{24}$/i);
 export const AnimalPhotoIdSchema = z.string().regex(/^[a-f0-9]{24}$/i);
 /** Nejvýše tolik fotografií smí mít jedno zvíře (limit určuje implementace, anico-domain §6/7). */
 export const MAX_PHOTOS_PER_ANIMAL = 10;
+/**
+ * Zmenšeniny fotografie (JPEG): `thumbnail` pro karty a náhledy (delší strana nejvýše
+ * 800 px), `preview` pro hlavní zobrazení v detailu (nejvýše 1920 px). Bez velikosti originál.
+ */
+export const AnimalPhotoSizeSchema = z.enum(['thumbnail', 'preview']);
+export type AnimalPhotoSize = z.infer<typeof AnimalPhotoSizeSchema>;
+export const ANIMAL_PHOTO_MAX_EDGE: Record<AnimalPhotoSize, number> = {
+  thumbnail: 800,
+  preview: 1920,
+};
 export type AnimalSpecies = z.infer<typeof AnimalSpeciesSchema>;
 export type AnimalSex = z.infer<typeof AnimalSexSchema>;
+
+/** Odvozený „stav dokladů“ zvířete (UC-03/7); neukládá se. Je i na kartě zvířete (WF 01). */
+export const AnimalDocumentsStateSchema = z.enum([
+  'NOT_SUBMITTED',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+]);
+export type AnimalDocumentsState = z.infer<typeof AnimalDocumentsStateSchema>;
 const catalogs = { dog: dogs.breeds, horse: horses.breeds };
 const ids = {
   dog: new Set(dogs.breeds.map((breed) => breed.id)),
@@ -31,12 +50,21 @@ const breedOfSpecies = {
 
 const BreedIdSchema = z.string().min(1).max(160);
 const text = (max: number) => z.string().trim().min(1).max(max);
+const czechDate = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Prague',
+});
+/**
+ * Dnešní kalendářní den v Česku (`YYYY-MM-DD`). „Datum narození ≤ dnes“ se posuzuje podle
+ * českého data, ne UTC, aby se po půlnoci neodmítalo dnešní datum; prohlížeč i server
+ * tak rozhodnou stejně bez ohledu na své časové pásmo.
+ */
+export const todayInCzechia = () => czechDate.format(new Date());
 /** Hodnoty volitelných údajů profilu; prázdné se neukládají jako text, ale jako `null`. */
 const optionalValues = {
   birthDate: z.iso
     .date()
     .refine(
-      (value) => value <= new Date().toISOString().slice(0, 10),
+      (value) => value <= todayInCzechia(),
       'Birth date cannot be in the future',
     ),
   coatColor: text(60),
@@ -169,6 +197,7 @@ export const AnimalSchema = z
       ),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
+    documentsState: AnimalDocumentsStateSchema,
   })
   .refine(matchingBreed, breedOfSpecies);
 export const ListAnimalsQuerySchema = z

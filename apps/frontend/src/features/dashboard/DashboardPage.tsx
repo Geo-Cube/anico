@@ -51,7 +51,7 @@ export function DashboardPage() {
           Přehled
         </p>
         <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.03em] text-brand md:text-[32px]">
-          Vítej, {displayName(session.identity)}
+          Vítejte, {displayName(session.identity)}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Business obrazovky AniCo zatím připravujeme; níže je to, co už

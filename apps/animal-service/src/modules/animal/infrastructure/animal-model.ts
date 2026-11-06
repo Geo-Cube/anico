@@ -6,6 +6,7 @@ import {
   AssessmentStatusSchema,
   type Animal,
   type AnimalDocumentType,
+  type AnimalPhotoSize,
   type AssessmentStatus,
 } from '@anico/shared-schemas';
 import type { PhotoContentType } from '../domain/entity.js';
@@ -31,7 +32,10 @@ export interface StoredDocumentVersion {
   rejectionReason: string | null;
 }
 
-/** Fotografie vnořená ve zvířeti (UC-02/3); soubor je v GridFS bucketu `animalPhotos`. */
+/**
+ * Fotografie vnořená ve zvířeti (UC-02/3); originál je v GridFS bucketu `animalPhotos`,
+ * zmenšeniny v `animalPhotoVariants`. Fotografie z doby před zmenšeninami mají `variants: null`.
+ */
 export interface StoredPhoto {
   _id: Types.ObjectId;
   file: {
@@ -40,7 +44,12 @@ export interface StoredPhoto {
     contentType: PhotoContentType;
     size: number;
   };
+  variants?: Record<AnimalPhotoSize, StoredPhotoVariant> | null;
   isPrimary: boolean;
+}
+export interface StoredPhotoVariant {
+  fileReference: string;
+  size: number;
 }
 
 export interface StoredAnimal {
@@ -66,8 +75,29 @@ export interface StoredAnimal {
   updatedAt: Date;
 }
 
-/** Projekce zvířete bez dokladů pro CRUD zvířat. */
-export const WITHOUT_DOCUMENTS = { documents: 0, documentsRevision: 0 };
+/**
+ * Projekce pro CRUD zvířat: z dokladů jen `isCurrent` a `assessmentStatus` pro odvozený
+ * stav dokladů (UC-03/7); soubory, důvody ani posouzení se nečtou.
+ */
+export const PROFILE_WITH_DOCUMENT_STATUSES = {
+  'documents._id': 0,
+  'documents.documentType': 0,
+  'documents.versionNumber': 0,
+  'documents.previousDocumentId': 0,
+  'documents.file': 0,
+  'documents.submittedAt': 0,
+  'documents.submittedBy': 0,
+  'documents.reviewedBy': 0,
+  'documents.reviewedAt': 0,
+  'documents.rejectionReason': 0,
+  documentsRevision: 0,
+};
+
+const variantSchema = {
+  _id: false,
+  fileReference: { type: String, required: true },
+  size: { type: Number, required: true, min: 1 },
+};
 
 const photoSchema = new Schema<StoredPhoto>(
   {
@@ -81,6 +111,13 @@ const photoSchema = new Schema<StoredPhoto>(
         enum: ['image/jpeg', 'image/png'],
       },
       size: { type: Number, required: true, min: 1 },
+    },
+    variants: {
+      type: new Schema(
+        { thumbnail: variantSchema, preview: variantSchema },
+        { _id: false, strict: 'throw' },
+      ),
+      default: null,
     },
     isPrimary: { type: Boolean, required: true },
   },

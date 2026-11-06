@@ -96,7 +96,7 @@ export function UserMenu() {
         <div className="fixed top-20 right-4 z-40 w-80">
           <Alert variant="error">
             <TriangleAlert aria-hidden />
-            <p>Odhlášení se nepodařilo. Zkus to prosím znovu.</p>
+            <p>Odhlášení se nepodařilo. Zkuste to prosím znovu.</p>
           </Alert>
         </div>
       )}

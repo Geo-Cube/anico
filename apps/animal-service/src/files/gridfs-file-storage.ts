@@ -12,10 +12,13 @@ function* uploadChunks(content: Buffer, chunkSize: number) {
 const isFileNotFound = (error: unknown) =>
   error instanceof Error && /file ?not ?found/i.test(error.message);
 
-/** GridFS bucket stejné databáze (vzor breeder-service): `animalDocuments`, `animalPhotos`. */
+/**
+ * GridFS bucket stejné databáze (vzor breeder-service): `animalDocuments`, `animalPhotos`
+ * a zmenšeniny fotografií `animalPhotoVariants`.
+ */
 export function gridFsFileStorage(
   connection: Connection,
-  bucketName: 'animalDocuments' | 'animalPhotos',
+  bucketName: 'animalDocuments' | 'animalPhotos' | 'animalPhotoVariants',
 ): FileStorage {
   const bucket = () => {
     if (!connection.db) throw new Error('MongoDB connection is not open');

@@ -15,6 +15,7 @@ const photo = (n: number, isPrimary = false): AnimalPhoto => ({
     contentType: 'image/png',
     size: 9,
   },
+  variants: null,
 });
 const change = (overrides: Partial<PhotoChange> = {}): PhotoChange => ({
   removePhotoIds: [],
