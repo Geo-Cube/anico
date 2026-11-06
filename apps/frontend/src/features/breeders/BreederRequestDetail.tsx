@@ -130,9 +130,12 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
     ? state.queueSearch
     : PENDING_QUEUE_SEARCH;
 
-  const [openDialog, setOpenDialog] = useState<'approve' | 'reject' | null>(
-    null,
-  );
+  // Revize, kterou administrátor viděl při otevření dialogu; rozhodnutí ji
+  // posílá, takže nikdy neschválí novější, nezkontrolované podání.
+  const [openDialog, setOpenDialog] = useState<{
+    kind: 'approve' | 'reject';
+    revision: number;
+  } | null>(null);
   const [conflict, setConflict] = useState<keyof typeof CONFLICT_TEXT | null>(
     null,
   );
@@ -141,13 +144,13 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
   const certificate = request.breedingStationCertificate;
 
   const decide = useMutation({
-    mutationFn: async (input: DecideVerificationRequestInput) => {
-      const generation = sessionGeneration(client);
-      const saved = await decideRequest(request.id, input, session.csrfToken);
-      return { generation, saved };
+    mutationFn: (input: DecideVerificationRequestInput) =>
+      decideRequest(request.id, input, session.csrfToken),
+    onMutate: () => {
+      setConflict(null);
+      return { generation: sessionGeneration(client) };
     },
-    onMutate: () => setConflict(null),
-    onSuccess: async ({ generation, saved }) => {
+    onSuccess: async (saved, _input, { generation }) => {
       // Odpověď z relace jiného účtu nesmí měnit cache ani přesměrovat.
       if (generation !== sessionGeneration(client)) return;
       client.setQueryData(requestDetailKey(request.id), saved);
@@ -162,7 +165,9 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
         { state: notice },
       );
     },
-    onError: async (error) => {
+    onError: async (error, _input, context) => {
+      // Totéž pro 409: `current` po odhlášení nebo změně účtu nesmí zpět do cache.
+      if (!context || context.generation !== sessionGeneration(client)) return;
       const found = decisionConflict(error);
       if (!found) return;
       setOpenDialog(null);
@@ -211,6 +216,25 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
   const decisionError =
     decide.isError && !decisionConflict(decide.error) ? decide.error : null;
   const isOwnDecision = request.reviewedBy === session.identity.userId;
+  // Žádost se mezitím změnila (obnovení detailu): dialog se zavře a admin musí
+  // aktuální podání zkontrolovat znovu. Během ukládání platí odeslaná revize.
+  const outdated =
+    openDialog !== null &&
+    !isSaving &&
+    !decide.isSuccess &&
+    (openDialog.revision !== request.revision || request.status !== 'PENDING')
+      ? request.status === 'PENDING'
+        ? 'stale'
+        : 'already-decided'
+      : null;
+  const dialog = outdated ? null : openDialog;
+  const shownConflict = conflict ?? outdated;
+
+  const openDecision = (kind: 'approve' | 'reject') => {
+    decide.reset();
+    setConflict(null);
+    setOpenDialog({ kind, revision: request.revision });
+  };
 
   return (
     <section
@@ -241,12 +265,12 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
         </h1>
       </div>
 
-      {conflict && (
+      {shownConflict && (
         <Alert variant="warning">
-          <p role="status">{CONFLICT_TEXT[conflict]}</p>
+          <p role="status">{CONFLICT_TEXT[shownConflict]}</p>
         </Alert>
       )}
-      {decisionError !== null && openDialog === null && (
+      {decisionError !== null && dialog === null && (
         <Alert variant="error">
           <p role="alert">{decisionErrorText(decisionError)}</p>
         </Alert>
@@ -375,21 +399,12 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
           <div className="flex flex-wrap gap-2">
             <Button
               variant="destructive"
-              onClick={() => {
-                decide.reset();
-                setOpenDialog('reject');
-              }}
+              onClick={() => openDecision('reject')}
               disabled={isSaving}
             >
               Zamítnout
             </Button>
-            <Button
-              onClick={() => {
-                decide.reset();
-                setOpenDialog('approve');
-              }}
-              disabled={isSaving}
-            >
+            <Button onClick={() => openDecision('approve')} disabled={isSaving}>
               Schválit ověření
             </Button>
           </div>
@@ -397,32 +412,34 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
       </div>
 
       <ApproveRequestDialog
-        open={openDialog === 'approve'}
+        open={dialog?.kind === 'approve'}
         isSaving={isSaving}
         breederName={fullName}
         error={
-          openDialog === 'approve' && decisionError !== null
+          dialog?.kind === 'approve' && decisionError !== null
             ? decisionErrorText(decisionError)
             : null
         }
         onClose={() => setOpenDialog(null)}
         onConfirm={() =>
-          decide.mutate({ decision: 'APPROVED', revision: request.revision })
+          dialog &&
+          decide.mutate({ decision: 'APPROVED', revision: dialog.revision })
         }
       />
       <RejectRequestDialog
-        open={openDialog === 'reject'}
+        open={dialog?.kind === 'reject'}
         isSaving={isSaving}
         error={
-          openDialog === 'reject' && decisionError !== null
+          dialog?.kind === 'reject' && decisionError !== null
             ? decisionErrorText(decisionError)
             : null
         }
         onClose={() => setOpenDialog(null)}
         onConfirm={(reason) =>
+          dialog &&
           decide.mutate({
             decision: 'REJECTED',
-            revision: request.revision,
+            revision: dialog.revision,
             rejectionReason: reason,
           })
         }

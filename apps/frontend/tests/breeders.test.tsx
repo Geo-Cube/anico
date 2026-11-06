@@ -7,7 +7,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQueryClient } from '@/app/query-client';
 import { routes } from '@/app/routes';
-import { server, sessionFor } from './server';
+import { requestDetailKey, verificationKey } from '@/features/breeders/api';
+import { anonymous, server, sessionFor } from './server';
 
 const api = '/api/breeder/verification-requests';
 const pending: AdminVerificationRequest = {
@@ -43,15 +44,35 @@ const rejectedByOther: AdminVerificationRequest = {
   rejectionReason: 'Nečitelný certifikát.',
 };
 
-function renderApp(path: string) {
+function renderApp(path: string, client = createQueryClient()) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={client}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
   return router;
 }
+
+/** Rozhodnutí čeká na `release`; `done` se splní, až ho MSW odešle. */
+function heldResponse(response: () => Response) {
+  let release!: () => void;
+  let sent!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const done = new Promise<void>((resolve) => (sent = resolve));
+  return {
+    release,
+    done,
+    handler: async () => {
+      await gate;
+      sent();
+      return response();
+    },
+  };
+}
+
+/** Doběhnutí zpožděné odpovědi včetně jejích callbacků. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
 
 /** Schválit ověření → Potvrdit schválení (WF 07 s potvrzením). */
 async function confirmApproval() {
@@ -79,6 +100,72 @@ beforeEach(() => {
     http.get(api, () => HttpResponse.json({ items: [pending] })),
     http.get(`${api}/:id`, () => HttpResponse.json(pending)),
   );
+});
+
+describe('administrace ověření chovatelů – souběh', () => {
+  it('409 doručená po odhlášení nevrátí data žádosti do cache', async () => {
+    const conflict = heldResponse(() =>
+      HttpResponse.json(
+        { error: 'Verification already decided', current: rejectedByOther },
+        { status: 409 },
+      ),
+    );
+    server.use(http.post(`${api}/:id/decision`, conflict.handler));
+    const client = createQueryClient();
+    renderApp(`/administrace/chovatele/zadosti/${pending.id}`, client);
+    await confirmApproval();
+
+    server.use(http.get('/api/auth/session', anonymous));
+    await client.invalidateQueries({ queryKey: ['session'] });
+    await waitFor(() => expect(client.getQueryData(['session'])).toBeNull());
+
+    conflict.release();
+    await conflict.done;
+    await settle();
+    expect(
+      client
+        .getQueryCache()
+        .findAll({ queryKey: verificationKey })
+        .filter((query) => query.state.data !== undefined),
+    ).toEqual([]);
+  });
+
+  it('změna revize při otevřeném dialogu ho zavře a schválí jen zkontrolovanou revizi', async () => {
+    const decide = vi.fn<(body: unknown) => void>();
+    server.use(
+      http.post(`${api}/:id/decision`, async ({ request }) => {
+        decide(await request.json());
+        return HttpResponse.json({ ...pending, revision: 3 });
+      }),
+    );
+    const client = createQueryClient();
+    renderApp(`/administrace/chovatele/zadosti/${pending.id}`, client);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Schválit ověření' }),
+    );
+    await screen.findByRole('dialog');
+
+    // detail se mezitím obnoví s opraveným podáním (revize 3)
+    client.setQueryData(requestDetailKey(pending.id), {
+      ...pending,
+      revision: 3,
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/Chovatel mezitím žádost opravil/),
+    ).toBeInTheDocument();
+    expect(decide).not.toHaveBeenCalled();
+
+    await confirmApproval();
+    await waitFor(() =>
+      expect(decide).toHaveBeenCalledWith({
+        decision: 'APPROVED',
+        revision: 3,
+      }),
+    );
+  });
 });
 
 describe('administrace ověření chovatelů', () => {
