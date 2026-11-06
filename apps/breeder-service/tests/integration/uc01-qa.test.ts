@@ -400,7 +400,6 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
       'emailAddress',
       'breedingStationName',
       'breedingStationNumber',
-      'hasBreedingStation',
     ]) {
       expect(after?.[key], key).toEqual(before?.[key]);
     }
@@ -434,7 +433,6 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
       firstName: 'A',
       lastName: 'B',
       emailAddress: 'a@example.test',
-      hasBreedingStation: true,
       isVerified: false,
       verificationRequest: {
         _id: new connection.base.Types.ObjectId(),

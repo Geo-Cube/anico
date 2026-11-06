@@ -6,5 +6,8 @@
   "rootDirectory": "/srv/anico/dev/events",
   "image": "nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5",
   "stream": "ANICO_AUTH_REGISTRATIONS",
-  "subject": "anico.dev.auth.user.registered.v1"
+  "subject": "anico.dev.auth.user.registered.v1",
+  "verificationStream": "ANICO_BREEDER_VERIFICATIONS",
+  "verificationSubject": "anico.dev.breeder.verified.v1",
+  "verificationConsumer": "animal-verified-breeders"
 }

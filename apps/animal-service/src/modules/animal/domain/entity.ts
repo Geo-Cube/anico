@@ -63,9 +63,9 @@ export interface AnimalRepository {
   ): Promise<{ documentFiles: string[]; photoFiles: string[] } | null>;
 }
 
-/** Stav ověření chovatele z breeder-service (UC-01). Nedostupnost vyhazuje chybu. */
+/** Místní projekce ověřených chovatelů. Chyba čtení vyhazuje výjimku. */
 export interface BreederVerification {
-  isVerified(identityToken: string): Promise<boolean>;
+  isVerified(breederId: string): Promise<boolean>;
 }
 
 export class AnimalError extends Error {

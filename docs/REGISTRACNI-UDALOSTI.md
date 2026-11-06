@@ -46,32 +46,84 @@ Admin a publisher credentials se kolegům neposílají; consumer bude mít vlast
 - Celkový file store 256 MiB, zpráva nejvýše 16 KiB, rotace logů.
 - Samostatný admin a publisher. Publisher smí jen odesílat tento subject a číst
   vlastní potvrzení; nesmí spravovat stream nebo číst registrační zprávy.
-- Credentials jsou v šifrovaném Pulumi configu a runtime souborech. Dostává je pouze auth-service.
+- Registrační credentials dostává pouze auth-service; ostatní služby mají vlastní
+  omezené účty. Všechny jsou v šifrovaném Pulumi configu a runtime souborech.
 - Při ukončení auth doběhne rozpracované publikování před zavřením DB.
 
 Jeden VPS není HA. Volume a fsync nenahrazují zálohu; broker data zahrneme do
 plánovaných záloh a zkoušky obnovy. Ty podle domluvy zatím neřešíme.
 
+## Události ověření chovatele: breeder → animal
+
+Předpis připravený 6. 11. 2026 (zatím neaplikovaný na VPS) doplňuje:
+
+| Nastavení             | Hodnota                                                |
+| --------------------- | ------------------------------------------------------ |
+| Stream                | `ANICO_BREEDER_VERIFICATIONS`                          |
+| Subject               | `anico.dev.breeder.verified.v1`                        |
+| Kontrakt              | `BreederVerifiedEventSchema` z `@anico/shared-schemas` |
+| Durable pull consumer | `animal-verified-breeders`                             |
+| Publisher             | `breeder-publisher`                                    |
+| Consumer účet         | `animal-consumer`                                      |
+
+Breeder-service uloží schválení a `breeder.verified` transakčně do outboxu;
+`eventId` slouží jako `Nats-Msg-Id`. Animal-service zprávy idempotentně zpracuje
+do vlastní projekce ověřených chovatelů. Ověření už nezávisí na synchronním
+`GET /breeders/me`. Registrační stream ani jeho zprávy nejsou tímto consumerem čtené.
+
+Nový stream má stejné bezpečnostní vlastnosti jako registrační: file storage,
+žádnou časovou expiraci, discard-new, zákaz delete/purge, limit zprávy 16 KiB
+a dvouminutovou deduplikaci. Oba streamy mají po 128 MiB; jejich součet přesně
+využívá stávající rozpočet file store 256 MiB, bez zmenšení existujícího streamu.
+Po zaplnění se nové události odmítají a zůstávají v outboxu.
+
+Consumer vzniká pouze pod administrátorským účtem, přehrává všechny zprávy,
+vyžaduje explicitní ACK, má `ack_wait` 30 sekund, nejvýše 100 nepotvrzených zpráv
+a neomezený počet doručení (výpadek projekce nesmí tiše ztratit ověření).
+Neshodný stream ani consumer se automaticky nemaže nebo nepřepisuje; konfigurace
+skončí chybou a vyžaduje review správce.
+
+`breeder-publisher` smí publikovat jen uvedený subject a číst vlastní
+`_INBOX.breeder-publisher.>`; nesmí číst zprávy nebo spravovat stream.
+`animal-consumer` smí jen NEXT, ACK a INFO konkrétního durable consumeru
+a přijímat na `_INBOX.animal-consumer.>`. Nemá správu streamů/consumerů,
+obecné čtení ani publikování doménových událostí.
+
+Init doplní dvě nová 64hex hesla do šifrovaného `devEventsCredentials`, zachová
+starý admin/publisher i při opakovaném spuštění a žádnou hodnotu nevypisuje.
+Soukromé JSON `{ server, user, password }` se instalují jako soubory `0400`
+pro UID 1000. Breeder dostane `/run/secrets/breeder-verification-broker-json`
+přes `BREEDER_VERIFICATION_BROKER_FILE`, animal
+`/run/secrets/animal-verification-broker-json` přes `ANIMAL_VERIFICATION_BROKER_FILE`.
+Obě služby se připojí k interní events síti; mounty jsou read-only,
+hesla nepatří do env. Animal už nemá `BREEDER_SERVICE_URL` ani compose závislost
+na běžícím breeder kontejneru.
+
 ## Nasazení a obnova správcem po review a zeleném CI
 
+Pouze správce a až po výslovném schválení aplikace změn; následující příkazy
+mění vzdálený provoz. Pořadí je init → deploy events → konfigurace a deploy služeb.
 Z kořene repozitáře:
 
 ```bash
 npm run init:dev-events -w @anico/infrastructure
 npm run deploy:dev-events -w @anico/infrastructure
 npm run deploy:dev-auth -w @anico/infrastructure
+npm run configure:dev-deployment -w @anico/infrastructure
 ```
 
-Init zachová existující credentials. Ansible vytvoří broker a stream přes dočasný
-SSH tunel, který se potom zavře. Neshodný stream automaticky nemaže ani nemění.
+Init zachová existující credentials. Ansible vytvoří broker, oba streamy a durable
+consumer přes dočasný SSH tunel, který se potom zavře. Neshodné prostředky nemění.
 `deploy:dev-auth` nejdřív ověří zdravý broker, připravený stream a publisher secret;
 teprve pak vystaví gateway runtime 4. CI na starším runtime odmítne deploy před
 změnou běžící aplikace. Potom merge spustí standardní GHCR/Coolify deployment.
 
-Publisher se zapíná pouze v dev auth-service. Kolegové dál používají své původní
+Publishery a consumer se zapojují v dev službách. Kolegové dál používají své původní
 příkazy, broker lokálně nepotřebují. `site.yml` obnovuje také broker, konfiguraci
-streamu a secrets. Data volume se nepřepisují. Prázdný broker neobnoví ztracené
-zprávy bez zálohy nebo výslovného replay postupu z uložených outbox payloadů.
+streamů, consumeru a secrets. Data volume se nepřepisují. Prázdný broker neobnoví
+ztracené zprávy bez zálohy nebo výslovného replay postupu z uložených outbox payloadů.
+Před konfigurací služeb se ověřuje skutečný stream/consumer; po deployi kontrola
+ověřuje events síť, read-only mounty a nepřítomnost NATS credentials v env.
 
 ## Testy
 

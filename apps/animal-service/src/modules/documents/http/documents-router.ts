@@ -30,7 +30,6 @@ import {
   multipart,
   storedFileHeaders,
 } from '../../../http/files.js';
-import { identityToken } from '../../../http/identity-token.js';
 import { jsonBody } from '../../../http/json-body.js';
 
 export const FILES_FIELD = 'files';
@@ -113,23 +112,18 @@ export function DocumentsRouter(dependencies: {
   router.post(
     '/animals/:animalId/documents',
     animalRoute(async (req, res, animalId) => {
-      const created = await documents.submit(
-        req.auth,
-        identityToken(req),
-        animalId,
-        async () => {
-          await parseFiles(req, res);
-          const { documentTypes } = SubmitAnimalDocumentsSchema.parse(req.body);
-          const files = (req.files ?? []) as Express.Multer.File[];
-          if (files.length === 0 || files.length !== documentTypes.length)
-            throw new UploadError(400);
-          return files.map((file, index) => ({
-            documentType: documentTypes[index]!,
-            fileName: file.originalname,
-            content: file.buffer,
-          }));
-        },
-      );
+      const created = await documents.submit(req.auth, animalId, async () => {
+        await parseFiles(req, res);
+        const { documentTypes } = SubmitAnimalDocumentsSchema.parse(req.body);
+        const files = (req.files ?? []) as Express.Multer.File[];
+        if (files.length === 0 || files.length !== documentTypes.length)
+          throw new UploadError(400);
+        return files.map((file, index) => ({
+          documentType: documentTypes[index]!,
+          fileName: file.originalname,
+          content: file.buffer,
+        }));
+      });
       res.status(201).json(
         contract(AnimalDocumentListSchema, {
           animalId,
@@ -143,11 +137,7 @@ export function DocumentsRouter(dependencies: {
   router.get(
     '/animals/:animalId/documents',
     animalRoute(async (req, res, animalId) => {
-      const current = await documents.list(
-        req.auth,
-        identityToken(req),
-        animalId,
-      );
+      const current = await documents.list(req.auth, animalId);
       res.json(
         contract(AnimalDocumentListSchema, {
           animalId,
@@ -162,12 +152,7 @@ export function DocumentsRouter(dependencies: {
     '/animals/:animalId/documents/:documentId/history',
     animalRoute(async (req, res, animalId) => {
       const documentId = documentIdOf(req);
-      const versions = await documents.history(
-        req.auth,
-        identityToken(req),
-        animalId,
-        documentId,
-      );
+      const versions = await documents.history(req.auth, animalId, documentId);
       res.json(
         contract(AnimalDocumentHistorySchema, {
           animalId,
@@ -182,12 +167,7 @@ export function DocumentsRouter(dependencies: {
     '/animals/:animalId/documents/:documentId/file',
     animalRoute(async (req, res, animalId) => {
       const documentId = documentIdOf(req);
-      const opened = await documents.openFile(
-        req.auth,
-        identityToken(req),
-        animalId,
-        documentId,
-      );
+      const opened = await documents.openFile(req.auth, animalId, documentId);
       res.set(storedFileHeaders(opened.file, opened.size, 'attachment'));
       try {
         await pipeline(opened.stream, res);
@@ -204,7 +184,6 @@ export function DocumentsRouter(dependencies: {
       const documentId = documentIdOf(req);
       const created = await documents.replace(
         req.auth,
-        identityToken(req),
         animalId,
         documentId,
         async (): Promise<Upload> => {

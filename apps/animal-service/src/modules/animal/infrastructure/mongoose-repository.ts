@@ -21,7 +21,7 @@ function toRecord(doc: StoredProfile): AnimalRecord {
   return {
     id: doc._id.toString(),
     ownerUserId: doc.ownerUserId,
-    name: doc.name ?? null,
+    name: doc.name,
     species: doc.species,
     breedId: doc.breedId,
     sex: doc.sex,

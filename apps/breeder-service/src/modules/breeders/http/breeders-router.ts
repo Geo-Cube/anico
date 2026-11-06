@@ -11,6 +11,7 @@ import { domainErrorResponder } from './domain-errors.js';
 import { getMyAccountHandler } from './get-my-account-handler.js';
 import { MAX_CERTIFICATE_BYTES } from './parse-upload.js';
 import { submitVerificationRequestHandler } from './submit-verification-request-handler.js';
+import { updateMyProfileHandler } from './update-my-profile-handler.js';
 
 export function breedersRouter(dependencies: {
   repository: BreederRepository;
@@ -24,6 +25,7 @@ export function breedersRouter(dependencies: {
   const respondWithError = domainErrorResponder(files);
 
   router.get('/me', authenticate, getMyAccountHandler(repository, files));
+  router.patch('/me', authenticate, updateMyProfileHandler(repository, files));
 
   router.post(
     '/me/verification-request',

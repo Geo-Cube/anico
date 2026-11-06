@@ -91,7 +91,7 @@ describe('admin verification requests API', () => {
     expect(ids(queue)).toEqual(['b2', 'b3']);
     expect(queue.body.items[0]).toMatchObject({
       status: 'PENDING',
-      breeder: { breederId: 'b2', hasBreedingStation: true },
+      breeder: { breederId: 'b2' },
       breedingStationCertificate: { contentType: 'image/png' },
     });
 

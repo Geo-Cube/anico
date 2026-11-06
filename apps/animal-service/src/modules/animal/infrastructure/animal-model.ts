@@ -45,7 +45,7 @@ export interface StoredPhoto {
 
 export interface StoredAnimal {
   ownerUserId: string;
-  name: string | null;
+  name: string;
   species: Animal['species'];
   breedId: string;
   sex: Animal['sex'];
@@ -135,7 +135,13 @@ export function animalModel(connection: Connection): Model<StoredAnimal> {
   const schema = new Schema<StoredAnimal>(
     {
       ownerUserId: { type: String, required: true, maxlength: 36 },
-      name: optionalText(120),
+      name: {
+        type: String,
+        required: true,
+        trim: true,
+        minlength: 1,
+        maxlength: 120,
+      },
       species: {
         type: String,
         required: true,

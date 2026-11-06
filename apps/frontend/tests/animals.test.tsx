@@ -108,7 +108,7 @@ beforeEach(() => {
 });
 
 describe('zvířata', () => {
-  it('zobrazuje jméno, náhradní označení, hlavní fotografii a další stránku', async () => {
+  it('zobrazuje jména, hlavní fotografii a další stránku', async () => {
     server.use(
       http.get('/api/animal/animals', ({ request }) =>
         new URL(request.url).searchParams.has('before')
@@ -117,7 +117,7 @@ describe('zvířata', () => {
                 {
                   ...animal,
                   id: '123456789012345678abcdef',
-                  name: null,
+                  name: 'Luna',
                   photos: [],
                 },
               ],
@@ -135,9 +135,21 @@ describe('zvířata', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Načíst další' }));
     expect(
       await screen.findByRole('heading', {
-        name: `Pes · ${breed.name} · abcdef`,
+        name: 'Luna',
       }),
     ).toBeVisible();
+  });
+
+  it('bez jména neodešle formulář a zobrazí českou validaci', async () => {
+    const submit = vi.fn(() => HttpResponse.json(animal, { status: 201 }));
+    server.use(http.post('/api/animal/animals', submit));
+    renderApp('/zvirata/nove');
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.selectOptions(screen.getByLabelText('Plemeno'), breed.id);
+    expect(screen.getByLabelText('Jméno')).toBeRequired();
+    await userEvent.click(screen.getByRole('button', { name: 'Uložit zvíře' }));
+    expect(await screen.findByText('Vyplňte jméno zvířete.')).toBeVisible();
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it('vytváří jedním multipart požadavkem se zvoleným indexem a CSRF', async () => {
@@ -316,6 +328,7 @@ describe('zvířata', () => {
       await screen.findByLabelText('Plemeno'),
       breed.id,
     );
+    await userEvent.type(screen.getByLabelText('Jméno'), 'Argo');
     await userEvent.click(screen.getByRole('button', { name: 'Uložit zvíře' }));
     await switchAccount(client);
     save.release();
@@ -375,6 +388,7 @@ describe('zvířata', () => {
       await screen.findByLabelText('Plemeno'),
       breed.id,
     );
+    await userEvent.type(screen.getByLabelText('Jméno'), 'Argo');
     await userEvent.click(screen.getByRole('button', { name: 'Uložit zvíře' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       status === 413 ? 'příliš velké' : 'JPEG nebo PNG',

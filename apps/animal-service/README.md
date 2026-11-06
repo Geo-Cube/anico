@@ -19,15 +19,18 @@ ale nemění server ani hesla. [Přístupy a více služeb](../../docs/VZDALENY-
 
 Samotný frontend proti týmovému API: `npm run dev:frontend`. Backend s osobní DB:
 `npm run dev:backend -- --service animal-service`. Launcher zároveň spustí
-`breeder-service` na portu 3003 s vlastní osobní DB, stejnou konfigurací ověření
-identity a nastaví `BREEDER_SERVICE_URL`. Vyžaduje DB oprávnění pro obě služby;
-Ctrl+C je ukončí společně. Frontendové `/api/breeder` zůstává na společném devu.
+`breeder-service` na portu 3003 s vlastní osobní DB a izolovaný lokální NATS
+JetStream broker na náhodném loopback portu. Dočasné JSON soubory s broker
+přístupem předá přes `BREEDER_VERIFICATION_BROKER_FILE` a
+`ANIMAL_VERIFICATION_BROKER_FILE`. Vyžaduje DB oprávnění pro obě služby;
+Ctrl+C ukončí procesy i broker a uklidí dočasné soubory.
+Frontendové `/api/breeder` zůstává na společném devu.
 
-Pro backend s místní DB spusť v druhém terminálu nejprve
-`npm run dev -w @anico/breeder-service` a potom
-`npm run dev -w @anico/animal-service`. Nastav
-`BREEDER_SERVICE_URL=http://127.0.0.1:3003` podle veřejného `.env.example`;
-bez běžící breeder-service operace chovatele vracejí 503.
+Pro backend s místní DB použij vlastní NATS JetStream se streamem a durable
+consumerem dle [ADR-0007](../../docs/adr/0007-projekce-overenych-chovatelu-pres-nats.md).
+Oběma službám předej jejich broker JSON soubor (`server`, `user`, `password`)
+výše uvedenými proměnnými a spusť `npm run dev -w @anico/breeder-service`
+a `npm run dev -w @anico/animal-service`. Animal nepotřebuje breeder HTTP URL.
 Tento přímý start bez identity zpřístupní jen health; pro přihlášené API použij
 běžný fullstack launcher. Místní výchozí `.env` používá `anico_animal_local`
 na portu MongoDB 27017. `npm run setup` vytvoří pouze chybějící `.env`
@@ -62,7 +65,7 @@ z ověřeného `req.auth.userId`, ne z formuláře. Soubory jsou v GridFS bucket
 | `species`                | Povinné: `dog` nebo `horse`                                          |
 | `breedId`                | Povinné stabilní ID ze společného JSON číselníku pro vybraný druh    |
 | `sex`                    | Povinné: `male` nebo `female`                                        |
-| `name`                   | Volitelné jméno, oříznuté mezery, 1–120 znaků                        |
+| `name`                   | Povinné jméno, oříznuté mezery, 1–120 znaků; PATCH jej nesmí vymazat |
 | `birthDate`              | Volitelné datum `YYYY-MM-DD`, bez času; nesmí být budoucí            |
 | `coatColor`              | Volitelná barva srsti, 1–60 znaků                                    |
 | `weightKg`               | Volitelná hmotnost v kg, větší než 0, nejvýše 2000                   |
@@ -78,6 +81,10 @@ z ověřeného `req.auth.userId`, ne z formuláře. Soubory jsou v GridFS bucket
 Nevyplněný volitelný údaj (vynechaný, `null`, prázdný nebo jen z mezer) se ukládá
 jako `null` a v odpovědi je vždy přítomný jako `null`. Věk neukládáme; odvodí se
 z data narození. ID plemen ani jejich české názvy nekopíruj do aplikace.
+Jméno je povinné dle rozhodnutí vlastníka produktu 2026-11-06 (odchylka od Products).
+Migrace `20261106120000-required-animal-name` se zastaví s počtem zvířat, jejichž jméno
+chybí, je `null` nebo prázdné; před opakováním je nutné data explicitně opravit.
+
 Sdílené kontrakty jsou `CreateAnimalSchema`, `UpdateAnimalSchema`, `AnimalProfileSchema`,
 `AnimalSchema`, `AnimalPhotoSchema`, `ListAnimalsQuerySchema` a `AnimalListSchema`
 z `@anico/shared-schemas`. `animalBreeds('dog')` / `animalBreeds('horse')` poskytne
@@ -119,12 +126,20 @@ Návrh v [`docs/design/uc-03-doklady.md`](../../docs/design/uc-03-doklady.md).
 | `POST /animals/:animalId/documents/:documentId/decision` | Admin: `APPROVED`, nebo `REJECTED` s `rejectionReason`             |
 | `GET /document-reviews`                                  | Admin: fronta aktuálních `PENDING` verzí včetně čísla čipu zvířete |
 
-Všechny operace chovatele se zvířaty i doklady vyžadují ověřený účet: služba se při
-každém požadavku zeptá breeder-service (`GET /breeders/me`, adresa
-`BREEDER_SERVICE_URL`). Bez této proměnné nebo při nedostupnosti breeder-service
-vracejí 503. Cizí nebo neexistující zvíře, fotografie či doklad je 404, neověřený
-chovatel a chybějící role 403. Posuzovatel (`admin` | `owner`) čte a rozhoduje
-o dokladech bez vlastnictví i ověření; ke správě cizích zvířat oprávnění nemá.
+Každý soubor podání zakládá vlastní řadu v1 (`previousDocumentId: null`, `PENDING`, `isCurrent: true`).
+Stejný typ může být v podání vícekrát; ani další podání stejného typu nenahrazuje existující doklady.
+Pouze endpoint `/versions` nahradí aktuální `REJECTED` verzi jedním nástupcem (+1, odkaz na předchůdce).
+Původní soubor a rozhodnutí zůstávají v historii této řady. Seznam a fronta pracují s aktuálními verzemi
+všech řad; odvozený stav má prioritu `PENDING` > `APPROVED` > `REJECTED`, bez dokladů `NOT_SUBMITTED`.
+
+Všechny operace chovatele se zvířaty i doklady vyžadují ověřený účet: služba při
+každém požadavku čte vlastní kolekci `verifiedBreeders` podle `req.auth.userId`.
+Bez identity vrací 401, bez záznamu 403 (i během několikasekundového zpoždění po
+schválení), při chybě čtení DB 503. Výpadek brokeru nepřeruší používání uložené
+projekce; consumer se znovu připojuje na pozadí. Breeder HTTP API se nevolá.
+Cizí nebo neexistující zvíře, fotografie či doklad je 404; chybějící role 403.
+Posuzovatel (`admin` | `owner`) čte a rozhoduje o dokladech bez vlastnictví
+i ověření; ke správě cizích zvířat oprávnění nemá.
 
 Z lokálního frontendu používej prefix **`/api/animal`**, například
 `fetch('/api/animal/animals')`. Vlastní server běží na portu **3002**;
@@ -158,10 +173,15 @@ ani soubory nezmění. Systémová pole nelze měnit přes body/query.
 
 ## Rozsah
 
-Služba volá breeder-service jen kvůli ověření chovatele a neodebírá zprávy z brokeru.
-Není zapojená do cloudového publish/deploymentu ani do frontendového formuláře.
-Pro přihlášený lokální běh musí běžet i breeder-service a animal-service potřebuje
-`BREEDER_SERVICE_URL`; bez ní vrací operace chovatele 503.
+Služba odebírá `breeder.verified` z NATS JetStream durable pull consumerem
+a idempotentně ukládá projekci `verifiedBreeders`. Zprávu potvrdí až po zápisu;
+neplatnou ukončí (`term`), při chybě DB žádá nové doručení (`nak`).
+Stream `ANICO_BREEDER_VERIFICATIONS`, subject `anico.dev.breeder.verified.v1`
+a consumer `animal-verified-breeders` připravuje infrastruktura nebo lokální launcher.
+Schéma události sdílí služby přes `@anico/shared-schemas`.
+Existující schválení doplní breeder migrace `20261106120000-breeder-verification-outbox`;
+projekci lze obnovit replayem streamu. Podrobnosti a omezení:
+[ADR-0007](../../docs/adr/0007-projekce-overenych-chovatelu-pres-nats.md).
 
 Ve společném lokálním běhu je frontend na http://127.0.0.1:5173,
 API na `/api/animal`, health na `/api/animal/health`.

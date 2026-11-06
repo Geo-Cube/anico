@@ -5,13 +5,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import {
-  createLocalJWKSet,
-  decodeJwt,
-  exportJWK,
-  generateKeyPair,
-  SignJWT,
-} from 'jose';
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import {
   createIdentityVerifier,
   requireAuth,
@@ -34,6 +28,7 @@ const stranger = testIdentity({ roles: ['breeder'] });
 const unverified = testIdentity({ roles: ['breeder'] });
 const admin = testIdentity({ roles: ['admin'] });
 const dog = {
+  name: 'Argo',
   species: 'dog',
   breedId: animalBreeds('dog')[0]!.id,
   sex: 'female',
@@ -41,7 +36,6 @@ const dog = {
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]);
 const JPEG = Buffer.from([255, 216, 255, 2]);
 const optionalKeys = [
-  'name',
   'birthDate',
   'coatColor',
   'weightKg',
@@ -126,9 +120,9 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
       modules: createModules(connection, {
         logger: pino({ level: 'silent' }),
         verification: {
-          async isVerified(token) {
+          async isVerified(breederId) {
             if (verificationDown) throw new Error('offline');
-            return decodeJwt(token).sub !== unverified.userId;
+            return breederId !== unverified.userId;
           },
         },
       }),
@@ -189,22 +183,59 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
     const changed = await request(app)
       .patch(`/animals/${animal.id}`)
       .set(auth())
-      .send({ name: '', city: null, weightKg: '' })
+      .send({ city: null, weightKg: '' })
       .expect(200);
     expect(changed.body).toMatchObject({
-      name: null,
+      name: 'Luna',
       city: null,
       weightKg: null,
       coatColor: 'black',
       microchipNumber: '  000123  ',
     });
     expect(await raw(animal.id)).toMatchObject({
-      name: null,
+      name: 'Luna',
       city: null,
       weightKg: null,
       coatColor: 'black',
       microchipNumber: '  000123  ',
     });
+  });
+
+  it.each([undefined, null, '', '   '])(
+    'rejects create without a valid name: %j',
+    async (name) => {
+      await request(app)
+        .post('/animals')
+        .set(auth())
+        .send({ ...dog, name })
+        .expect(400);
+      expect(await collection().countDocuments()).toBe(0);
+    },
+  );
+
+  it.each([null, '', '   '])(
+    'rejects clearing the name on PATCH: %j',
+    async (name) => {
+      const animal = await create();
+      await request(app)
+        .patch(`/animals/${animal.id}`)
+        .set(auth())
+        .send({ name })
+        .expect(400);
+      expect(await raw(animal.id)).toMatchObject({ name: dog.name });
+    },
+  );
+
+  it('trims a required name on create and PATCH', async () => {
+    const animal = await create({ ...dog, name: '  Argo  ' });
+    expect(animal.name).toBe('Argo');
+    const changed = await request(app)
+      .patch(`/animals/${animal.id}`)
+      .set(auth())
+      .send({ name: '  Luna  ' })
+      .expect(200);
+    expect(changed.body.name).toBe('Luna');
+    expect(await raw(animal.id)).toMatchObject({ name: 'Luna' });
   });
 
   it.each([
@@ -499,7 +530,7 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
       .get('/document-reviews')
       .set(auth(admin))
       .expect(200);
-    expect(review.body.items).toHaveLength(1);
+    expect(review.body.items).toHaveLength(2);
     await request(app).delete(`/animals/${animal.id}`).set(auth()).expect(204);
     expect(await raw(animal.id)).toBeNull();
     expect(await files()).toHaveLength(0);
@@ -537,8 +568,9 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
       await isolated
         .db!.collection('animals')
         .updateOne({ _id: animal.insertedId }, { $set: { sex: 'female' } });
+      const remaining = migrations.filter((m) => m.id >= migration.id);
       expect(await migrateDatabase(isolated, migrations, migration.id)).toEqual(
-        [migration.id],
+        remaining.map((m) => m.id),
       );
       expect(await migrateDatabase(isolated, migrations)).toEqual([]);
     } finally {
@@ -546,4 +578,46 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
       await isolated.close();
     }
   });
+
+  it.each([null, undefined, '', '   '])(
+    'stops the required-name migration for invalid legacy name %j',
+    async (name) => {
+      const isolated = await mongoose
+        .createConnection(mongo.getUri(`animal_names_${randomUUID()}`))
+        .asPromise();
+      try {
+        const migrations = await loadMigrations();
+        const migration = migrations.find(
+          (m) => m.id === '20261106120000-required-animal-name',
+        )!;
+        await migrateDatabase(
+          isolated,
+          migrations.filter((m) => m.id < migration.id),
+        );
+        const legacy = { ...dog, ...(name === undefined ? {} : { name }) };
+        if (name === undefined) delete (legacy as Partial<typeof dog>).name;
+        const inserted = await isolated
+          .db!.collection('animals')
+          .insertOne(legacy);
+        await expect(migration.up(isolated)).rejects.toThrow(/1 animal/);
+        await expect(migrateDatabase(isolated, migrations)).rejects.toThrow();
+        await isolated
+          .db!.collection('animals')
+          .updateOne({ _id: inserted.insertedId }, { $set: { name: 'Luna' } });
+        expect(
+          await migrateDatabase(isolated, migrations, migration.id),
+        ).toEqual(
+          migrations.filter((m) => m.id >= migration.id).map((m) => m.id),
+        );
+        expect(
+          await isolated
+            .db!.collection('animals')
+            .findOne({ _id: inserted.insertedId }),
+        ).toMatchObject({ name: 'Luna' });
+      } finally {
+        await isolated.dropDatabase();
+        await isolated.close();
+      }
+    },
+  );
 });

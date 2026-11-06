@@ -631,7 +631,6 @@ describe('UC01-ACC-05 GET /breeders/me ve všech stavech', () => {
     expect(none.body).toMatchObject({
       accountState: 'NOT_SUBMITTED',
       isVerified: false,
-      hasBreedingStation: true,
       verificationRequest: null,
       breedingStationName: null,
     });

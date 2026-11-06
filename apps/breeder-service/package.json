@@ -29,6 +29,8 @@
   "dependencies": {
     "@anico/auth": "^0.1.0",
     "@anico/shared-schemas": "^0.1.0",
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
     "express": "^5.1.0",
     "jose": "^6.2.14",
     "mongoose": "^8.19.0",

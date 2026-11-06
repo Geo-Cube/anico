@@ -81,8 +81,9 @@ Frontend je nemá; do společného service `.env` ani do image URI nevkládej.
 Coolify totiž společný `.env` přidává všem komponentám.
 
 Gateway: `/api/animal/*` a `/api/breeder/*` vedou přes ověření relace (`anico-session`)
-na příslušnou službu, veřejné jsou jen jejich `/health` a `/ready`. animal-service volá
-breeder-service interně (`BREEDER_SERVICE_URL=http://breeder:3000`) s přeposlanou identitou.
+na příslušnou službu, veřejné jsou jen jejich `/health` a `/ready`. Stav ověření chovatele
+předává breeder-service do animal-service událostí přes interní NATS
+([ADR-0007](adr/0007-projekce-overenych-chovatelu-pres-nats.md)); přímé volání mezi nimi není.
 
 CI vstup `deploy-dev.anico.online` přijme jen Service Auth a GET/PATCH určené služby
 plus kontrolu manifestu. Lidský dev a admin vyžadují jiné Access audience.

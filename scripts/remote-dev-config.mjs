@@ -21,28 +21,24 @@ export function remoteServiceMetadata(name, manifest, example) {
   const port = Number(parseEnv(example).PORT);
   if (!Number.isInteger(port) || port < 1024 || port > 65535)
     throw new Error('Set a valid PORT in the selected service .env.example');
-  const developmentDependencies =
-    manifest.anicoDevDependencies === undefined
-      ? {}
-      : manifest.anicoDevDependencies;
+  const developmentServices =
+    manifest.anicoDevServices === undefined ? [] : manifest.anicoDevServices;
   if (
-    typeof developmentDependencies !== 'object' ||
-    developmentDependencies === null ||
-    Array.isArray(developmentDependencies) ||
-    Object.entries(developmentDependencies).some(
-      ([variable, dependency]) =>
-        !/^[A-Z][A-Z0-9_]*_URL$/.test(variable) ||
+    !Array.isArray(developmentServices) ||
+    new Set(developmentServices).size !== developmentServices.length ||
+    developmentServices.some(
+      (dependency) =>
         typeof dependency !== 'string' ||
         remoteServiceName(dependency) !== dependency ||
         dependency === name,
     )
   )
-    throw new Error('Invalid anicoDevDependencies: use ENV_URL: service-name');
+    throw new Error('Invalid anicoDevServices: use an array of service names');
   return {
     name,
     workspace: manifest.name,
     port,
-    developmentDependencies,
+    developmentServices,
   };
 }
 
@@ -140,13 +136,9 @@ export function remoteDevelopmentServices(text, settings, services) {
   if (new Set(configs.map(({ port }) => port)).size !== configs.length)
     throw new Error('Local service ports must be distinct');
   for (const config of configs)
-    for (const [variable, name] of Object.entries(
-      config.service.developmentDependencies ?? {},
-    )) {
-      const dependency = configs.find(({ service }) => service.name === name);
-      if (!dependency) throw new Error(`Missing local dependency ${name}`);
-      config.env[variable] = `http://127.0.0.1:${dependency.port}`;
-    }
+    for (const name of config.service.developmentServices ?? [])
+      if (!configs.some(({ service }) => service.name === name))
+        throw new Error(`Missing local dependency ${name}`);
   return configs;
 }
 

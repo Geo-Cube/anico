@@ -65,7 +65,7 @@ export const AnimalDocumentListSchema = z.strictObject({
 });
 export type AnimalDocumentList = z.infer<typeof AnimalDocumentListSchema>;
 
-/** Historie řady verzí jednoho typu dokladu, nejstarší první. */
+/** Historie jedné propojené řady dokladu, nejstarší první. */
 export const AnimalDocumentHistorySchema = z.strictObject({
   animalId: AnimalIdSchema,
   documentType: AnimalDocumentTypeSchema,
@@ -75,20 +75,13 @@ export type AnimalDocumentHistory = z.infer<typeof AnimalDocumentHistorySchema>;
 
 /**
  * Textová pole multipart podání. `documentTypes[i]` je typ i-tého souboru `files`;
- * jeden typ smí být v podání nejvýše jednou.
+ * stejný typ lze uvést vícekrát, každý soubor zakládá samostatný doklad.
  */
 export const SubmitAnimalDocumentsSchema = z.strictObject({
-  documentTypes: z
-    .preprocess(
-      (value) => (typeof value === 'string' ? [value] : value),
-      z
-        .array(AnimalDocumentTypeSchema)
-        .min(1)
-        .max(MAX_DOCUMENTS_PER_SUBMISSION),
-    )
-    .refine((types) => new Set(types).size === types.length, {
-      message: 'Each document type may be submitted only once',
-    }),
+  documentTypes: z.preprocess(
+    (value) => (typeof value === 'string' ? [value] : value),
+    z.array(AnimalDocumentTypeSchema).min(1).max(MAX_DOCUMENTS_PER_SUBMISSION),
+  ),
 });
 export type SubmitAnimalDocumentsInput = z.infer<
   typeof SubmitAnimalDocumentsSchema
@@ -114,7 +107,7 @@ export const DocumentReviewSchema = z.strictObject({
   animal: z.strictObject({
     id: AnimalIdSchema,
     ownerUserId: z.uuid(),
-    name: z.string().nullable(),
+    name: z.string().trim().min(1).max(120),
     species: AnimalSpeciesSchema,
     breedId: z.string(),
     sex: AnimalSexSchema,

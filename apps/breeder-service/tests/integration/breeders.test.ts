@@ -87,7 +87,6 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
     expect(responses[0]!.body).toMatchObject({
       accountState: 'NOT_SUBMITTED',
       isVerified: false,
-      hasBreedingStation: true,
       breedingStationName: null,
     });
   });
@@ -103,7 +102,6 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
       firstName: 'Jan',
       breedingStationName: 'Stanice U Nováků',
       breedingStationNumber: '123456',
-      hasBreedingStation: true,
       isVerified: false,
       verificationRequest: {
         status: 'PENDING',

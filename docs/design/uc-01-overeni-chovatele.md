@@ -84,7 +84,7 @@ Mimo rozsah: frontend (K17), WF 04 „Čekající doklady“ (UC-03), US-02+.
 
 | Analýza                                 | Endpoint / komponenta                                     | Klíčový test (úroveň)                                                                    |
 | --------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Převzetí účtu HDS 1–3, WF 01            | `GET /breeders/me` (JIT `provision`)                      | výchozí hodnoty R2 vč. `hasBreedingStation`; idempotence i 3× souběžně (http, int)       |
+| Převzetí účtu HDS 1–3, WF 01            | `GET /breeders/me` (JIT `provision`)                      | výchozí hodnoty R2; idempotence i 3× souběžně (http, int)                                |
 | Podání HDS 1                            | `GET /breeders/me`                                        | `accountState: NOT_SUBMITTED`, `verificationRequest: null`                               |
 | Podání HDS 2–3, A1 Zrušit, WF 02        | jen frontend                                              | backend nic neukládá – bez testu                                                         |
 | Podání HDS 4, A2                        | `POST /breeders/me/verification-request`                  | 401, 400, 413, 415; nic se neuloží, ani soubor (http, int)                               |
@@ -115,7 +115,6 @@ breeders {
   _id: ObjectId
   breederId: string                 required, unique; = req.auth.userId, neměnné
   firstName, lastName, emailAddress: string | null   z identity, mohou chybět; podání je doplní
-  hasBreedingStation: true          required, default true          (NOVÉ, K2)
   breedingStationName, breedingStationNumber: string | null   default null
   isVerified: boolean               required, default false
   verificationRequest: null | {     default null
@@ -151,7 +150,6 @@ Adaptér generuje `_id` žádosti explicitně (`new Types.ObjectId()`) v `$set` 
 | Rozhodnutí jen z PENDING (R10, ADR-0004)  | filtr `status: 'PENDING'` + `revision` z rozhodnutí             | `revision` povinná, int ≥ 1       | `null` → znovu načíst → 404 / 409 (decided/mismatch)  | `$set` + `$push` do `reviewHistory`        |
 | APPROVED ⇔ `isVerified: true` (R8, R9)    | stejný `$set`                                                   | –                                 | –                                                     | `isVerified = decision === 'APPROVED'`     |
 | Důvod povinný u REJECTED a RETURNED       | – (viz §7 ř. 7)                                                 | `trim().min(1).max(500)`, strict  | prázdný po trim → `InvalidDecisionError`              | ukládá jen u daného výsledku, jinak `null` |
-| `hasBreedingStation` vždy `true` (R1)     | default + `$setOnInsert` + `$set` při podání (HDS 5)            | `z.literal(true)`                 | typ `true`                                            | `toDomain` vždy `true`                     |
 | Povinná pole podání                       | `required` ve schématu                                          | `SubmitVerificationRequestSchema` | –                                                     | –                                          |
 | Formát certifikátu                        | –                                                               | –                                 | `detectCertificateContentType` (magic bytes)          | `metadata.contentType`                     |
 | `breederId`, `reviewedBy` jen z identity  | –                                                               | `strictObject` odmítne cizí pole  | vstup use-case je z identity                          | –                                          |
@@ -166,7 +164,7 @@ definice indexu = nová migrace.
 
 Schémata v `@anico/shared-schemas` (K15, existující exporty beze změny názvů; v `src/index.ts` už jsou):
 `ObjectIdSchema`, `VerificationStatusSchema`, `accountSchema`, `CertificateFileSchema`, `StoredFileSchema`,
-`VerificationRequestSchema`, `MyAccountSchema` (s `hasBreedingStation: z.literal(true)`), `BreederProfileSchema`,
+`VerificationRequestSchema`, `MyAccountSchema`, `BreederProfileSchema`, `UpdateMyProfileSchema`,
 `SubmitVerificationRequestSchema`, `DecideVerificationRequestSchema`, `ListVerificationRequestsQuerySchema`,
 `AdminVerificationRequestSchema`, `VerificationRequestListSchema`, `VerificationSummarySchema` + typy. Vstupy
 `safeParse`, výstupy vždy `Schema.parse(...)` (i stávající `GET /breeders/me`, dnes bez `parse`).
@@ -174,6 +172,7 @@ Schémata v `@anico/shared-schemas` (K15, existující exporty beze změny názv
 | Metoda a cesta                                      | Oprávnění                           | Vstup                                                                                   | Úspěch                                | Chyby                                                     |
 | --------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------- |
 | `GET /breeders/me`                                  | `authenticate`                      | –                                                                                       | 200 `MyAccountSchema` (založí profil) | 401, 500                                                  |
+| `PATCH /breeders/me`                                | `authenticate`, vlastník = identita | strict JSON, alespoň jedno z `firstName`, `lastName`, `emailAddress`                    | 200 `MyAccountSchema`                 | 400, 401, 409 + `MyAccount`, 500                          |
 | `POST /breeders/me/verification-request`            | `authenticate`, vlastník = identita | multipart: pole `SubmitVerificationRequestSchema` + soubor `breedingStationCertificate` | 201 `MyAccountSchema` (`PENDING`)     | 400, 401, 409 + `MyAccount`, 413, 415                     |
 | `GET /breeders/me/verification-request/certificate` | `authenticate`                      | –                                                                                       | 200 soubor (§5)                       | 401, 404 (bez profilu / žádosti), 500                     |
 | `GET /verification-requests/summary`                | `requireAdmin`                      | –                                                                                       | 200 `VerificationSummarySchema`       | 401, 403                                                  |
@@ -208,6 +207,18 @@ Schémata v `@anico/shared-schemas` (K15, existující exporty beze změny názv
 Každá „společná“ změna je jeden atomický zápis do jednoho dokumentu (ADR-0001); transakce ani replica set nejsou.
 
 - **Převzetí** (hotovo): `findOneAndUpdate({ breederId }, { $setOnInsert }, { upsert })`, 11000 → znovu načíst.
+- **Samostatná úprava profilu:** `PATCH /breeders/me` převezme profil z identity a použije
+  `findOneAndUpdate({ breederId, verificationRequest: null }, { $set: update })`.
+  Povolené jsou jen jméno, příjmení a e-mail se stejnou validací jako podání; prázdný objekt a cizí pole → 400.
+  Jakákoli existující žádost včetně `RETURNED` znamená 409 s aktuálním účtem; souběžné podání nelze přepsat.
+  Oprava vrácené žádosti zůstává odděleným tokem dle ADR-0004.
+- **Událost ověření (rozhodnutí 6. 11. 2026):** vítězné schválení atomicky uloží také embedded
+  `verificationEvent` s kontraktem `BreederVerifiedEventSchema`. Zamítnutí ani vrácení událost nevytváří.
+  Lease dispatcher publikuje do JetStream s `Nats-Msg-Id = eventId`, čeká na ACK a teprve pak značí `published`.
+  Opakování 1–60 s, nevalidní událost → `failed` / `invalid_event`; token lease brání zápisu zastaralého workeru.
+  Bez `BREEDER_VERIFICATION_BROKER_FILE` zůstává outbox pending (jediné varování při startu).
+  Ukončení dokončí in-flight publikaci před zavřením DB. Nová migrace doplní existujícím ověřeným chovatelům
+  událost z `verificationRequest.reviewedAt` a claim index; druhá migrace odstraní zrušený příznak stanice.
 - **Podání** (`application/submit-verification-request.ts`):
 
   ```text
@@ -231,7 +242,7 @@ Každá „společná“ změna je jeden atomický zápis do jednoho dokumentu (
   ```
 
   Filtr prvního podání: `{ breederId, verificationRequest: null }` (pokryje i chybějící pole), `$set` profil +
-  `hasBreedingStation: true` + celá žádost (`PENDING`, `submittedAt` = `lastSubmittedAt` = `new Date()`,
+  celá žádost (`PENDING`, `submittedAt` = `lastSubmittedAt` = `new Date()`,
   `reviewed*`/`rejectionReason`/`returnReason` `null`, `reviewHistory: []`). Filtr opravy: `breederId` + `_id`
   žádosti + `status: 'RETURNED'` + `fileReference` certifikátu, ze kterého oprava vychází; `$set` profil,
   `PENDING`, `lastSubmittedAt`, `reviewed*`/důvody `null` a případně nový certifikát; `submittedAt` a
@@ -254,7 +265,7 @@ Každá „společná“ změna je jeden atomický zápis do jednoho dokumentu (
 - **E-mail** (K12, ADR-0003): jen vítězný požadavek, až po vrácení uloženého dokumentu; `try/catch` →
   `logger.warn({ err, breederId }, …)`, odpověď 200 se nemění. Při 409/404 se nic neposílá.
 - **In-memory adaptéry** musí mít stejné podmínky i sémantiku: vracet kopie (`structuredClone`), ne sdílené
-  objekty, ukládat jméno/e-mail/`hasBreedingStation` při podání, řadit a omezit frontu jako Mongo.
+  objekty, ukládat jméno/e-mail při podání, řadit a omezit frontu jako Mongo.
 
 ## 5. Soubory
 
@@ -379,7 +390,7 @@ produkční e-mail ani dokončení onboardingového profilu.
 Historický plán původní implementace (před ADR-0004 a před přechodem na JWT identitu); úkoly jsou hotové a
 zmínky o hlavičkách `x-user-*` nebo „lze podat pouze jednou“ už neplatí – současný stav popisuje §0.
 
-Dopad na hotový kód: mění se `domain/breeder.ts` (`hasBreedingStation`, přesun `DecisionNotifier`),
+Dopad na hotový kód: mění se `domain/breeder.ts` (přesun `DecisionNotifier`),
 `http/current-breeder.ts` (nahrazení `CurrentBreederResolver`), `get-my-account-handler.ts` (identita,
 `parse`), Mongoose schéma (nové pole), `tests/support/in-memory.ts` a `tests/http/get-my-account.test.ts`
 (nutná změna signatury, ne oslabení). Datová migrace není potřeba.
@@ -388,14 +399,14 @@ Dopad na hotový kód: mění se `domain/breeder.ts` (`hasBreedingStation`, pře
 
 1. E1.1 `shared-schemas`: zkontrolovat exporty §3, build, changeset (minor `shared-schemas` + `breeder-service`).
    Ověření: `npm run typecheck` v kořeni.
-2. E1.2 Doména: `hasBreedingStation: true`, `DecisionNotifier` do `ports.ts`, `InvalidDecisionError`.
+2. E1.2 Doména: `DecisionNotifier` do `ports.ts`, `InvalidDecisionError`.
    Unit: `accountState` a `canSubmitVerificationRequest` pro 4 stavy.
 3. E1.3 `domain/certificate-file.ts`: detekce + sanitizace. Unit: PDF/PNG/JPEG, GIF, prázdný, HTML jako `.pdf`,
    `../../etc/passwd`, `C:\…\Cert "1".pdf`, bidi znaky, NFC, 151 code pointů (přípona zůstane), prázdný název.
 4. E1.4 `domain/decision-email.ts`: předmět + text. Unit: schválení; zamítnutí s důvodem (dnes: „zamítnutí je
    konečné“); vrácení s důvodem a možností opravy (ADR-0004).
 5. E1.5 In-memory adaptéry (§4) + `inMemoryFiles()`. Unit: podání uloží jméno/e-mail, kopie, řazení, limit.
-6. E1.6 Mongoose: `hasBreedingStation`, explicitní `_id` žádosti, `submitVerification`, `decideVerification`,
+6. E1.6 Mongoose: explicitní `_id` žádosti, `submitVerification`, `decideVerification`,
    `listByVerificationStatus`, `countByVerificationStatus`. Integ: 1 dokument, souběh 3 podání a 2 rozhodnutí
    na úrovni repozitáře, nevalidní ObjectId, počty s nulami, řazení.
 7. E1.7 `infrastructure/gridfs-file-storage.ts` (`save`, `open`, `getMetadata`, `delete`). Integ: round-trip

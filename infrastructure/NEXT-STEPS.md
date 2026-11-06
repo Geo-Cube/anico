@@ -22,7 +22,12 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
 - [x] Jmenovat a ověřit prvního skutečného Google vlastníka na společném devu; audit potvrzený.
 - [x] Review/CI PR #25, nasazení registračního kontraktu, backfill migrace a ověření payloadů i vlastníka.
 - [x] Review/CI PR #26, nasazení privátního NATS JetStream a publisheru, runtime 4; shodné payloady obou registrací v outboxu/brokeru, nulové pending/failed a aktualizovaný recovery release. [Postup](../docs/REGISTRACNI-UDALOSTI.md).
-- [ ] Později potvrdit potřebu animal projekce, implementovat vlastní durable/idempotentní consumer a otestovat celý tok včetně výpadků a duplicit. Nyní se consumer ani business tok nemění.
+- [ ] Po výslovném schválení správcem aplikovat `init:dev-events` → `deploy:dev-events`
+      → konfiguraci/deploy služeb: nový stream `ANICO_BREEDER_VERIFICATIONS`,
+      durable pull consumer `animal-verified-breeders`, oddělené účty/secrets a
+      lokální projekce ověřených chovatelů v animal-service. IaC je připravené,
+      změny zatím nebyly aplikované; po nasazení ověřit celý tok včetně duplicit
+      a výpadků. Registrační animal consumer zůstává oddělenou budoucí potřebou.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
 - [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).
 - [x] Review auth-service a sdíleného kontraktu identity (PR #17), oprava gateway (PR #19).

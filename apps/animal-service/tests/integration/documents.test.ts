@@ -4,13 +4,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import {
-  createLocalJWKSet,
-  decodeJwt,
-  exportJWK,
-  generateKeyPair,
-  SignJWT,
-} from 'jose';
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import {
   createIdentityVerifier,
   requireAuth,
@@ -90,9 +84,9 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
         logger: pino({ level: 'silent' }),
         // breeder-service nahrazuje fake: rozhoduje podle `sub` přeposlané identity
         verification: {
-          async isVerified(token) {
-            if (verificationDown) throw new Error('breeder-service down');
-            return decodeJwt(token).sub !== unverified.userId;
+          async isVerified(breederId) {
+            if (verificationDown) throw new Error('projection read failed');
+            return breederId !== unverified.userId;
           },
         },
       }),
@@ -269,7 +263,6 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
   it('validates the submission shape before storing anything', async () => {
     const animalId = await createAnimal();
     const invalid: Upload[][] = [
-      [{ type: 'PEDIGREE' }, { type: 'PEDIGREE' }],
       [{ type: 'STATION_REGISTRATION' }],
       Array.from({ length: 11 }, () => ({ type: 'PEDIGREE' })),
     ];
@@ -377,11 +370,16 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
     const { body } = await submit(animalId, [{ type: 'PEDIGREE' }]).expect(201);
     const v1 = body.documents[0].id as string;
 
-    expect((await replace(animalId, v1)).body).toMatchObject({
-      error: 'Only a rejected document can be replaced',
-      current: { id: v1, assessmentStatus: 'PENDING' },
-    });
+    await replace(animalId, v1).expect(409);
     await reject(animalId, v1);
+    // Jiná řada stejného typu nesmí ovlivnit náhradu ani historii této řady.
+    const independent = await submit(animalId, [{ type: 'PEDIGREE' }]).expect(
+      201,
+    );
+    await decide(animalId, independent.body.documents[0].id, {
+      decision: 'APPROVED',
+    }).expect(200);
+    await replace(animalId, independent.body.documents[0].id).expect(409);
 
     const created = await replace(animalId, v1, PNG).expect(201);
     const v2 = AnimalDocumentSchema.parse(created.body);
@@ -418,6 +416,9 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
       reviewedBy: admin.userId,
     });
     expect((await download(animalId, v1).expect(200)).body).toEqual(PDF);
+    const staleDecision = await decide(animalId, v1, { decision: 'APPROVED' });
+    expect(staleDecision.status).toBe(409);
+    expect(staleDecision.body.current.id).toBe(v2.id);
   });
 
   it('lets exactly one of two concurrent replacements of the same version win', async () => {
@@ -439,24 +440,48 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
     expect(await storedFiles()).toBe(2);
   });
 
-  it('continues the chain when the same type is submitted again (R7)', async () => {
+  it('starts independent chains for repeated types within and across submissions', async () => {
     const animalId = await createAnimal();
-    const first = await submit(animalId, [{ type: 'PEDIGREE' }]).expect(201);
-    const v1 = first.body.documents[0].id as string;
-    await decide(animalId, v1, { decision: 'APPROVED' }).expect(200);
+    const first = await submit(animalId, [
+      { type: 'PEDIGREE' },
+      { type: 'PEDIGREE' },
+    ]).expect(201);
+    const [approved, pending] = AnimalDocumentListSchema.parse(
+      first.body,
+    ).documents;
+    expect(approved!.id).not.toBe(pending!.id);
+    for (const document of [approved!, pending!])
+      expect(document).toMatchObject({
+        versionNumber: 1,
+        previousDocumentId: null,
+        isCurrent: true,
+        assessmentStatus: 'PENDING',
+      });
+    await decide(animalId, approved!.id, { decision: 'APPROVED' }).expect(200);
 
-    const second = await submit(animalId, [{ type: 'PEDIGREE' }]).expect(201);
-    const v2 = second.body.documents[0];
-    expect(v2).toMatchObject({ versionNumber: 2, previousDocumentId: v1 });
-    const third = await submit(animalId, [{ type: 'PEDIGREE' }]).expect(201);
-    const v3 = third.body.documents[0];
-
-    // nahrazená PENDING verze z fronty mizí a rozhodnout o ní už nelze
-    const late = await decide(animalId, v2.id, { decision: 'APPROVED' });
-    expect(late.status).toBe(409);
-    expect(late.body).toMatchObject({
-      error: 'Document version is not current',
-      current: { id: v3.id },
+    const next = await submit(animalId, [{ type: 'PEDIGREE' }]).expect(201);
+    const newChain = AnimalDocumentListSchema.parse(next.body).documents[0]!;
+    expect(newChain).toMatchObject({
+      versionNumber: 1,
+      previousDocumentId: null,
+      isCurrent: true,
+      assessmentStatus: 'PENDING',
+    });
+    const listed = AnimalDocumentListSchema.parse(
+      (
+        await request(app)
+          .get(`/animals/${animalId}/documents`)
+          .set(await auth(owner))
+      ).body,
+    );
+    expect(listed.documentsState).toBe('PENDING');
+    expect(listed.documents).toHaveLength(3);
+    expect(
+      listed.documents.find(({ id }) => id === approved!.id),
+    ).toMatchObject({
+      isCurrent: true,
+      assessmentStatus: 'APPROVED',
+      versionNumber: 1,
     });
     const queue = DocumentReviewListSchema.parse(
       (
@@ -465,16 +490,20 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
           .set(await auth(admin))
       ).body,
     );
-    expect(queue.items.map((item) => item.document.id)).toEqual([v3.id]);
-
-    const history = await request(app)
-      .get(`/animals/${animalId}/documents/${v1}/history`)
-      .set(await auth(owner));
-    expect(
-      history.body.versions.map(
-        (v: { assessmentStatus: string }) => v.assessmentStatus,
-      ),
-    ).toEqual(['APPROVED', 'PENDING', 'PENDING']);
+    expect(queue.items.map((item) => item.document.id).sort()).toEqual(
+      [pending!.id, newChain.id].sort(),
+    );
+    for (const document of [approved!, pending!, newChain]) {
+      const history = AnimalDocumentHistorySchema.parse(
+        (
+          await request(app)
+            .get(`/animals/${animalId}/documents/${document.id}/history`)
+            .set(await auth(owner))
+        ).body,
+      );
+      expect(history.versions.map(({ id }) => id)).toEqual([document.id]);
+    }
+    await decide(animalId, pending!.id, { decision: 'APPROVED' }).expect(200);
   });
 
   it('validates decisions and keeps the first decision final', async () => {
@@ -627,19 +656,16 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
     });
     const animalId = await createAnimal();
 
-    const [v1] = await documents.submit(owner, 'token', animalId, async () => [
+    const [v1] = await documents.submit(owner, animalId, async () => [
       { documentType: 'PEDIGREE', fileName: 'rodokmen.pdf', content: PDF },
     ]);
     expect((await download(animalId, v1!.id).expect(200)).body).toEqual(PDF);
 
     await reject(animalId, v1!.id);
-    const v2 = await documents.replace(
-      owner,
-      'token',
-      animalId,
-      v1!.id,
-      async () => ({ fileName: 'nova.png', content: PNG }),
-    );
+    const v2 = await documents.replace(owner, animalId, v1!.id, async () => ({
+      fileName: 'nova.png',
+      content: PNG,
+    }));
     expect(v2.previousDocumentId).toBe(v1!.id);
     expect((await download(animalId, v2.id).expect(200)).body).toEqual(PNG);
     expect(await storedFiles()).toBe(2);

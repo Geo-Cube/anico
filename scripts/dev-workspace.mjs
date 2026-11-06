@@ -38,8 +38,7 @@ export function loadRemoteWorkspaces(root, name) {
     visiting.add(name);
     const service = loadRemoteWorkspace(root, name);
     services.set(name, service);
-    for (const dependency of Object.values(service.developmentDependencies))
-      load(dependency);
+    for (const dependency of service.developmentServices) load(dependency);
     visiting.delete(name);
   }
   load(name);

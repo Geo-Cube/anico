@@ -18,6 +18,7 @@ import type { FileStorage } from '../../src/files/file-storage.js';
 
 const actor = testIdentity();
 const dog = {
+  name: 'Argo',
   species: 'dog' as const,
   breedId: animalBreeds('dog')[0]!.id,
   sex: 'female' as const,
@@ -94,7 +95,7 @@ function setup() {
     newId: () => (++sequence).toString(16).padStart(24, '0'),
   });
   const create = (uploads: PhotoUpload[] = []) =>
-    use.create(actor, 'token', async () => ({
+    use.create(actor, async () => ({
       input: CreateAnimalSchema.parse(dog),
       uploads,
     }));
@@ -121,7 +122,7 @@ describe('animal profile write consistency', () => {
         return null;
       })
       .mockImplementation(update);
-    const changed = await s.use.update(actor, 'token', animal.id, async () => ({
+    const changed = await s.use.update(actor, animal.id, async () => ({
       input: { name: 'Luna' },
       uploads: [upload],
     }));
@@ -136,7 +137,7 @@ describe('animal profile write consistency', () => {
     const previous = [...s.files.keys()];
     vi.mocked(s.repository.update).mockResolvedValue(null);
     await expect(
-      s.use.update(actor, 'token', animal.id, async () => ({
+      s.use.update(actor, animal.id, async () => ({
         input: { name: 'Race' },
         uploads: [upload],
       })),
@@ -167,7 +168,7 @@ describe('animal profile write consistency', () => {
       const result =
         operation === 'create'
           ? await s.create([upload])
-          : await s.use.update(actor, 'token', animal!.id, async () => ({
+          : await s.use.update(actor, animal!.id, async () => ({
               input: { name: 'New' },
               uploads: [upload],
             }));
@@ -190,7 +191,7 @@ describe('animal profile write consistency', () => {
       await expect(
         operation === 'create'
           ? s.create([upload])
-          : s.use.update(actor, 'token', animal!.id, async () => ({
+          : s.use.update(actor, animal!.id, async () => ({
               input: { name: 'New' },
               uploads: [upload],
             })),
@@ -221,11 +222,11 @@ describe('animal profile write consistency', () => {
     const s = setup();
     const read = vi.fn(async () => ({ input: dog, uploads: [upload] }));
     s.verification.isVerified.mockResolvedValue(false);
-    await expect(s.use.create(actor, 'token', read)).rejects.toMatchObject({
+    await expect(s.use.create(actor, read)).rejects.toMatchObject({
       status: 403,
     });
     await expect(
-      s.use.list(undefined, undefined, ListAnimalsQuerySchema.parse({})),
+      s.use.list(undefined, ListAnimalsQuerySchema.parse({})),
     ).rejects.toMatchObject({ status: 401 });
     expect(read).not.toHaveBeenCalled();
     expect(s.photos.save).not.toHaveBeenCalled();

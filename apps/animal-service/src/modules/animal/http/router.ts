@@ -22,7 +22,6 @@ import {
   multipart,
   storedFileHeaders,
 } from '../../../http/files.js';
-import { identityToken } from '../../../http/identity-token.js';
 import { readJsonBody } from '../../../http/json-body.js';
 import { animalUseCases, type PhotoUpload } from '../application/animals.js';
 import type { WarnLogger } from '../application/verified-breeder.js';
@@ -122,11 +121,7 @@ export function AnimalRouter(dependencies: {
 
   router.get('/animals', async (req, res) => {
     const query = ListAnimalsQuerySchema.parse(req.query);
-    const { items, nextCursor } = await animals.list(
-      req.auth,
-      identityToken(req),
-      query,
-    );
+    const { items, nextCursor } = await animals.list(req.auth, query);
     res.json(
       contract(AnimalListSchema, { items: items.map(toDto), nextCursor }),
     );
@@ -135,25 +130,19 @@ export function AnimalRouter(dependencies: {
   router.post('/animals', async (req, res) => {
     const created = await animals.create(
       req.auth,
-      identityToken(req),
       requestReader(req, res, CreateAnimalSchema),
     );
     res.status(201).json(contract(AnimalSchema, toDto(created)));
   });
 
   router.get('/animals/:animalId', async (req, res) => {
-    const animal = await animals.get(
-      req.auth,
-      identityToken(req),
-      animalIdOf(req),
-    );
+    const animal = await animals.get(req.auth, animalIdOf(req));
     res.json(contract(AnimalSchema, toDto(animal)));
   });
 
   router.patch('/animals/:animalId', async (req, res) => {
     const changed = await animals.update(
       req.auth,
-      identityToken(req),
       animalIdOf(req),
       requestReader(req, res, UpdateAnimalSchema),
     );
@@ -161,19 +150,14 @@ export function AnimalRouter(dependencies: {
   });
 
   router.delete('/animals/:animalId', async (req, res) => {
-    await animals.remove(req.auth, identityToken(req), animalIdOf(req));
+    await animals.remove(req.auth, animalIdOf(req));
     res.sendStatus(204);
   });
 
   router.get('/animals/:animalId/photos/:photoId/file', async (req, res) => {
     const animalId = animalIdOf(req);
     const photoId = AnimalPhotoIdSchema.parse(req.params.photoId);
-    const opened = await animals.openPhoto(
-      req.auth,
-      identityToken(req),
-      animalId,
-      photoId,
-    );
+    const opened = await animals.openPhoto(req.auth, animalId, photoId);
     res.set(storedFileHeaders(opened.file, opened.size, 'inline'));
     try {
       await pipeline(opened.stream, res);

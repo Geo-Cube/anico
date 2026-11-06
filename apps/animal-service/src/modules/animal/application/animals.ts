@@ -86,12 +86,8 @@ export function animalUseCases(dependencies: {
   const breeder = verifiedBreeder(dependencies.verification);
 
   /** Ověřený chovatel a jeho zvíře; cizí i neexistující zvíře je 404. */
-  async function ownedAnimal(
-    actor: Identity | undefined,
-    identityToken: string | undefined,
-    id: string,
-  ) {
-    const identity = await breeder(actor, identityToken);
+  async function ownedAnimal(actor: Identity | undefined, id: string) {
+    const identity = await breeder(actor);
     return { identity, animal: await owned(identity, id) };
   }
 
@@ -199,33 +195,24 @@ export function animalUseCases(dependencies: {
   }
 
   return {
-    async list(
-      actor: Identity | undefined,
-      identityToken: string | undefined,
-      query: ListAnimalsQuery,
-    ) {
-      const identity = await breeder(actor, identityToken);
+    async list(actor: Identity | undefined, query: ListAnimalsQuery) {
+      const identity = await breeder(actor);
       return repository.list(identity.userId, query);
     },
 
-    async get(
-      actor: Identity | undefined,
-      identityToken: string | undefined,
-      id: string,
-    ) {
-      return (await ownedAnimal(actor, identityToken, id)).animal;
+    async get(actor: Identity | undefined, id: string) {
+      return (await ownedAnimal(actor, id)).animal;
     },
 
     /** UC-02/4: profil a fotografie se uloží jedním zápisem, nebo vůbec. */
     async create(
       actor: Identity | undefined,
-      identityToken: string | undefined,
       readRequest: () => Promise<{
         input: CreateAnimalInput;
         uploads: PhotoUpload[];
       }>,
     ): Promise<AnimalRecord> {
-      const identity = await breeder(actor, identityToken);
+      const identity = await breeder(actor);
       const { input, uploads } = await readRequest();
       const { primaryUploadIndex, ...profile } = input;
       const values = profileOf(profile);
@@ -258,14 +245,13 @@ export function animalUseCases(dependencies: {
      */
     async update(
       actor: Identity | undefined,
-      identityToken: string | undefined,
       id: string,
       readRequest: () => Promise<{
         input: UpdateAnimalInput;
         uploads: PhotoUpload[];
       }>,
     ): Promise<AnimalRecord> {
-      const { identity, animal } = await ownedAnimal(actor, identityToken, id);
+      const { identity, animal } = await ownedAnimal(actor, id);
       const { input, uploads } = await readRequest();
       const {
         removePhotoIds = [],
@@ -329,12 +315,8 @@ export function animalUseCases(dependencies: {
     },
 
     /** UC-02/6: zvíře, fotografie i všechny verze dokladů jedním zápisem, soubory potom. */
-    async remove(
-      actor: Identity | undefined,
-      identityToken: string | undefined,
-      id: string,
-    ) {
-      const { identity } = await ownedAnimal(actor, identityToken, id);
+    async remove(actor: Identity | undefined, id: string) {
+      const { identity } = await ownedAnimal(actor, id);
       const deleted = await repository.deleteOwned(id, identity.userId);
       if (!deleted) throw animalNotFound();
       await removeFiles(documentFiles, deleted.documentFiles, 'Document');
@@ -342,13 +324,8 @@ export function animalUseCases(dependencies: {
     },
 
     /** Soubor fotografie jen pro ověřeného vlastníka zvířete. */
-    async openPhoto(
-      actor: Identity | undefined,
-      identityToken: string | undefined,
-      id: string,
-      photoId: string,
-    ) {
-      const { animal } = await ownedAnimal(actor, identityToken, id);
+    async openPhoto(actor: Identity | undefined, id: string, photoId: string) {
+      const { animal } = await ownedAnimal(actor, id);
       const photo = animal.photos.find(
         (candidate) => candidate.id === photoId.toLowerCase(),
       );

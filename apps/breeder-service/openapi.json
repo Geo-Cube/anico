@@ -86,6 +86,48 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "500": { "$ref": "#/components/responses/InternalError" }
         }
+      },
+      "patch": {
+        "tags": ["breeder"],
+        "operationId": "updateMyProfile",
+        "summary": "Upravit profil před prvním podáním",
+        "description": "Idempotentně převezme profil z identity. Upraví alespoň jedno z polí firstName, lastName, emailAddress pouze ve stavu NOT_SUBMITTED. Údaje stanice zde měnit nelze.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateMyProfile" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Aktualizovaný účet chovatele.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MyAccount" }
+              }
+            }
+          },
+          "400": {
+            "description": "Neplatná, prázdná nebo nepovolená pole.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidationError" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": {
+            "description": "Profil již má žádost o ověření; current je aktuální účet.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MyAccountConflict" }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
       }
     },
     "/breeders/me/verification-request": {
@@ -528,7 +570,6 @@
           },
           "breedingStationName": { "type": ["string", "null"] },
           "breedingStationNumber": { "type": ["string", "null"] },
-          "hasBreedingStation": { "type": "boolean", "const": true },
           "isVerified": { "type": "boolean" },
           "verificationRequest": {
             "anyOf": [
@@ -545,7 +586,6 @@
           "emailAddress",
           "breedingStationName",
           "breedingStationNumber",
-          "hasBreedingStation",
           "isVerified",
           "verificationRequest"
         ],
@@ -580,6 +620,20 @@
           "breedingStationName",
           "breedingStationNumber"
         ],
+        "additionalProperties": false
+      },
+      "UpdateMyProfile": {
+        "type": "object",
+        "properties": {
+          "firstName": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "lastName": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "emailAddress": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
         "additionalProperties": false
       },
       "SubmitVerificationRequestForm": {
@@ -678,7 +732,6 @@
           },
           "breedingStationName": { "type": ["string", "null"] },
           "breedingStationNumber": { "type": ["string", "null"] },
-          "hasBreedingStation": { "type": "boolean", "const": true },
           "isVerified": { "type": "boolean" }
         },
         "required": [
@@ -688,7 +741,6 @@
           "emailAddress",
           "breedingStationName",
           "breedingStationNumber",
-          "hasBreedingStation",
           "isVerified"
         ],
         "additionalProperties": false

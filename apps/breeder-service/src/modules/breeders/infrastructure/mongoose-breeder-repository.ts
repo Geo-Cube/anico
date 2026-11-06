@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Schema, Types, type Connection, type InferSchemaType } from 'mongoose';
 import type {
   NewBreeder,
@@ -54,6 +55,21 @@ const verificationRequestSchema = new Schema({
   reviewHistory: { type: [reviewSchema], default: [] },
 });
 
+const verificationEventSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ['pending', 'published', 'failed'],
+      required: true,
+    },
+    createdAt: { type: Date, required: true },
+    event: { type: Schema.Types.Mixed, required: true },
+    delivery: { type: Schema.Types.Mixed, default: () => ({ attempts: 0 }) },
+  },
+  { _id: false },
+);
+
 const breederSchema = new Schema({
   breederId: { type: String, required: true, unique: true },
   firstName: { type: String, default: null },
@@ -61,9 +77,9 @@ const breederSchema = new Schema({
   emailAddress: { type: String, default: null },
   breedingStationName: { type: String, default: null },
   breedingStationNumber: { type: String, default: null },
-  hasBreedingStation: { type: Boolean, default: true, required: true },
   isVerified: { type: Boolean, default: false, required: true },
   verificationRequest: { type: verificationRequestSchema, default: null },
+  verificationEvent: { type: verificationEventSchema, default: undefined },
 });
 
 //indexy
@@ -82,6 +98,15 @@ breederSchema.index({
   'verificationRequest.status': 1,
   'verificationRequest.lastSubmittedAt': 1,
 });
+breederSchema.index(
+  {
+    'verificationEvent.status': 1,
+    'verificationEvent.delivery.nextAttemptAt': 1,
+    'verificationEvent.delivery.lockedUntil': 1,
+    'verificationEvent.createdAt': 1,
+  },
+  { name: 'verification_event_claim' },
+);
 
 type BreederRecord = InferSchemaType<typeof breederSchema>;
 
@@ -106,7 +131,6 @@ function toDomain(record: BreederRecord): Breeder {
     emailAddress: record.emailAddress ?? null,
     breedingStationName: record.breedingStationName ?? null,
     breedingStationNumber: record.breedingStationNumber ?? null,
-    hasBreedingStation: true,
     isVerified: record.isVerified,
     verificationRequest,
   };
@@ -172,7 +196,6 @@ export function mongooseBreederRepository(
               emailAddress: input.emailAddress,
               breedingStationName: null,
               breedingStationNumber: null,
-              hasBreedingStation: true,
               isVerified: false,
               verificationRequest: null,
             },
@@ -213,6 +236,15 @@ export function mongooseBreederRepository(
       return toDomain(record);
     },
 
+    async updateProfile(breederId, update) {
+      const record = await mongooseBreederModel.findOneAndUpdate(
+        { breederId, verificationRequest: null },
+        { $set: update },
+        { returnDocument: 'after' },
+      );
+      return record ? toDomain(record) : null;
+    },
+
     async findByVerificationRequestId(
       requestId: string,
     ): Promise<Breeder | null> {
@@ -243,7 +275,6 @@ export function mongooseBreederRepository(
             emailAddress: submission.emailAddress,
             breedingStationName: submission.breedingStationName,
             breedingStationNumber: submission.breedingStationNumber,
-            hasBreedingStation: true,
             verificationRequest: {
               _id: new Types.ObjectId(),
               status: 'PENDING',
@@ -331,6 +362,7 @@ export function mongooseBreederRepository(
           : decision.decision === 'RETURNED'
             ? decision.returnReason
             : null;
+      const eventId = randomUUID();
       // stav, historie a isVerified se mění v jednom příkazu; podmínka PENDING
       // a revize zaručí, že o každém kole rozhodne nejvýše jeden administrátor
       // a jen o té verzi podání, kterou posoudil
@@ -340,27 +372,61 @@ export function mongooseBreederRepository(
           'verificationRequest.status': 'PENDING',
           'verificationRequest.revision': decision.revision,
         },
-        {
-          $set: {
-            'verificationRequest.status': decision.decision,
-            'verificationRequest.reviewedBy': decision.reviewedBy,
-            'verificationRequest.reviewedAt': decision.reviewedAt,
-            'verificationRequest.rejectionReason':
-              decision.decision === 'REJECTED' ? reason : null,
-            'verificationRequest.returnReason':
-              decision.decision === 'RETURNED' ? reason : null,
-            isVerified: decision.decision === 'APPROVED',
-          },
-          $push: {
-            'verificationRequest.reviewHistory': {
-              decision: decision.decision,
-              revision: decision.revision,
-              reviewedBy: decision.reviewedBy,
-              reviewedAt: decision.reviewedAt,
-              reason,
+        [
+          {
+            $set: {
+              'verificationRequest.status': { $literal: decision.decision },
+              'verificationRequest.reviewedBy': {
+                $literal: decision.reviewedBy,
+              },
+              'verificationRequest.reviewedAt': decision.reviewedAt,
+              'verificationRequest.rejectionReason': {
+                $literal: decision.decision === 'REJECTED' ? reason : null,
+              },
+              'verificationRequest.returnReason': {
+                $literal: decision.decision === 'RETURNED' ? reason : null,
+              },
+              isVerified: decision.decision === 'APPROVED',
+              'verificationRequest.reviewHistory': {
+                $concatArrays: [
+                  { $ifNull: ['$verificationRequest.reviewHistory', []] },
+                  {
+                    $literal: [
+                      {
+                        decision: decision.decision,
+                        revision: decision.revision,
+                        reviewedBy: decision.reviewedBy,
+                        reviewedAt: decision.reviewedAt,
+                        reason,
+                      },
+                    ],
+                  },
+                ],
+              },
+              ...(decision.decision === 'APPROVED'
+                ? {
+                    verificationEvent: {
+                      id: eventId,
+                      status: 'pending',
+                      createdAt: decision.reviewedAt,
+                      delivery: { attempts: 0 },
+                      event: {
+                        eventId,
+                        type: 'breeder.verified',
+                        schemaVersion: 1,
+                        producer: 'breeder-service',
+                        occurredAt: decision.reviewedAt.toISOString(),
+                        data: {
+                          breederId: '$breederId',
+                          verifiedAt: decision.reviewedAt.toISOString(),
+                        },
+                      },
+                    },
+                  }
+                : {}),
             },
           },
-        },
+        ],
         { returnDocument: 'after' },
       );
       return record ? toDomain(record) : null;

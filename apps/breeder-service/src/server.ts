@@ -12,6 +12,12 @@ import { loggingDecisionNotifier } from './modules/breeders/infrastructure/loggi
 import { mongooseBreederRepository } from './modules/breeders/infrastructure/mongoose-breeder-repository.js';
 import { apiDocsEnabled } from './openapi/docs-router.js';
 import { requestAuthenticator } from '@anico/auth';
+import {
+  verificationDispatcher,
+  type VerificationDispatcher,
+} from './modules/breeders/application/verification-dispatcher.js';
+import { mongoVerificationOutbox } from './modules/breeders/infrastructure/verification-outbox.js';
+import { configuredVerificationPublisher } from './modules/breeders/infrastructure/nats-verification-publisher.js';
 
 const env = z
   .object({
@@ -32,6 +38,7 @@ const logger = pino({
 });
 
 const connection = mongoose.createConnection();
+let dispatcher: VerificationDispatcher | undefined;
 
 try {
   const authenticate = requestAuthenticator(process.env);
@@ -62,6 +69,19 @@ try {
   await Promise.all(
     Object.values(connection.models).map((model) => model.init()),
   );
+  const publisher = configuredVerificationPublisher(process.env);
+  if (publisher) {
+    dispatcher = verificationDispatcher({
+      outbox: mongoVerificationOutbox(connection),
+      publisher,
+      logger,
+    });
+    dispatcher.start();
+  } else {
+    logger.warn(
+      'Verification publisher disabled: broker file missing; pending events retained',
+    );
+  }
   logger.warn(
     'E-mail delivery is not configured: decision e-mails are only logged (development adapter)',
   );
@@ -90,11 +110,13 @@ try {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
+      await dispatcher?.stop();
       await connection.close();
       logger.info('Server stopped');
       process.exitCode = code;
     } catch (error) {
       logger.error({ err: error }, 'Shutdown failed');
+      await dispatcher?.stop().catch(() => undefined);
       await connection.close().catch(() => undefined);
       process.exitCode = 1;
     } finally {
@@ -108,6 +130,7 @@ try {
   logger.fatal(
     'Startup failed; inspect database connectivity and migration status. Private details suppressed.',
   );
+  await dispatcher?.stop().catch(() => undefined);
   await connection.close();
   process.exitCode = 1;
 }

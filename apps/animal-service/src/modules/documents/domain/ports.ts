@@ -10,6 +10,8 @@ export interface AnimalDocumentsRepository {
     ownerUserId: string,
     expectedRevision: number,
     versions: DocumentVersion[],
+    /** Náhrada navíc vyžaduje aktuální `REJECTED` verzi přímo ve filtru zápisu. */
+    replacementId?: string,
   ): Promise<boolean>;
   /** Zapíše rozhodnutí jen o aktuální `PENDING` verzi; jinak `null` (A4). */
   decide(

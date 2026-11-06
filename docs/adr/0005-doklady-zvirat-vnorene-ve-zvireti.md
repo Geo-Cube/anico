@@ -1,6 +1,6 @@
 # ADR-0005: Doklady zvířat (UC-03) jako modul animal-service, vnořené ve zvířeti
 
-- Stav: přijato; rozhodnutí R1–R8 schválil vlastník produktu 5. 11. 2026 (R7 jako vědomou odchylku od analýzy)
+- Stav: přijato; R1–R8 schválil vlastník produktu 5. 11. 2026; odchylku R7 zrušil 6. 11. 2026, vnořený model beze změny
 - Datum: 2026-11-05
 - Souvisí: [návrh UC-03](../design/uc-03-doklady.md), [ADR-0001](0001-zadost-o-overeni-vnorena-v-chovateli.md),
   [`anico-domain.md`](../anico-domain.md) §3, §4, §5 UC-02 a UC-03, §6
@@ -20,25 +20,26 @@ verzí dokladů a souborů v jedné transakci (UC-02/6). Repozitář nepoužív�
    - podání: `updateOne` s filtrem `_id`, `ownerUserId` a `documentsRevision` (optimistická kontrola);
      při souběhu se operace zopakuje nad čerstvým stavem (nejvýše 3×);
    - rozhodnutí: filtr na `_id` verze, `isCurrent: true` a `assessmentStatus: PENDING`;
-   - „nejvýše jeden nástupce“ (UC-03/5) vynucuje databáze tímto podmíněným zápisem: nástupce lze přidat jen
-     k verzi, která je v okamžiku zápisu aktuální. Unikátní index uvnitř pole jednoho dokumentu MongoDB neumí.
+   - „nejvýše jeden nástupce“ (UC-03/5) vynucuje databáze filtrem náhrady
+     `$elemMatch {_id, isCurrent: true, assessmentStatus: REJECTED}` spolu s revizí. Unikátní index uvnitř pole
+     jednoho dokumentu MongoDB neumí. `documentsRevision` zůstává nutná: zápis nahrazuje celé pole verzí a bez
+     revize by mohl přepsat souběžné podání, náhradu jiné řady nebo rozhodnutí; rozhodnutí ji také zvyšuje.
    - odstranění zvířete smaže i všechny verze jedním `findOneAndDelete`; soubory z GridFS se mažou až potom
      (selhání úklidu se jen zaloguje, osiřelý soubor nemá žádný záznam, přes který by šel otevřít).
    - nahrané soubory se při neúspěchu mažou jen tehdy, když je jisté, že je žádný zápis nepoužil (odmítnutí před
      zápisem, nepřijatá revize). Výjimka ze samotného zápisu může znamenat ztracené potvrzení: služba proto stav
      znovu načte. Jsou-li nové verze uložené, operace uspěla. Jinak (nebo když stav nelze zjistit) soubory ponechá
      a zaloguje jejich reference k odloženému úklidu, protože zápis může ještě doběhnout.
-3. **Řada verzí podle typu (R7, odchylka od UC-03/4):** zvíře má pro každý typ dokladu nejvýše jednu řadu verzí.
-   Podání dokladu typu, který už existuje, vytvoří novou verzi téže řady (`versionNumber + 1`,
-   `previousDocumentId` = dosud aktuální verze) bez ohledu na stav předchozí verze. Původní soubor i rozhodnutí
-   zůstávají v historii. Analýza nová verze povolovala jen nad zamítnutou verzí; explicitní endpoint pro novou verzi
-   konkrétního dokladu toto omezení zachovává (jen aktuální `REJECTED`, jinak 409). Dva soubory téhož typu v jednom
-   podání se odmítnou (400). Nahrazená `PENDING` verze opouští frontu (fronta obsahuje jen aktuální verze) a pokus o
-   rozhodnutí o ní vrátí 409.
-4. **Ověřený chovatel (R2):** každá operace chovatele s doklady se dotáže `GET /breeders/me` v `breeder-service`
-   s identitou přihlášeného uživatele (`x-anico-identity`) a vyžaduje `isVerified: true`. Nedostupnost nebo neplatná
-   odpověď vede k 503 (fail closed); neověřený chovatel 403. Admin (role `admin` | `owner`) čte a rozhoduje bez této
-   kontroly a bez vlastnictví. Správu zvířat (UC-02) stejnou kontrolou chrání [ADR-0006](0006-profil-a-fotografie-zvirete-jednim-zapisem.md).
+3. **Samostatné řady dokladů (R7 zrušeno vlastníkem 6. 11. 2026):** každá příloha podání zakládá nezávislou
+   řadu (`versionNumber: 1`, `previousDocumentId: null`, `PENDING`, `isCurrent: true`). Typ se smí opakovat
+   v jednom podání i mezi podáními; existující řady zůstávají beze změny. Novou verzi řady lze vytvořit jen
+   explicitním endpointem pro náhradu aktuální `REJECTED` verze (jinak 409). Nástupce má číslo +1 a odkaz na
+   nahrazenou verzi; předchůdce přestane být aktuální, původní soubor a rozhodnutí zůstávají beze změny.
+   Historie i údaj `current` v konfliktu sledují propojení `previousDocumentId`, nikoli shodu typu.
+4. **Ověřený chovatel (R2) – nahrazeno [ADR-0007](0007-projekce-overenych-chovatelu-pres-nats.md):**
+   každá operace chovatele s doklady čte lokální projekci `verifiedBreeders` v animal-service, nikoli
+   breeder HTTP API. Chybějící záznam znamená 403, chyba čtení DB 503. Admin (role `admin` | `owner`)
+   čte a rozhoduje bez této kontroly a bez vlastnictví.
 5. **Odpovědi (R4):** cizí nebo neexistující zvíře či doklad 404, chybějící role 403, neplatné ID 400 (jako zbytek
    animal-service).
 6. **Soubory (R5, R6):** PDF/JPEG/PNG podle obsahu (magic bytes), 1–10 souborů na podání, nejvýše 10 MiB na soubor,
@@ -60,7 +61,7 @@ verzí dokladů a souborů v jedné transakci (UC-02/6). Repozitář nepoužív�
 
 - Seznam a detail zvířete načítají dokument bez pole `documents` (projekce), odpovědi zvířat se nemění.
 - Dokument zvířete roste s počtem verzí; metadata verze mají stovky bajtů, soubory jsou v GridFS.
-- Bez nasazené `breeder-service` (chybí routa gateway) operace chovatele s doklady vracejí 503; lokálně musí běžet
-  obě služby a animal-service potřebuje `BREEDER_SERVICE_URL`.
+- Ověření chovatele nezávisí na dostupnosti breeder HTTP API; projekci plní události přes NATS JetStream
+  ([ADR-0007](0007-projekce-overenych-chovatelu-pres-nats.md)), včetně krátkého zpoždění po schválení.
 - Fronta admina se dotazuje přes multikey index na `documents.isCurrent`, `documents.assessmentStatus` a
   `documents.submittedAt`.

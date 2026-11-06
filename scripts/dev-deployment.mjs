@@ -209,17 +209,21 @@ export function composeForRelease(references, revision, options = {}) {
 
 /**
  * animal-service a breeder-service: vlastní DB účet a secret, identita z gateway
- * (`anico-session`), veřejné jen health/ready. animal-service volá breeder-service
- * interně (`GET /breeders/me`) s přeposlanou identitou.
+ * (`anico-session`), veřejné jen health/ready. Ověření chovatele přenáší broker
+ * do lokální projekce animal-service, bez synchronního volání breeder-service.
  */
 function addDomainServices(compose, images, common) {
   const revision = compose.services.frontend.labels['com.anico.revision'];
-  const domain = (name, workspace, environment = {}) => {
+  const domain = (name, workspace) => {
     const router = `anico-dev-${name}`;
     const prefix = `/api/${name}`;
     const middleware = `anico-dev-${name}-prefix`;
     compose.secrets[`${name}-mongodb-uri`] = {
       file: `/srv/anico/dev/applications/secrets/${name}-mongodb-uri`,
+    };
+    const broker = `${name}-verification-broker-json`;
+    compose.secrets[broker] = {
+      file: `/srv/anico/dev/applications/secrets/${name}-verification-broker.json`,
     };
     return {
       ...common,
@@ -236,11 +240,12 @@ function addDomainServices(compose, images, common) {
         AUTH_JWKS_URL: 'http://auth:3000/.well-known/jwks.json',
         AUTH_ISSUER: 'https://dev.anico.online/api/auth',
         AUTH_AUDIENCE: 'anico-api-dev',
-        ...environment,
+        [`${name.toUpperCase()}_VERIFICATION_BROKER_FILE`]: `/run/secrets/${broker}`,
       },
-      networks: ['app', 'data'],
+      networks: ['app', 'data', 'events'],
       secrets: [
         { source: `${name}-mongodb-uri`, target: `${name}-mongodb-uri` },
+        { source: broker, target: broker },
       ],
       command: [
         'sh',
@@ -270,10 +275,7 @@ function addDomainServices(compose, images, common) {
     };
   };
   compose.services.breeder = domain('breeder', 'breeder-service');
-  compose.services.animal = domain('animal', 'animal-service', {
-    BREEDER_SERVICE_URL: 'http://breeder:3000',
-  });
-  compose.services.animal.depends_on.breeder = { condition: 'service_healthy' };
+  compose.services.animal = domain('animal', 'animal-service');
 }
 
 /**

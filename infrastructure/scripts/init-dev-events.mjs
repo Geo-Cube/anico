@@ -3,13 +3,18 @@ import { secret, setSecret } from './private-config.mjs';
 import { devEventsCredentialsSchema } from '../src/dev-events.ts';
 try {
   const existing = secret('devEventsCredentials', true);
-  const credentials = devEventsCredentialsSchema.parse(
-    existing ?? {
+  const credentials = devEventsCredentialsSchema.parse({
+    ...(existing ?? {
       adminPassword: randomBytes(32).toString('hex'),
       publisherPassword: randomBytes(32).toString('hex'),
-    },
-  );
-  if (!existing) setSecret('devEventsCredentials', credentials);
+    }),
+    breederPublisherPassword:
+      existing?.breederPublisherPassword ?? randomBytes(32).toString('hex'),
+    animalConsumerPassword:
+      existing?.animalConsumerPassword ?? randomBytes(32).toString('hex'),
+  });
+  if (JSON.stringify(credentials) !== JSON.stringify(existing))
+    setSecret('devEventsCredentials', credentials);
   console.log(
     'Dev event credentials stored encrypted; existing credentials preserved, values hidden.',
   );

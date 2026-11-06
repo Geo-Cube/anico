@@ -5,6 +5,7 @@ import type { DecisionNotifier } from '../domain/ports.js';
 /**
  * Vývojový adaptér: e-mail nedoručuje, jen zaloguje, že rozhodnutí proběhlo.
  * Do logu nepatří tělo e-mailu, adresa ani jméno.
+ * TODO: Doplnit skutečné doručování e-mailů.
  */
 export function loggingDecisionNotifier(
   logger: Pick<Logger, 'info'>,

@@ -38,11 +38,15 @@ animal backend. Používej relativní URL; cestu za prefixem určuje router slu�
 Služba musí být ve tvé větvi a správce jí musí přidělit osobní DB oprávnění.
 
 Animal launcher zároveň spustí lokální `breeder-service` na portu 3003 s vlastní
-osobní DB a stejnými ověřovacími klíči identity. Animal na portu 3002 ji volá přes
-`BREEDER_SERVICE_URL`; přeposlané `x-anico-identity` proto přijme i breeder.
-Správce musí přidělit oprávnění k oběma DB. `/api/breeder` ve frontendu zůstává
-na společném devu: lokální osobní chovatelský účet ani jeho ověření se odtud nekopírují.
-Ctrl+C ukončí oba backendy, UI i tunel spuštěné launcherem.
+osobní DB a stejnými ověřovacími klíči identity a izolovaný NATS JetStream broker
+na náhodném loopback portu. Dočasné credential soubory předá přes
+`BREEDER_VERIFICATION_BROKER_FILE` a `ANIMAL_VERIFICATION_BROKER_FILE`.
+Animal na portu 3002 čte vlastní projekci `verifiedBreeders`, nikoli breeder HTTP API;
+identitu uživatele mezi službami nepřeposílá. Správce musí přidělit oprávnění k oběma DB.
+`/api/breeder` ve frontendu zůstává na společném devu: lokální osobní chovatelský účet
+ani jeho ověření se odtud nekopírují. Po lokálním schválení může několik sekund trvat,
+než událost dorazí do projekce; do té doby animal vrací 403.
+Ctrl+C ukončí oba backendy, broker, UI i tunel spuštěné launcherem a uklidí dočasné soubory.
 
 ## Jen backend, Postman nebo REST klient
 

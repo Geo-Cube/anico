@@ -10,6 +10,7 @@ import {
   documentNotFound,
   historyOf,
   planSubmission,
+  planReplacement,
   type AnimalDocuments,
   type DocumentVersion,
   type NewVersionInput,
@@ -64,12 +65,8 @@ export function documentUseCases(dependencies: {
   const breeder = verifiedBreeder(dependencies.verification);
 
   /** Vlastník zvířete s ověřeným účtem; cizí i neexistující zvíře je 404. */
-  async function ownedAnimal(
-    actor: Identity | undefined,
-    identityToken: string | undefined,
-    animalId: string,
-  ) {
-    const identity = await breeder(actor, identityToken);
+  async function ownedAnimal(actor: Identity | undefined, animalId: string) {
+    const identity = await breeder(actor);
     const documents = await repository.load(animalId);
     if (!documents || documents.ownerUserId !== identity.userId)
       throw new DocumentError(404, 'Animal not found');
@@ -79,12 +76,11 @@ export function documentUseCases(dependencies: {
   /** Čtení: posuzovatel bez dalších podmínek, jinak ověřený vlastník. */
   async function readableAnimal(
     actor: Identity | undefined,
-    identityToken: string | undefined,
     animalId: string,
   ): Promise<AnimalDocuments> {
     const identity = requireActor(actor);
     if (!isReviewer(identity))
-      return (await ownedAnimal(identity, identityToken, animalId)).documents;
+      return (await ownedAnimal(identity, animalId)).documents;
     const documents = await repository.load(animalId);
     if (!documents) throw new DocumentError(404, 'Animal not found');
     return documents;
@@ -179,22 +175,26 @@ export function documentUseCases(dependencies: {
     identity: Identity,
     animalId: string,
     stored: NewVersionInput[],
-    plan: (versions: DocumentVersion[]) => NewVersionInput[],
+    replacementId?: string,
   ): Promise<DocumentVersion[]> {
     try {
       for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
         const documents = await repository.load(animalId);
         if (!documents || documents.ownerUserId !== identity.userId)
           throw new DocumentError(404, 'Animal not found');
-        const next = planSubmission(
-          documents.versions,
-          plan(documents.versions),
-          {
-            id: dependencies.newId,
-            now: now(),
-            submittedBy: identity.userId,
-          },
-        );
+        const submission = {
+          id: dependencies.newId,
+          now: now(),
+          submittedBy: identity.userId,
+        };
+        const next = replacementId
+          ? planReplacement(
+              documents.versions,
+              replacementId,
+              stored[0]!,
+              submission,
+            )
+          : planSubmission(documents.versions, stored, submission);
         let saved: boolean;
         try {
           saved = await repository.saveVersions(
@@ -202,6 +202,7 @@ export function documentUseCases(dependencies: {
             identity.userId,
             documents.revision,
             next.versions,
+            replacementId,
           );
         } catch (error) {
           const persisted = await reconcileUnknownWrite(
@@ -226,30 +227,24 @@ export function documentUseCases(dependencies: {
     /** UC-03/1: každý soubor je samostatný doklad; celé podání se uloží jedním zápisem. */
     async submit(
       actor: Identity | undefined,
-      identityToken: string | undefined,
       animalId: string,
       readUploads: () => Promise<
         (Upload & { documentType: AnimalDocumentType })[]
       >,
     ): Promise<DocumentVersion[]> {
-      const { identity } = await ownedAnimal(actor, identityToken, animalId);
+      const { identity } = await ownedAnimal(actor, animalId);
       const stored = await storeFiles(await readUploads());
-      return writeVersions(identity, animalId, stored, () => stored);
+      return writeVersions(identity, animalId, stored);
     },
 
     /** UC-03/4–5: nová verze aktuálního zamítnutého dokladu, každá verze jen jednou. */
     async replace(
       actor: Identity | undefined,
-      identityToken: string | undefined,
       animalId: string,
       documentId: string,
       readUpload: () => Promise<Upload>,
     ): Promise<DocumentVersion> {
-      const { identity, documents } = await ownedAnimal(
-        actor,
-        identityToken,
-        animalId,
-      );
+      const { identity, documents } = await ownedAnimal(actor, animalId);
       const { documentType } = assertReplaceable(
         documents.versions,
         documentId,
@@ -261,41 +256,32 @@ export function documentUseCases(dependencies: {
         identity,
         animalId,
         stored,
-        (versions) => {
-          assertReplaceable(versions, documentId);
-          return stored;
-        },
+        documentId,
       );
       return created!;
     },
 
-    async list(
-      actor: Identity | undefined,
-      identityToken: string | undefined,
-      animalId: string,
-    ) {
-      const documents = await readableAnimal(actor, identityToken, animalId);
+    async list(actor: Identity | undefined, animalId: string) {
+      const documents = await readableAnimal(actor, animalId);
       return documents.versions.filter((version) => version.isCurrent);
     },
 
     async history(
       actor: Identity | undefined,
-      identityToken: string | undefined,
       animalId: string,
       documentId: string,
     ) {
-      const documents = await readableAnimal(actor, identityToken, animalId);
+      const documents = await readableAnimal(actor, animalId);
       return historyOf(documents.versions, documentId);
     },
 
     /** Stažení libovolné verze (i historické) po kontrole oprávnění. */
     async openFile(
       actor: Identity | undefined,
-      identityToken: string | undefined,
       animalId: string,
       documentId: string,
     ) {
-      const documents = await readableAnimal(actor, identityToken, animalId);
+      const documents = await readableAnimal(actor, animalId);
       const version = documents.versions.find(({ id }) => id === documentId);
       if (!version) throw documentNotFound();
       const opened = await files.open(version.file.fileReference);
@@ -328,7 +314,7 @@ export function documentUseCases(dependencies: {
         target.isCurrent
           ? 'Document already decided'
           : 'Document version is not current',
-        currentVersionOf(versions, target.documentType),
+        currentVersionOf(versions, target.id),
       );
     },
 

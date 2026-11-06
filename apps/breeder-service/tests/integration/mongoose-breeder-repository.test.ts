@@ -262,7 +262,6 @@ describe('mongooseBreederRepository', () => {
       expect(breeder?.firstName).toBe('Jan1');
       expect(breeder?.emailAddress).toBe('jan1@example.com');
       expect(breeder?.breedingStationName).toBe('Stanice 1');
-      expect(breeder?.hasBreedingStation).toBe(true);
       expect(breeder?.isVerified).toBe(false);
       expect(breeder?.verificationRequest).toMatchObject({
         status: 'PENDING',
@@ -284,11 +283,6 @@ describe('mongooseBreederRepository', () => {
       expect(breeder?.verificationRequest?.lastSubmittedAt).toEqual(
         breeder?.verificationRequest?.submittedAt,
       );
-
-      const raw = await connection
-        .collection('breeders')
-        .findOne({ breederId: 'b1' });
-      expect(raw?.hasBreedingStation).toBe(true);
     });
 
     it('second submit returns null and keeps the data', async () => {

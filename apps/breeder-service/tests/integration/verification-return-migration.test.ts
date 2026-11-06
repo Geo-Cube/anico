@@ -41,7 +41,6 @@ function legacy(
     emailAddress: `${breederId}@example.test`,
     breedingStationName: request ? 'Stanice' : null,
     breedingStationNumber: request ? '1' : null,
-    hasBreedingStation: true,
     isVerified: request?.status === 'APPROVED',
     verificationRequest: request && {
       _id: new Types.ObjectId(),

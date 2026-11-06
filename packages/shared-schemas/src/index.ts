@@ -117,7 +117,6 @@ export const MyAccountSchema = z.strictObject({
   emailAddress: z.email().nullable(),
   breedingStationName: z.string().nullable(),
   breedingStationNumber: z.string().nullable(),
-  hasBreedingStation: z.literal(true),
   isVerified: z.boolean(),
   verificationRequest: VerificationRequestSchema.nullable(),
 });
@@ -134,6 +133,20 @@ export const SubmitVerificationRequestSchema = z.strictObject({
 export type SubmitVerificationRequestInput = z.infer<
   typeof SubmitVerificationRequestSchema
 >;
+
+export const UpdateMyProfileSchema = SubmitVerificationRequestSchema.pick({
+  firstName: true,
+  lastName: true,
+  emailAddress: true,
+})
+  .partial()
+  .refine(
+    (input) => Object.values(input).some((value) => value !== undefined),
+    {
+      message: 'At least one profile field is required',
+    },
+  );
+export type UpdateMyProfileInput = z.infer<typeof UpdateMyProfileSchema>;
 
 // Admin decision. `revision` must equal the revision the administrator reviewed;
 // a newer correction makes the decision stale (409).
@@ -175,7 +188,6 @@ export const BreederProfileSchema = z.strictObject({
   emailAddress: z.email().nullable(),
   breedingStationName: z.string().nullable(),
   breedingStationNumber: z.string().nullable(),
-  hasBreedingStation: z.literal(true),
   isVerified: z.boolean(),
 });
 export type BreederProfile = z.infer<typeof BreederProfileSchema>;
@@ -230,6 +242,16 @@ export {
   type UserRegisteredData,
   type UserRegisteredEvent,
 } from './registration.js';
+
+export {
+  ANIMAL_VERIFIED_BREEDERS_CONSUMER,
+  BREEDER_VERIFIED_STREAM,
+  BREEDER_VERIFIED_SUBJECT,
+  BreederVerifiedDataSchema,
+  BreederVerifiedEventSchema,
+  type BreederVerifiedData,
+  type BreederVerifiedEvent,
+} from './breeder-verification.js';
 
 export {
   AnimalSpeciesSchema,

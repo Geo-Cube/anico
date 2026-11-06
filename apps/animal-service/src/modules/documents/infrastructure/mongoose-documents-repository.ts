@@ -63,11 +63,28 @@ export function mongooseDocumentsRepository(
       };
     },
 
-    async saveVersions(animalId, ownerUserId, expectedRevision, versions) {
+    async saveVersions(
+      animalId,
+      ownerUserId,
+      expectedRevision,
+      versions,
+      replacementId,
+    ) {
       const result = await model.updateOne(
         {
           _id: animalId,
           ownerUserId,
+          ...(replacementId
+            ? {
+                documents: {
+                  $elemMatch: {
+                    _id: new Types.ObjectId(replacementId),
+                    isCurrent: true,
+                    assessmentStatus: 'REJECTED',
+                  },
+                },
+              }
+            : {}),
           // dokumenty před zavedením dokladů pole nemají; revize 0 = žádný zápis dokladů
           ...(expectedRevision === 0
             ? { documentsRevision: { $in: [0, null] } }
@@ -124,7 +141,7 @@ export function mongooseDocumentsRepository(
       const rows = await model.aggregate<{
         _id: Types.ObjectId;
         ownerUserId: string;
-        name?: string | null;
+        name: string;
         species: Animal['species'];
         breedId: string;
         sex: Animal['sex'];
@@ -164,7 +181,7 @@ export function mongooseDocumentsRepository(
         animal: {
           id: row._id.toString(),
           ownerUserId: row.ownerUserId,
-          name: row.name ?? null,
+          name: row.name,
           species: row.species,
           breedId: row.breedId,
           sex: row.sex,

@@ -9,7 +9,6 @@ const decided: Breeder = {
   emailAddress: 'jan@example.com',
   breedingStationName: 'Stanice',
   breedingStationNumber: '123456',
-  hasBreedingStation: true,
   isVerified: false,
   verificationRequest: {
     requestId: 'a'.repeat(24),

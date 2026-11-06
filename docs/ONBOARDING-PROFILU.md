@@ -4,8 +4,9 @@
 Tento dokument uchovává rozhodnutí pro další práci; nevytváří nový registrační formulář s heslem.
 Lokální `breeder-service` už obsahuje backend UC-01 pro ověření chovatele:
 `GET /breeders/me` idempotentně převezme profil podle ověřeného `req.auth.userId`
-a vrátí stav žádosti. To není dokončení onboardingu. Endpoint pro uložení
-doplňujících údajů a označení profilu jako dokončeného zatím neexistuje.
+a vrátí stav žádosti. `PATCH /breeders/me` upraví jméno, příjmení a e-mail pouze
+před prvním podáním (`NOT_SUBMITTED`); neukládá údaje stanice ani dokončení onboardingu.
+Endpoint pro uložení dalších onboardingových údajů a označení profilu jako dokončeného zatím neexistuje.
 Služba není nasazená a frontendové simulace na její API nejsou napojené.
 
 ## Cesta uživatele

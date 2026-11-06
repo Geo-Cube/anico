@@ -7,7 +7,8 @@ import { createModules } from './modules/index.js';
 import { migrateDatabase } from './database/engine.js';
 import { loadMigrations } from './database/registry.js';
 import { databaseTarget } from './database/policy.js';
-import { httpBreederVerification } from './modules/animal/infrastructure/http-breeder-verification.js';
+import { mongoVerifiedBreeders } from './modules/animal/infrastructure/verified-breeders.js';
+import { configuredVerificationConsumer } from './modules/animal/infrastructure/nats-verification-consumer.js';
 
 const env = z
   .object({
@@ -18,8 +19,7 @@ const env = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
-    /** breeder-service pro ověření chovatele (`isVerified`) u zvířat i dokladů; bez něj operace chovatelů 503. */
-    BREEDER_SERVICE_URL: z.url({ protocol: /^https?$/ }).optional(),
+    ANIMAL_VERIFICATION_BROKER_FILE: z.string().optional(),
   })
   .parse(process.env);
 
@@ -59,22 +59,18 @@ try {
   }
   let stopping = false;
   const authenticate = requestAuthenticator(process.env);
-  if (!env.BREEDER_SERVICE_URL)
-    logger.warn(
-      'BREEDER_SERVICE_URL is not set: breeder animal and document operations answer 503 (fail closed)',
-    );
+  const verification = mongoVerifiedBreeders(connection);
+  const consumer = await configuredVerificationConsumer({
+    file: env.ANIMAL_VERIFICATION_BROKER_FILE,
+    project: verification.project,
+    logger,
+  });
   const app = createApp({
     ...(authenticate ? { authenticate } : {}),
     logger,
     modules: createModules(connection, {
       logger,
-      verification: env.BREEDER_SERVICE_URL
-        ? httpBreederVerification({ baseUrl: env.BREEDER_SERVICE_URL })
-        : {
-            isVerified: async () => {
-              throw new Error('BREEDER_SERVICE_URL is not configured');
-            },
-          },
+      verification,
     }),
     isReady: () => !stopping && connection.readyState === 1,
   });
@@ -95,6 +91,7 @@ try {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
+      await consumer.close();
       await connection.close();
       logger.info('Server stopped');
       process.exitCode = code;

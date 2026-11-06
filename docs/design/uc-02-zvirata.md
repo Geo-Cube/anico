@@ -21,27 +21,29 @@ Stav: implementováno v modulu `apps/animal-service/src/modules/animal`. Závazn
 ## 2. Datový model
 
 Dokument kolekce `animals`: `ownerUserId` (= `breeder_id`, neměnný), `species`, `breedId`, `sex`
-(`male` | `female`), volitelné `name`, `birthDate`, `coatColor`, `weightKg`, `city`, `pedigreeNumber`,
+(`male` | `female`), povinné `name`, volitelné `birthDate`, `coatColor`, `weightKg`, `city`, `pedigreeNumber`,
 `microchipNumber`, `description` (nevyplněné `null`), `photos[]` (`_id` = `photo_id`, `file { fileName,
 fileReference, contentType, size }`, `isPrimary`), `profileRevision`, `documents[]` a `documentsRevision`
 (UC-03). Soubory fotografií jsou v GridFS bucketu `animalPhotos`; `fileReference` API nevrací.
 
-| Invariant                                         | Vynucení                                                                                     |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Povinné druh, plemeno dle číselníku, pohlaví      | `AnimalProfileSchema` nad výsledným stavem (i po PATCH), Mongoose `enum`/`required`          |
-| Prázdné volitelné údaje → `NULL`                  | sdílené schéma převádí vynechané, `null`, prázdný a mezerový text na `null`; čtení `?? null` |
-| `weight_kg > 0`, `birth_date ≤ dnes`              | sdílené schéma, Mongoose validátor hmotnosti                                                 |
-| Neprázdný seznam má právě jednu hlavní fotografii | doménová funkce `planPhotos`, kontrola v `AnimalSchema` odpovědi                             |
-| Profil + fotografie + soubory jedna transakce     | validace před uložením souborů, jeden `findOneAndUpdate` s `profileRevision`, úklid souborů  |
-| Úprava zachovává ID, vlastníka, ID fotek, doklady | zápis jen `$set` profilu/`photos`, filtr `ownerUserId`, zachované fotky nesou svůj `_id`     |
-| Odebrané fotografie mažou soubory                 | po úspěšném zápisu `animalPhotos.delete`; selhání se zaloguje                                |
-| Odstranění smaže profil, fotky, všechny doklady   | jeden `findOneAndDelete`, potom soubory obou bucketů                                         |
+| Invariant                                           | Vynucení                                                                                     |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Povinné jméno, druh, plemeno dle číselníku, pohlaví | `AnimalProfileSchema` nad výsledným stavem (i po PATCH), Mongoose `enum`/`required`          |
+| Prázdné volitelné údaje → `NULL`                    | sdílené schéma převádí vynechané, `null`, prázdný a mezerový text na `null`; čtení `?? null` |
+| `weight_kg > 0`, `birth_date ≤ dnes`                | sdílené schéma, Mongoose validátor hmotnosti                                                 |
+| Neprázdný seznam má právě jednu hlavní fotografii   | doménová funkce `planPhotos`, kontrola v `AnimalSchema` odpovědi                             |
+| Profil + fotografie + soubory jedna transakce       | validace před uložením souborů, jeden `findOneAndUpdate` s `profileRevision`, úklid souborů  |
+| Úprava zachovává ID, vlastníka, ID fotek, doklady   | zápis jen `$set` profilu/`photos`, filtr `ownerUserId`, zachované fotky nesou svůj `_id`     |
+| Odebrané fotografie mažou soubory                   | po úspěšném zápisu `animalPhotos.delete`; selhání se zaloguje                                |
+| Odstranění smaže profil, fotky, všechny doklady     | jeden `findOneAndDelete`, potom soubory obou bucketů                                         |
 
 ## 3. Oprávnění a pořadí kontrol
 
 1. Identita z `req.auth` (`@anico/auth`), jinak 401. Vlastník vždy z identity, nikdy z těla.
-2. Ověřený chovatel: `GET /breeders/me` v breeder-service s přeposlanou `x-anico-identity` → `isVerified`
-   (`BREEDER_SERVICE_URL`). Neověřený 403, nedostupnost 503.
+2. Ověřený chovatel: lokální kolekce `verifiedBreeders` podle identity, plněná událostmi
+   `breeder.verified` přes NATS JetStream ([ADR-0007](../adr/0007-projekce-overenych-chovatelu-pres-nats.md)).
+   Chybějící projekce znamená 403 (i několik sekund po schválení), chyba čtení DB 503.
+   Výpadek brokeru neblokuje čtení již uložené projekce; žádný HTTP dotaz do breeder-service.
 3. Vlastnictví zvířete z uloženého `ownerUserId`; cizí i neexistující zvíře nebo fotografie 404.
 4. Teprve potom se čte tělo (JSON, nebo multipart: pole `animal` + soubory `photos`), validuje profil,
    pravidla fotografií a formát souborů (415). Až pak se ukládají soubory a zapisuje dokument.
@@ -59,6 +61,9 @@ nebo index bez nahraného souboru → 400, více než 10 fotografií → 400.
 
 - Limity (§6/7): 10 fotografií na zvíře, 10 MiB na soubor, JSON pole `animal` do 32 KiB, JSON tělo 32 KiB.
 - `sex: unknown` ze základu služby odpadá (Products má jen samce a samici); migrace se při výskytu zastaví.
+- Rozhodnutí vlastníka produktu 2026-11-06: `name` je povinné (odchylka od Products), oříznuté na 1–120 znaků;
+  PATCH jej nesmí vymazat. Migrace `20261106120000-required-animal-name` zastaví nasazení při chybějícím,
+  `null` nebo prázdném jménu; data je nutné explicitně opravit.
 - Délky textových údajů (jméno 120, barva 60, obec 120, číslo průkazu původu 60, čip 64, popis 2000 znaků) a
   horní mez hmotnosti 2000 kg určuje implementace; analýza je neuvádí.
 

@@ -3,6 +3,9 @@ import { secret, privateFile } from './private-config.mjs';
 import {
   devEventsConfiguration,
   devEventsCredentialsSchema,
+  devRegistrationStream,
+  devBreederVerificationStream,
+  devAnimalVerificationConsumer,
 } from '../src/dev-events.ts';
 try {
   const value = secret('devEventsCredentials', true);
@@ -19,6 +22,12 @@ try {
     settings.network !== 'anico-dev-events' ||
     settings.volume !== 'anico-dev-events-data' ||
     settings.rootDirectory !== '/srv/anico/dev/events' ||
+    settings.stream !== devRegistrationStream.name ||
+    settings.subject !== devRegistrationStream.subjects[0] ||
+    settings.verificationStream !== devBreederVerificationStream.name ||
+    settings.verificationSubject !== devBreederVerificationStream.subjects[0] ||
+    settings.verificationConsumer !==
+      devAnimalVerificationConsumer.durable_name ||
     !/^nats:2\.15\.2-alpine@sha256:[a-f0-9]{64}$/.test(settings.image)
   )
     throw new Error();
@@ -35,6 +44,27 @@ try {
       password: c.publisherPassword,
     }),
   );
+  for (const [file, user, password] of [
+    [
+      'breeder-verification-broker.json',
+      'breeder-publisher',
+      c.breederPublisherPassword,
+    ],
+    [
+      'animal-verification-broker.json',
+      'animal-consumer',
+      c.animalConsumerPassword,
+    ],
+  ]) {
+    privateFile(
+      new URL(file, root),
+      JSON.stringify({
+        server: 'nats://anico-dev-events:4222',
+        user,
+        password,
+      }),
+    );
+  }
   privateFile(
     new URL('compose.json', root),
     JSON.stringify({

@@ -27,7 +27,6 @@ describe('GET /breeders/me', () => {
       accountState: 'NOT_SUBMITTED',
       breederId: 'user-123',
       emailAddress: 'user-123@example.test',
-      hasBreedingStation: true,
       isVerified: false,
       breedingStationName: null,
       verificationRequest: null,
@@ -65,7 +64,6 @@ describe('GET /breeders/me', () => {
     expect(response.status).toBe(200);
     MyAccountSchema.parse(response.body);
     expect(response.body.accountState).toBe('PENDING');
-    expect(response.body.hasBreedingStation).toBe(true);
     expect(
       response.body.verificationRequest.breedingStationCertificate,
     ).toEqual({ fileName: 'certifikát.pdf', contentType: 'application/pdf' });

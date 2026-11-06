@@ -22,6 +22,7 @@ import {
   redactRemoteLog,
   remoteArguments,
 } from './remote-dev-config.mjs';
+import { startLocalVerificationBroker } from './dev-verification-broker.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const children = [];
@@ -31,6 +32,7 @@ const initialParent = process.ppid;
 let parentWatch;
 let databaseTask = false;
 let authRelay;
+let verificationBroker;
 
 function stop(signal = 'SIGTERM') {
   for (const child of children)
@@ -70,6 +72,7 @@ function cleanup() {
     ]);
     clearTimeout(timer);
     await authRelay?.close().catch(() => {});
+    await verificationBroker?.close().catch(() => {});
   })();
   return cleanupPromise;
 }
@@ -141,7 +144,7 @@ try {
     text,
     settings,
     // Checks and database commands operate on the selected service only.
-    check || command ? [{ ...service, developmentDependencies: {} }] : services,
+    check || command ? [{ ...service, developmentServices: [] }] : services,
   );
   const [config] = configs;
   if (
@@ -220,6 +223,23 @@ try {
     console.log(`Connected to your workspace ${backend.database}.`);
   }
   if (!check) {
+    if (
+      !command &&
+      configs.some(({ service }) => service.name === 'animal-service') &&
+      configs.some(({ service }) => service.name === 'breeder-service')
+    ) {
+      verificationBroker = await startLocalVerificationBroker({
+        launch,
+        onCleanup: (close) => {
+          verificationBroker = { close };
+        },
+      });
+      for (const backend of configs)
+        Object.assign(
+          backend.env,
+          verificationBroker.environments[backend.service.name] ?? {},
+        );
+    }
     let identityEnvironment = {};
     if (!command && (service.name !== 'auth-service' || frontend)) {
       authRelay = await startDevelopmentRelay({
@@ -307,6 +327,15 @@ try {
       ...dependencies.map((dependency) =>
         once(dependency, 'exit').then(([code]) => code ?? 1),
       ),
+      ...(verificationBroker
+        ? [
+            verificationBroker.closed.then(() => {
+              throw new Error(
+                'Local verification broker stopped; stopping applications',
+              );
+            }),
+          ]
+        : []),
       ...(tunnel
         ? [
             once(tunnel, 'exit').then(() => {
