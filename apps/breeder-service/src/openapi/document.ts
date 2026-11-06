@@ -194,6 +194,8 @@ export function openApiDocument(): JsonObject {
         '',
         'Stavy žádosti: `PENDING` (čeká na posouzení) → `APPROVED` | `REJECTED` (konečné) | `RETURNED` (vráceno k doplnění; chovatel opraví a znovu odešle → `PENDING`). Každé rozhodnutí se přidá do `reviewHistory` (nejstarší první).',
         '',
+        'Kdo rozhodl (`reviewedBy`, `reviewHistory`) vrací jen administrátorské API (role `admin` | `owner`); odpovědi pro chovatele tyto údaje neobsahují.',
+        '',
         'Identitu doplňuje gateway, resp. lokální vývojový most z přihlášení, do hlavičky `x-anico-identity`; klient ji nikdy nevkládá ani nezná.',
       ].join('\n'),
     },
@@ -250,7 +252,7 @@ export function openApiDocument(): JsonObject {
           operationId: 'getMyAccount',
           summary: 'Můj účet chovatele',
           description:
-            'Idempotentně převezme profil z identity. Před prvním podáním je `accountState` `NOT_SUBMITTED`, profilová pole mohou být `null` a `verificationRequest` je `null`.',
+            'Idempotentně převezme profil z identity. Před prvním podáním je `accountState` `NOT_SUBMITTED`, profilová pole mohou být `null` a `verificationRequest` je `null`. Žádost neobsahuje identitu administrátora ani historii rozhodnutí.',
           responses: {
             '200': {
               description: 'Účet chovatele.',
@@ -296,7 +298,7 @@ export function openApiDocument(): JsonObject {
           description: [
             'Povoleno ve stavech `NOT_SUBMITTED` (první podání) a `RETURNED` (oprava vrácené žádosti); jinak po úspěšné validaci 409 s aktuálním účtem. Před podáním se idempotentně převezme profil z identity, předchozí `GET /breeders/me` není nutný.',
             '',
-            `Mimo opravu vrácené žádosti (\`RETURNED\`) je \`${CERTIFICATE_FIELD}\` povinný; jeho absence vrací 400 ve všech ostatních stavech (validace má přednost před 409). Při opravě je nepovinný: bez souboru zůstává původní certifikát. Oprava nastaví stav \`PENDING\`, \`lastSubmittedAt\` na aktuální čas a vynuluje \`returnReason\` a \`reviewedBy\`/\`reviewedAt\`; \`submittedAt\` a \`reviewHistory\` zůstávají.`,
+            `Mimo opravu vrácené žádosti (\`RETURNED\`) je \`${CERTIFICATE_FIELD}\` povinný; jeho absence vrací 400 ve všech ostatních stavech (validace má přednost před 409). Při opravě je nepovinný: bez souboru zůstává původní certifikát. Oprava nastaví stav \`PENDING\`, \`lastSubmittedAt\` na aktuální čas a vynuluje \`returnReason\` a \`reviewedAt\` (v administrátorském API i \`reviewedBy\`); \`submittedAt\` a historie rozhodnutí zůstávají.`,
           ].join('\n'),
           requestBody: {
             required: true,

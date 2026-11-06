@@ -1,4 +1,4 @@
-import type { Role, Session } from '@anico/shared-schemas';
+import type { MyAccount, Role, Session } from '@anico/shared-schemas';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
@@ -25,9 +25,24 @@ export function sessionFor(
 export const anonymous = () =>
   HttpResponse.json({ error: 'AUTHENTICATION_REQUIRED' }, { status: 401 });
 
+export const unsubmittedAccount: MyAccount = {
+  accountState: 'NOT_SUBMITTED',
+  breederId: '123456789012345678901234',
+  firstName: null,
+  lastName: null,
+  emailAddress: null,
+  breedingStationName: null,
+  breedingStationNumber: null,
+  isVerified: false,
+  verificationRequest: null,
+};
+
 export const server = setupServer(
   http.get('/api/auth/providers', () =>
     HttpResponse.json({ providers: ['google', 'microsoft', 'apple'] }),
   ),
   http.get('/api/auth/session', anonymous),
+  http.get('/api/breeder/breeders/me', () =>
+    HttpResponse.json(unsubmittedAccount),
+  ),
 );

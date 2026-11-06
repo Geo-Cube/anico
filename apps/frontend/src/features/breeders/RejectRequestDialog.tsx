@@ -7,6 +7,8 @@ import { Button } from '@/shared/ui/button';
 const REASON_INPUT_ID = 'rejection-reason-input';
 const REASON_ERROR_ID = 'rejection-reason-error';
 const REASON_NOTE_ID = 'rejection-reason-note';
+/** Same limit as `DecideVerificationRequestSchema.rejectionReason`. */
+const REASON_MAX_LENGTH = 500;
 
 /**
  * Stays mounted for the whole detail screen, so a typed reason survives
@@ -15,11 +17,14 @@ const REASON_NOTE_ID = 'rejection-reason-note';
 export function RejectRequestDialog({
   open,
   isSaving,
+  error: saveError,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   isSaving: boolean;
+  /** Failed save, shown inside the dialog so the typed reason stays visible. */
+  error: string | null;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }) {
@@ -35,6 +40,10 @@ export function RejectRequestDialog({
     const trimmed = reason.trim();
     if (!trimmed) {
       setError('Důvod zamítnutí je povinný.');
+      return;
+    }
+    if (trimmed.length > REASON_MAX_LENGTH) {
+      setError(`Důvod může mít nejvýše ${REASON_MAX_LENGTH} znaků.`);
       return;
     }
     setError('');
@@ -103,6 +112,11 @@ export function RejectRequestDialog({
             <p id={REASON_NOTE_ID} className="text-sm text-muted-foreground">
               Důvod se zobrazí u výsledku posouzení a v e-mailu pro chovatele.
             </p>
+            {saveError && (
+              <p role="alert" className="text-sm text-destructive">
+                {saveError}
+              </p>
+            )}
           </div>
           <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
             <Button variant="outline" onClick={close} disabled={isSaving}>

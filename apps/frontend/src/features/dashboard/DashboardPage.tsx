@@ -2,6 +2,7 @@ import { ArrowRight, ClipboardCheck, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { canAdminister, displayName, useCurrentSession } from '@/features/auth';
+import { VerificationStatusCard } from '@/features/verification/VerificationStatusCard';
 import { Card } from '@/shared/ui/card';
 
 function Shortcut({
@@ -57,6 +58,7 @@ export function DashboardPage() {
           funguje.
         </p>
       </div>
+      <VerificationStatusCard />
       <div className="grid gap-4 md:grid-cols-2">
         <Shortcut to="/ucet" icon={<UserRound />} title="Můj účet">
           Profil a propojená přihlášení Google a Microsoft.
@@ -67,7 +69,7 @@ export function DashboardPage() {
             icon={<ClipboardCheck />}
             title="Ověření chovatelů"
           >
-            Administrace žádostí o ověření (simulace bez API).
+            Posuzování žádostí o ověření chovatelů.
           </Shortcut>
         )}
       </div>

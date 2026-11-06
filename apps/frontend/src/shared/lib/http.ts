@@ -15,6 +15,8 @@ export class ApiError extends Error {
     readonly status?: number,
     readonly code?: string,
     readonly issues?: unknown,
+    /** Parsed JSON error body, e.g. the stored `current` state of a 409. */
+    readonly body?: unknown,
   ) {
     super(code ?? kind);
     this.name = 'ApiError';
@@ -40,11 +42,12 @@ type RequestOptions<T> = {
 
 async function errorBody(
   response: Response,
-): Promise<{ code?: string; issues?: unknown }> {
+): Promise<{ code?: string; issues?: unknown; body?: unknown }> {
   try {
     const body: unknown = await response.json();
     if (!body || typeof body !== 'object') return {};
     return {
+      body,
       ...('error' in body && typeof body.error === 'string'
         ? { code: body.error }
         : {}),
@@ -56,14 +59,20 @@ async function errorBody(
 }
 
 /**
- * Same-origin JSON request. `redirect: 'error'` turns an expired Cloudflare
+ * Same-origin request. `redirect: 'error'` turns an expired Cloudflare
  * Access redirect on dev into `unavailable`, never into a fake logout.
  */
-export async function apiRequest<T = undefined>(
+async function send(
   path: string,
-  { method = 'GET', csrfToken, body, signal, schema }: RequestOptions<T> = {},
-): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  {
+    method = 'GET',
+    csrfToken,
+    body,
+    signal,
+  }: Omit<RequestOptions<unknown>, 'schema'>,
+  accept: string,
+): Promise<Response> {
+  const headers: Record<string, string> = { Accept: accept };
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
   const multipart = body instanceof FormData;
   if (body !== undefined && !multipart)
@@ -85,18 +94,40 @@ export async function apiRequest<T = undefined>(
     throw new ApiError('unavailable');
   }
   if (!response.ok) {
-    const { code, issues } = await errorBody(response);
+    const { code, issues, body: details } = await errorBody(response);
     if (response.status === 401 && code !== 'RECENT_LOGIN_REQUIRED')
-      throw new ApiError('unauthorized', 401, code, issues);
+      throw new ApiError('unauthorized', 401, code, issues, details);
     if (response.status === 403)
-      throw new ApiError('forbidden', 403, code, issues);
+      throw new ApiError('forbidden', 403, code, issues, details);
     if (response.status >= 400 && response.status < 500)
-      throw new ApiError('rejected', response.status, code, issues);
-    throw new ApiError('unavailable', response.status, code, issues);
+      throw new ApiError('rejected', response.status, code, issues, details);
+    throw new ApiError('unavailable', response.status, code, issues, details);
   }
+  return response;
+}
+
+/** Same-origin JSON request. */
+export async function apiRequest<T = undefined>(
+  path: string,
+  { schema, ...options }: RequestOptions<T> = {},
+): Promise<T> {
+  const response = await send(path, options, 'application/json');
   if (!schema) return undefined as T;
   try {
     return schema.parse(await response.json());
+  } catch {
+    throw new ApiError('unavailable', response.status, 'INVALID_RESPONSE');
+  }
+}
+
+/** Same-origin file download (GET) with the same error mapping as JSON. */
+export async function apiBlob(
+  path: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const response = await send(path, signal ? { signal } : {}, '*/*');
+  try {
+    return await response.blob();
   } catch {
     throw new ApiError('unavailable', response.status, 'INVALID_RESPONSE');
   }

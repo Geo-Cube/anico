@@ -2,6 +2,7 @@ import { LoginErrorCodeSchema, type AuthProvider } from '@anico/shared-schemas';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { CheckCircle2, ExternalLink, Link2, TriangleAlert } from 'lucide-react';
 import { useSearchParams } from 'react-router';
+import { VerificationStatusCard } from '@/features/verification/VerificationStatusCard';
 import { isApiError } from '@/shared/lib/http';
 import { Alert } from '@/shared/ui/alert';
 import { Button } from '@/shared/ui/button';
@@ -49,6 +50,7 @@ export function AccountPage() {
           Můj účet
         </h1>
       </div>
+      <VerificationStatusCard />
 
       {callbackError && (
         <Alert variant="error">

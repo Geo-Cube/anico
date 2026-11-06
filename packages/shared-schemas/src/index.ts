@@ -78,6 +78,11 @@ export const VerificationReviewSchema = z.strictObject({
 });
 export type VerificationReview = z.infer<typeof VerificationReviewSchema>;
 
+/**
+ * Verification request as the breeder sees it (`GET /breeders/me`). It never
+ * carries who decided (`reviewedBy`, `reviewHistory`); only administrators
+ * and owners see that, in `AdminVerificationRequestSchema`.
+ */
 export const VerificationRequestSchema = z.strictObject({
   id: ObjectIdSchema,
   status: VerificationStatusSchema,
@@ -88,14 +93,11 @@ export const VerificationRequestSchema = z.strictObject({
   /** Current submission revision; a decision must quote it to prove what was reviewed. */
   revision: SubmissionRevisionSchema,
   breedingStationCertificate: CertificateFileSchema,
-  /** Latest review; null while PENDING. */
-  reviewedBy: z.string().nullable(),
+  /** Time of the latest review; null while PENDING. */
   reviewedAt: z.iso.datetime().nullable(),
   rejectionReason: z.string().nullable(),
   /** Administrator note while RETURNED; null otherwise. */
   returnReason: z.string().nullable(),
-  /** All reviews, oldest first. */
-  reviewHistory: z.array(VerificationReviewSchema),
 });
 export type VerificationRequestDto = z.infer<typeof VerificationRequestSchema>;
 
@@ -192,7 +194,12 @@ export const BreederProfileSchema = z.strictObject({
 });
 export type BreederProfile = z.infer<typeof BreederProfileSchema>;
 
+/** Admin/owner view: adds the reviewer identity and the breeder profile. */
 export const AdminVerificationRequestSchema = VerificationRequestSchema.extend({
+  /** Administrator id (identity `userId`) of the latest review; null while PENDING. */
+  reviewedBy: z.string().nullable(),
+  /** All reviews, oldest first. */
+  reviewHistory: z.array(VerificationReviewSchema),
   breeder: BreederProfileSchema,
 });
 export type AdminVerificationRequest = z.infer<

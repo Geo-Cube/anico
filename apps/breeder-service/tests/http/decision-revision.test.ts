@@ -134,15 +134,15 @@ describe('POST /verification-requests/:id/decision – revize podání', () => {
       file: null,
     }).expect(201);
 
-    expect(corrected.body.verificationRequest).toMatchObject({
-      revision: 2,
-      reviewHistory: [{ decision: 'RETURNED', revision: 1 }],
-    });
+    expect(corrected.body.verificationRequest).toMatchObject({ revision: 2 });
     const detail = await request(app)
       .get(`/verification-requests/${id}`)
       .set(adminHeaders())
       .expect(200);
-    expect(detail.body.revision).toBe(2);
+    expect(detail.body).toMatchObject({
+      revision: 2,
+      reviewHistory: [{ decision: 'RETURNED', revision: 1 }],
+    });
     const queue = await request(app)
       .get('/verification-requests')
       .set(adminHeaders())

@@ -150,11 +150,9 @@ describe('RETURNED: oprava a nové podání', () => {
         id,
         status: 'PENDING',
         submittedAt: before.verificationRequest.submittedAt,
-        reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,
         returnReason: null,
-        reviewHistory: returned.body.reviewHistory,
         breedingStationCertificate: {
           fileName: 'puvodni.pdf',
           contentType: 'application/pdf',
@@ -167,6 +165,14 @@ describe('RETURNED: oprava a nové podání', () => {
     expect(response.body.verificationRequest.lastSubmittedAt).toBe(
       '2026-03-02T08:00:00.000Z',
     );
+    const detail = await request(app)
+      .get(`/verification-requests/${id}`)
+      .set(adminHeaders())
+      .expect(200);
+    expect(detail.body).toMatchObject({
+      reviewedBy: null,
+      reviewHistory: returned.body.reviewHistory,
+    });
     expect(files.size()).toBe(1);
     const download = await ownCertificate(app);
     expect(Buffer.compare(download.body as Buffer, PDF)).toBe(0);

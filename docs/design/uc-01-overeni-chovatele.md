@@ -168,6 +168,9 @@ Schémata v `@anico/shared-schemas` (K15, existující exporty beze změny názv
 `SubmitVerificationRequestSchema`, `DecideVerificationRequestSchema`, `ListVerificationRequestsQuerySchema`,
 `AdminVerificationRequestSchema`, `VerificationRequestListSchema`, `VerificationSummarySchema` + typy. Vstupy
 `safeParse`, výstupy vždy `Schema.parse(...)` (i stávající `GET /breeders/me`, dnes bez `parse`).
+Kdo rozhodl (`reviewedBy`, `reviewHistory`) obsahuje jen `AdminVerificationRequestSchema` (role `admin` | `owner`);
+`VerificationRequestSchema` v `MyAccount` je pro chovatele a tato pole nemá (rozhodnutí 6. 11. 2026: chovatel
+vidí jen výsledek, datum a důvod).
 
 | Metoda a cesta                                      | Oprávnění                           | Vstup                                                                                   | Úspěch                                | Chyby                                                     |
 | --------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------- |

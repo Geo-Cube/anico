@@ -3,7 +3,7 @@
   "info": {
     "title": "AniCo breeder-service",
     "version": "0.1.0",
-    "description": "Ověření chovatele (UC-01): chovatel podá žádost s certifikátem chovatelské stanice, administrátor ji schválí, zamítne, nebo vrátí k doplnění.\n\nStavy žádosti: `PENDING` (čeká na posouzení) → `APPROVED` | `REJECTED` (konečné) | `RETURNED` (vráceno k doplnění; chovatel opraví a znovu odešle → `PENDING`). Každé rozhodnutí se přidá do `reviewHistory` (nejstarší první).\n\nIdentitu doplňuje gateway, resp. lokální vývojový most z přihlášení, do hlavičky `x-anico-identity`; klient ji nikdy nevkládá ani nezná."
+    "description": "Ověření chovatele (UC-01): chovatel podá žádost s certifikátem chovatelské stanice, administrátor ji schválí, zamítne, nebo vrátí k doplnění.\n\nStavy žádosti: `PENDING` (čeká na posouzení) → `APPROVED` | `REJECTED` (konečné) | `RETURNED` (vráceno k doplnění; chovatel opraví a znovu odešle → `PENDING`). Každé rozhodnutí se přidá do `reviewHistory` (nejstarší první).\n\nKdo rozhodl (`reviewedBy`, `reviewHistory`) vrací jen administrátorské API (role `admin` | `owner`); odpovědi pro chovatele tyto údaje neobsahují.\n\nIdentitu doplňuje gateway, resp. lokální vývojový most z přihlášení, do hlavičky `x-anico-identity`; klient ji nikdy nevkládá ani nezná."
   },
   "servers": [
     {
@@ -73,7 +73,7 @@
         "tags": ["breeder"],
         "operationId": "getMyAccount",
         "summary": "Můj účet chovatele",
-        "description": "Idempotentně převezme profil z identity. Před prvním podáním je `accountState` `NOT_SUBMITTED`, profilová pole mohou být `null` a `verificationRequest` je `null`.",
+        "description": "Idempotentně převezme profil z identity. Před prvním podáním je `accountState` `NOT_SUBMITTED`, profilová pole mohou být `null` a `verificationRequest` je `null`. Žádost neobsahuje identitu administrátora ani historii rozhodnutí.",
         "responses": {
           "200": {
             "description": "Účet chovatele.",
@@ -135,7 +135,7 @@
         "tags": ["breeder"],
         "operationId": "submitVerificationRequest",
         "summary": "Podat nebo opravit žádost o ověření",
-        "description": "Povoleno ve stavech `NOT_SUBMITTED` (první podání) a `RETURNED` (oprava vrácené žádosti); jinak po úspěšné validaci 409 s aktuálním účtem. Před podáním se idempotentně převezme profil z identity, předchozí `GET /breeders/me` není nutný.\n\nMimo opravu vrácené žádosti (`RETURNED`) je `breedingStationCertificate` povinný; jeho absence vrací 400 ve všech ostatních stavech (validace má přednost před 409). Při opravě je nepovinný: bez souboru zůstává původní certifikát. Oprava nastaví stav `PENDING`, `lastSubmittedAt` na aktuální čas a vynuluje `returnReason` a `reviewedBy`/`reviewedAt`; `submittedAt` a `reviewHistory` zůstávají.",
+        "description": "Povoleno ve stavech `NOT_SUBMITTED` (první podání) a `RETURNED` (oprava vrácené žádosti); jinak po úspěšné validaci 409 s aktuálním účtem. Před podáním se idempotentně převezme profil z identity, předchozí `GET /breeders/me` není nutný.\n\nMimo opravu vrácené žádosti (`RETURNED`) je `breedingStationCertificate` povinný; jeho absence vrací 400 ve všech ostatních stavech (validace má přednost před 409). Při opravě je nepovinný: bez souboru zůstává původní certifikát. Oprava nastaví stav `PENDING`, `lastSubmittedAt` na aktuální čas a vynuluje `returnReason` a `reviewedAt` (v administrátorském API i `reviewedBy`); `submittedAt` a historie rozhodnutí zůstávají.",
         "requestBody": {
           "required": true,
           "content": {
@@ -522,7 +522,6 @@
           "breedingStationCertificate": {
             "$ref": "#/components/schemas/CertificateFile"
           },
-          "reviewedBy": { "type": ["string", "null"] },
           "reviewedAt": {
             "anyOf": [
               { "type": "string", "format": "date-time" },
@@ -530,11 +529,7 @@
             ]
           },
           "rejectionReason": { "type": ["string", "null"] },
-          "returnReason": { "type": ["string", "null"] },
-          "reviewHistory": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/VerificationReview" }
-          }
+          "returnReason": { "type": ["string", "null"] }
         },
         "required": [
           "id",
@@ -543,11 +538,9 @@
           "lastSubmittedAt",
           "revision",
           "breedingStationCertificate",
-          "reviewedBy",
           "reviewedAt",
           "rejectionReason",
-          "returnReason",
-          "reviewHistory"
+          "returnReason"
         ],
         "additionalProperties": false
       },
@@ -756,7 +749,6 @@
           "breedingStationCertificate": {
             "$ref": "#/components/schemas/CertificateFile"
           },
-          "reviewedBy": { "type": ["string", "null"] },
           "reviewedAt": {
             "anyOf": [
               { "type": "string", "format": "date-time" },
@@ -765,6 +757,7 @@
           },
           "rejectionReason": { "type": ["string", "null"] },
           "returnReason": { "type": ["string", "null"] },
+          "reviewedBy": { "type": ["string", "null"] },
           "reviewHistory": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/VerificationReview" }
@@ -778,10 +771,10 @@
           "lastSubmittedAt",
           "revision",
           "breedingStationCertificate",
-          "reviewedBy",
           "reviewedAt",
           "rejectionReason",
           "returnReason",
+          "reviewedBy",
           "reviewHistory",
           "breeder"
         ],

@@ -48,15 +48,25 @@ export function toAdminVerificationRequest(
   breeder: Breeder,
   contentType: CertificateFile['contentType'],
 ): AdminVerificationRequest {
-  if (!breeder.verificationRequest) {
+  const request = breeder.verificationRequest;
+  if (!request) {
     throw new Error('Breeder has no verification request');
   }
   return {
-    ...toVerificationRequest(breeder.verificationRequest, contentType),
+    ...toVerificationRequest(request, contentType),
+    reviewedBy: request.reviewedBy,
+    reviewHistory: request.reviewHistory.map((review) => ({
+      decision: review.decision,
+      revision: review.revision,
+      reviewedBy: review.reviewedBy,
+      reviewedAt: review.reviewedAt.toISOString(),
+      reason: review.reason,
+    })),
     breeder: toBreederProfile(breeder),
   };
 }
 
+/** Breeder-facing request: without the reviewer identity and review history. */
 export function toVerificationRequest(
   request: VerificationRequest,
   contentType: CertificateFile['contentType'],
@@ -71,16 +81,8 @@ export function toVerificationRequest(
       fileName: request.breedingStationCertificate.fileName,
       contentType: contentType,
     },
-    reviewedBy: request.reviewedBy,
     reviewedAt: request.reviewedAt?.toISOString() ?? null,
     rejectionReason: request.rejectionReason,
     returnReason: request.returnReason,
-    reviewHistory: request.reviewHistory.map((review) => ({
-      decision: review.decision,
-      revision: review.revision,
-      reviewedBy: review.reviewedBy,
-      reviewedAt: review.reviewedAt.toISOString(),
-      reason: review.reason,
-    })),
   };
 }

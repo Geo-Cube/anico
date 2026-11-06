@@ -5,7 +5,7 @@
 | `apps/frontend`           | React UI, TypeScript, Vite                                                            |
 | `apps/auth-service`       | OIDC přihlášení, účty, relace a role                                                  |
 | `apps/animal-service`     | Zvířata a fotografie UC-02, doklady UC-03 (verze, posouzení); nasazená na devu        |
-| `apps/breeder-service`    | Backend UC-01: profil a ověření chovatele; nasazený na devu, UI administrace simulace |
+| `apps/breeder-service`    | Backend UC-01: profil a ověření chovatele; nasazený na devu, napojená UI administrace |
 | `packages/auth`           | Ověření aplikační identity v backendových službách                                    |
 | `apps/tvoje-service`      | Tvoje samostatná Express mikroservisa, Mongoose, Pino                                 |
 | `packages/shared-schemas` | Zod schémata a odvozené typy pro API                                                  |
@@ -77,10 +77,10 @@ apps/frontend/src/
     auth/             # přihlašovací stránka, relace, guardy, účet, UserMenu
     profile/          # ProfileGate – místo pro kontrolu dokončení profilu
     dashboard/        # úvodní přehled
-    breeders/         # administrace ověření chovatelů (simulace bez API)
+    breeders/         # UC-01: administrace ověření chovatelů; skutečné breeder API
     animals/          # UC-02: seznam, profil, fotografie; skutečné animal API
   shared/
-    lib/http.ts       # apiRequest: same-origin, CSRF, Zod, rozlišení 401/403/výpadku
+    lib/http.ts       # apiRequest/apiBlob: same-origin, CSRF, Zod, rozlišení 401/403/výpadku
     ui/               # Button, Card, Alert, StatePanel, Logo
 ```
 
@@ -109,7 +109,7 @@ Frontend má nasazené přihlášení Google/Microsoft a práci s relací. Sprá
 na `/zvirata`, `/zvirata/nove`, `/zvirata/:animalId` a `/zvirata/:animalId/upravit`
 volá skutečné `/api/animal` (Zod odpovědi, kurzorové stránkování, JSON/multipart
 profilu a fotografií jedním zápisem, CSRF, ověření chovatele a nevratné smazání).
-Administrace chovatelů na `/administrace/chovatele` zůstává simulací.
+Administrace chovatelů na `/administrace/chovatele` volá breeder API (`/api/breeder/verification-requests`).
 Auth backend, kontrakt identity a gateway jsou nasazené na devu;
 Google i Microsoft login/logout jsou uživatelsky ověřené. Volitelné propojení účtů je nasazené,
 vlastník ponechává své účty oddělené. [Lokální přihlášení](LOKALNI-PRIHLASENI.md) je také

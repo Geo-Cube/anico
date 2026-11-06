@@ -155,12 +155,6 @@ describe('roles', () => {
       screen.queryByRole('link', { name: 'Administrace' }),
     ).not.toBeInTheDocument();
   });
-
-  it('opens the simulated breeder administration for an owner', async () => {
-    signedIn(sessionFor(['breeder', 'owner']));
-    renderApp('/administrace/chovatele');
-    expect(await screen.findByText(/Simulace\./)).toBeInTheDocument();
-  });
 });
 
 describe('logout and cached user data', () => {
