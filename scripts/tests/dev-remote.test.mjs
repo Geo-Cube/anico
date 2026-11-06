@@ -167,7 +167,7 @@ test('database commands allow only named tasks and explicit recovery flags', asy
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
-test('workspace metadata parses explicit local URL dependencies', () => {
+test('workspace metadata parses explicit paired local services without URL mapping', () => {
   const services = loadRemoteWorkspaces(root, 'animal-service');
   assert.deepEqual(
     services.map(({ name, port }) => ({ name, port })),
@@ -176,9 +176,7 @@ test('workspace metadata parses explicit local URL dependencies', () => {
       { name: 'breeder-service', port: 3003 },
     ],
   );
-  assert.deepEqual(services[0].developmentDependencies, {
-    BREEDER_SERVICE_URL: 'breeder-service',
-  });
+  assert.deepEqual(services[0].developmentServices, ['breeder-service']);
   const manifest = {
     name: '@anico/animal-service',
     scripts: { dev: 'tsx watch src/server.ts' },
@@ -186,35 +184,34 @@ test('workspace metadata parses explicit local URL dependencies', () => {
   };
   for (const declaration of [
     null,
-    [],
+    {},
     'breeder-service',
-    { BREEDER_SERVICE_URL: '../breeder-service' },
-    { BREEDER_SERVICE_URL: 'breeder' },
-    { BREEDER_SERVICE_URL: 'animal-service' },
-    { PORT: 'breeder-service' },
-    { BREEDER_SERVICE_URL: 3003 },
+    ['../breeder-service'],
+    ['breeder'],
+    ['animal-service'],
+    ['breeder-service', 'breeder-service'],
+    [3003],
   ])
     assert.throws(() =>
       remoteServiceMetadata(
         'animal-service',
-        { ...manifest, anicoDevDependencies: declaration },
+        { ...manifest, anicoDevServices: declaration },
         'PORT=3002',
       ),
     );
 });
 
-test('paired config uses distinct personal databases, ports and the local breeder URL', () => {
+test('paired config uses distinct personal databases and ports without HTTP coupling', () => {
   const services = loadRemoteWorkspaces(root, 'animal-service');
   for (const text of [
     valid,
     valid.replace('/anico_breeding_example?', '/anico_animal_example?'),
   ]) {
     const [animal, breeder] = remoteDevelopmentServices(
-      `${text}\nMIGRATE_ON_START=true\nBREEDER_SERVICE_URL=https://shared.invalid`,
+      `${text}\nMIGRATE_ON_START=true`,
       settings,
       services,
     );
-    assert.equal(animal.env.BREEDER_SERVICE_URL, 'http://127.0.0.1:3003');
     assert.equal(animal.database, 'anico_animal_example');
     assert.equal(breeder.database, 'anico_breeder_example');
     assert.equal(animal.env.PORT, '3002');
@@ -238,13 +235,12 @@ test('paired config uses distinct personal databases, ports and the local breede
 test('single-service launch config stays unchanged without a declaration', () => {
   const services = loadRemoteWorkspaces(root, 'breeder-service');
   assert.equal(services.length, 1);
-  assert.deepEqual(services[0].developmentDependencies, {});
+  assert.deepEqual(services[0].developmentServices, []);
   const [config] = remoteDevelopmentServices(valid, settings, services);
   assert.deepEqual(config, {
     service: services[0],
     ...remoteDevelopmentConfig(valid, settings, services[0]),
   });
-  assert.equal(config.env.BREEDER_SERVICE_URL, undefined);
 });
 
 test('paired config rejects duplicate ports and missing dependencies before launch', () => {

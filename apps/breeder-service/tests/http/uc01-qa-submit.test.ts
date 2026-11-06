@@ -192,7 +192,6 @@ describe('UC01-SUB-09 privilegovaná/neznámá pole v těle', () => {
     ['reviewedBy', 'admin-1'],
     ['status', 'APPROVED'],
     ['rejectionReason', 'x'],
-    ['hasBreedingStation', 'false'],
     ['verificationRequest', '{}'],
     ['__proto__', 'x'],
   ])('pole %s v podání -> 400 a nic se neuloží', async (name, value) => {
@@ -298,7 +297,16 @@ describe('UC01-SUB-09 privilegovaná/neznámá pole v těle', () => {
           [method](path)
           .set(breederHeaders())
           .send({ firstName: 'Hacker', isVerified: true });
-        expect([404, 405], `${method} ${path}`).toContain(response.status);
+        if (method === 'patch' && path === '/breeders/me') {
+          expect(response.status).toBe(400);
+          await request(app)
+            .patch(path)
+            .set(breederHeaders())
+            .send({ firstName: 'Hacker' })
+            .expect(409);
+        } else {
+          expect([404, 405], `${method} ${path}`).toContain(response.status);
+        }
       }
     }
     expect((await take(app)).body).toEqual(before);

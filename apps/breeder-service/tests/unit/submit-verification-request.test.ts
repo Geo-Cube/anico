@@ -468,7 +468,6 @@ function withRequest(status: VerificationStatus): Breeder {
     emailAddress: 'jan@example.com',
     breedingStationName: null,
     breedingStationNumber: null,
-    hasBreedingStation: true,
     isVerified: status === 'APPROVED',
     verificationRequest: {
       requestId: 'request-123',

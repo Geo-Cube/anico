@@ -72,7 +72,7 @@ const SubmitAnimalDocumentsFormSchema = z.strictObject({
     .min(1)
     .max(MAX_DOCUMENTS_PER_SUBMISSION)
     .describe(
-      `Typ i-tého souboru v \`${FILES_FIELD}\` (stejné pořadí a počet). Každý typ nejvýše jednou.`,
+      `Typ i-tého souboru v \`${FILES_FIELD}\` (stejné pořadí a počet). Stejný typ lze uvést vícekrát.`,
     ),
   [FILES_FIELD]: z
     .array(z.file())
@@ -269,9 +269,9 @@ export function openApiDocument(): JsonObject {
       description: [
         'Profily zvířat s fotografiemi (UC-02) a doklady zvířat (UC-03, ADR-0005). Chovatel spravuje jen svá zvířata; administrátor posuzuje doklady.',
         '',
-        'Profil a fotografie se vytvářejí i mění jedním požadavkem a jedním zápisem: buď se uloží vše, nebo nic. Nevyplněné volitelné údaje (vynechané, `null`, prázdný nebo jen mezerový text) se ukládají jako `null`. Neprázdný seznam fotografií má právě jednu hlavní: zvolenou, jinak dosavadní, jinak první. Odebrání hlavní udělá hlavní první zbývající.',
+        'Profil a fotografie se vytvářejí i mění jedním požadavkem a jedním zápisem: buď se uloží vše, nebo nic. Jméno je povinné, oříznuté, 1–120 znaků a nelze je vymazat při PATCH. Nevyplněné volitelné údaje (vynechané, `null`, prázdný nebo jen mezerový text) se ukládají jako `null`. Neprázdný seznam fotografií má právě jednu hlavní: zvolenou, jinak dosavadní, jinak první. Odebrání hlavní udělá hlavní první zbývající.',
         '',
-        'Každá příloha je samostatný doklad s řadou verzí. Zvíře má pro každý typ nejvýše jednu řadu: nový doklad stejného typu vytvoří další verzi (`versionNumber + 1`, `previousDocumentId`) a starší verze zůstává v historii včetně souboru a rozhodnutí. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.',
+        'Každá příloha zakládá samostatnou řadu verzí: `versionNumber: 1`, `previousDocumentId: null`, `PENDING`. Více řad stejného typu je povoleno i v jednom podání. Nová verze vzniká jen explicitní náhradou aktuální zamítnuté verze; původní soubor a rozhodnutí zůstávají v historii. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.',
         '',
         'Operace chovatele vyžadují ověřený účet z breeder-service (`isVerified`), ověřuje se při každém požadavku. Cizí i neexistující zvíře je 404. Identitu doplňuje gateway do hlavičky `x-anico-identity`.',
       ].join('\n'),
@@ -487,7 +487,7 @@ export function openApiDocument(): JsonObject {
           tags: ['documents'],
           operationId: 'submitAnimalDocuments',
           summary: 'Podat doklady',
-          description: `Jen vlastník zvířete s ověřeným účtem. 1–${MAX_DOCUMENTS_PER_SUBMISSION} souborů; každý je samostatný doklad \`PENDING\`. Typ, který zvíře už má, pokračuje ve své řadě novou verzí (i nad \`PENDING\` či \`APPROVED\`). Podání se uloží celé, nebo vůbec.`,
+          description: `Jen vlastník zvířete s ověřeným účtem. 1–${MAX_DOCUMENTS_PER_SUBMISSION} souborů; každý zakládá samostatný doklad \`PENDING\`, verzi 1 s \`previousDocumentId: null\`. Typ se může opakovat a existující doklady se nemění. Podání se uloží celé, nebo vůbec.`,
           requestBody: {
             required: true,
             content: {

@@ -40,7 +40,6 @@ export function toBreederProfile(breeder: Breeder): BreederProfile {
     emailAddress: breeder.emailAddress,
     breedingStationName: breeder.breedingStationName,
     breedingStationNumber: breeder.breedingStationNumber,
-    hasBreedingStation: breeder.hasBreedingStation,
     isVerified: breeder.isVerified,
   };
 }

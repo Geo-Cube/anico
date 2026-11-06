@@ -18,6 +18,15 @@ Přihlášení dál zajišťuje sdílená `auth-service`; backend UC-01 ověřuj
 `@anico/auth` a používá ověřené `req.auth.userId`. Dokončení onboardingového profilu
 zatím nemá vlastní endpoint. Notifikátor rozhodnutí je pouze vývojový log, e-maily nedoručuje.
 
+Ověření chovatele pro UC-02/UC-03 se neověřuje synchronním HTTP voláním mezi službami.
+Breeder ukládá schválení a outbox událost `breeder.verified` atomicky do dokumentu chovatele;
+publisher ji doručuje do NATS JetStream. Animal durable pull consumer plní vlastní kolekci
+`verifiedBreeders`, kterou API čte podle `req.auth.userId`. Bez identity vrací 401, bez projekce
+403 (i během několikasekundového zpoždění po schválení), při chybě čtení DB 503.
+Výpadek brokeru nepřeruší používání uložené projekce. Kontrakt události je v
+`packages/shared-schemas/src/breeder-verification.ts`; doručování, backfill a provoz popisuje
+[ADR-0007](adr/0007-projekce-overenych-chovatelu-pres-nats.md).
+
 Npm workspaces propojí balíčky, Turborepo řídí pořadí buildů.
 Všichni používáme jeden kořenový `package-lock.json`.
 

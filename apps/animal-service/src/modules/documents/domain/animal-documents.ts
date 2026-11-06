@@ -60,11 +60,9 @@ export const documentNotFound = () =>
 
 export function currentVersionOf(
   versions: readonly DocumentVersion[],
-  documentType: AnimalDocumentType,
+  documentId: string,
 ): DocumentVersion | undefined {
-  return versions.find(
-    (version) => version.isCurrent && version.documentType === documentType,
-  );
+  return historyOf(versions, documentId).find((version) => version.isCurrent);
 }
 
 function successorOf(
@@ -88,33 +86,35 @@ function successorOf(
   };
 }
 
-/**
- * Podání (UC-03/1, R7): každý soubor je samostatný doklad `PENDING`. Typ, který zvíře už má,
- * pokračuje ve své řadě novou verzí; předchozí verze zůstává v historii, jen přestane být aktuální.
- */
+/** Podání (UC-03/1): každý soubor zakládá vlastní řadu, i při shodném typu. */
 export function planSubmission(
   versions: readonly DocumentVersion[],
   inputs: readonly NewVersionInput[],
   submission: { id: () => string; now: Date; submittedBy: string },
 ): { versions: DocumentVersion[]; created: DocumentVersion[] } {
   const created = inputs.map((input) =>
-    successorOf(
-      currentVersionOf(versions, input.documentType),
-      input,
-      submission,
-    ),
+    successorOf(undefined, input, submission),
   );
-  const superseded = new Set(
-    created.flatMap((version) => version.previousDocumentId ?? []),
-  );
+  return { versions: [...versions, ...created], created };
+}
+
+/** Náhrada pokračuje pouze v řadě explicitně zvolené zamítnuté verze. */
+export function planReplacement(
+  versions: readonly DocumentVersion[],
+  documentId: string,
+  input: NewVersionInput,
+  submission: { id: () => string; now: Date; submittedBy: string },
+): { versions: DocumentVersion[]; created: DocumentVersion[] } {
+  const target = assertReplaceable(versions, documentId);
+  const created = successorOf(target, input, submission);
   return {
     versions: [
       ...versions.map((version) =>
-        superseded.has(version.id) ? { ...version, isCurrent: false } : version,
+        version.id === target.id ? { ...version, isCurrent: false } : version,
       ),
-      ...created,
+      created,
     ],
-    created,
+    created: [created],
   };
 }
 
@@ -128,8 +128,8 @@ export function assertReplaceable(
 ): DocumentVersion {
   const target = versions.find((version) => version.id === documentId);
   if (!target) throw documentNotFound();
-  const current = currentVersionOf(versions, target.documentType)!;
-  if (current.id !== documentId)
+  const current = currentVersionOf(versions, documentId)!;
+  if (!target.isCurrent)
     throw new DocumentError(
       409,
       'Document version was already replaced',
@@ -165,7 +165,20 @@ export function historyOf(
 ): DocumentVersion[] {
   const target = versions.find((version) => version.id === documentId);
   if (!target) throw documentNotFound();
-  return versions
-    .filter((version) => version.documentType === target.documentType)
-    .sort((a, b) => a.versionNumber - b.versionNumber);
+  const byId = new Map(versions.map((version) => [version.id, version]));
+  let root = target;
+  while (root.previousDocumentId) {
+    const previous = byId.get(root.previousDocumentId);
+    if (!previous) break;
+    root = previous;
+  }
+  const chain = new Set([root.id]);
+  const ordered = [...versions].sort(
+    (a, b) => a.versionNumber - b.versionNumber,
+  );
+  return ordered.filter((version) => {
+    if (version.previousDocumentId && chain.has(version.previousDocumentId))
+      chain.add(version.id);
+    return chain.has(version.id);
+  });
 }

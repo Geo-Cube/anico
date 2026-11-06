@@ -92,7 +92,7 @@ describe('OpenAPI document', () => {
 
   it('documents exactly the routes registered by the routers', () => {
     const fromRouters = routerOperations();
-    expect(fromRouters).toHaveLength(10); // 8 business + /health + /ready
+    expect(fromRouters).toHaveLength(11); // 9 business + /health + /ready
     expect(documentOperations()).toEqual(fromRouters);
   });
 

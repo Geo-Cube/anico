@@ -1,4 +1,4 @@
-- name: Deploy private durable development registration broker
+- name: Deploy private durable development event broker
   hosts: anico
   become: true
   gather_facts: false
@@ -155,7 +155,23 @@
         group: '1000'
         mode: '0400'
       no_log: true
-    - name: Configure durable stream through temporary private SSH tunnel
+    - name: Prepare domain service secret directory
+      ansible.builtin.file:
+        path: /srv/anico/dev/applications/secrets
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Install scoped breeder publisher and animal consumer credentials
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/dev-events/{{ item }}-verification-broker.json'
+        dest: '/srv/anico/dev/applications/secrets/{{ item }}-verification-broker.json'
+        owner: '1000'
+        group: '1000'
+        mode: '0400'
+      loop: [breeder, animal]
+      no_log: true
+    - name: Configure durable streams and pull consumer through temporary private SSH tunnel
       ansible.builtin.command:
         argv:
           [
@@ -175,6 +191,13 @@
       ansible.builtin.copy:
         content: '{"stream":"ANICO_AUTH_REGISTRATIONS","version":1}'
         dest: /srv/anico/dev/events/stream-ready.json
+        owner: root
+        group: root
+        mode: '0600'
+    - name: Record configured verification stream and consumer prerequisite
+      ansible.builtin.copy:
+        content: '{"stream":"ANICO_BREEDER_VERIFICATIONS","consumer":"animal-verified-breeders","version":1}'
+        dest: /srv/anico/dev/events/verification-ready.json
         owner: root
         group: root
         mode: '0600'

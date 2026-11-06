@@ -236,9 +236,13 @@ test('domain release routes animal and breeder behind the session gateway with o
         '@' +
         full.find((item) => item.service === `${name}-service`).digest,
     );
-    assert.deepEqual(service.networks, ['app', 'data']);
+    assert.deepEqual(service.networks, ['app', 'data', 'events']);
     assert.deepEqual(service.secrets, [
       { source: `${name}-mongodb-uri`, target: `${name}-mongodb-uri` },
+      {
+        source: `${name}-verification-broker-json`,
+        target: `${name}-verification-broker-json`,
+      },
     ]);
     assert.equal(
       compose.secrets[`${name}-mongodb-uri`].file,
@@ -252,6 +256,18 @@ test('domain release routes animal and breeder behind the session gateway with o
       service.environment.MONGODB_URI_FILE,
       `/run/secrets/${name}-mongodb-uri`,
     );
+    assert.equal(
+      service.environment[`${name.toUpperCase()}_VERIFICATION_BROKER_FILE`],
+      `/run/secrets/${name}-verification-broker-json`,
+    );
+    assert.equal(
+      compose.secrets[`${name}-verification-broker-json`].file,
+      `/srv/anico/dev/applications/secrets/${name}-verification-broker.json`,
+    );
+    assert.equal(service.environment.NATS_PASSWORD, undefined);
+    assert.deepEqual(service.depends_on, {
+      auth: { condition: 'service_healthy' },
+    });
     // Chráněné API jen přes ověřenou relaci; health/ready bez ní, ale nad přísnějším prefixem.
     assert.equal(
       service.labels[`${router}.middlewares`],
@@ -276,14 +292,6 @@ test('domain release routes animal and breeder behind the session gateway with o
       compose.services.frontend.labels['com.anico.revision'],
     );
   }
-  assert.equal(
-    compose.services.animal.environment.BREEDER_SERVICE_URL,
-    'http://breeder:3000',
-  );
-  assert.equal(
-    compose.services.breeder.environment.BREEDER_SERVICE_URL,
-    undefined,
-  );
   assert.deepEqual(compose.services.backend.secrets, [
     { source: 'mongodb-uri', target: 'dev-mongodb-uri' },
   ]);

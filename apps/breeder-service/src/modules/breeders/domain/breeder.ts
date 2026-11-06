@@ -46,7 +46,6 @@ export interface Breeder {
   emailAddress: string | null;
   breedingStationName: string | null;
   breedingStationNumber: string | null;
-  hasBreedingStation: true;
   isVerified: boolean;
   verificationRequest: VerificationRequest | null;
 }
@@ -65,6 +64,10 @@ export interface BreederDetails {
   breedingStationName: string;
   breedingStationNumber: string;
 }
+
+export type ProfileUpdate = Partial<
+  Pick<BreederDetails, 'firstName' | 'lastName' | 'emailAddress'>
+>;
 
 /** První podání: certifikát je povinný. */
 export interface Submission extends BreederDetails {

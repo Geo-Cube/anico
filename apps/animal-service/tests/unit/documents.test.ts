@@ -3,7 +3,12 @@ import { testIdentity } from '@anico/auth/testing';
 import { documentUseCases } from '../../src/modules/documents/application/documents.js';
 import type { AnimalDocumentsRepository } from '../../src/modules/documents/domain/ports.js';
 import type { FileStorage } from '../../src/files/file-storage.js';
-import { httpBreederVerification } from '../../src/modules/animal/infrastructure/http-breeder-verification.js';
+import {
+  documentsState,
+  historyOf,
+  planReplacement,
+  planSubmission,
+} from '../../src/modules/documents/domain/animal-documents.js';
 
 const owner = testIdentity({ roles: ['breeder'] });
 const ANIMAL_ID = '000000000000000000000001';
@@ -93,9 +98,9 @@ describe('document submission keeps files and records consistent', () => {
         },
         files,
       );
-      await expect(
-        documents.submit(owner, 'token', ANIMAL_ID, uploads),
-      ).rejects.toThrow('acknowledgement lost');
+      await expect(documents.submit(owner, ANIMAL_ID, uploads)).rejects.toThrow(
+        'acknowledgement lost',
+      );
       expect(stored.size).toBe(2);
     }
   });
@@ -113,44 +118,52 @@ describe('document submission keeps files and records consistent', () => {
       files,
     );
     await expect(
-      documents.submit(owner, 'token', ANIMAL_ID, uploads),
+      documents.submit(owner, ANIMAL_ID, uploads),
     ).rejects.toMatchObject({ status: 409 });
     expect(attempts).toBe(3);
     expect(stored.size).toBe(0);
   });
 });
 
-describe('breeder verification over HTTP fails closed', () => {
-  const verification = (response: Response | Error) =>
-    httpBreederVerification({
-      baseUrl: 'http://breeder.test/api',
-      fetch: async (url, init) => {
-        expect(String(url)).toBe('http://breeder.test/api/breeders/me');
-        expect(new Headers(init?.headers).get('x-anico-identity')).toBe('jwt');
-        if (response instanceof Error) throw response;
-        return response;
+describe('independent document chains', () => {
+  it('derives state from current versions of every chain, not just the type', () => {
+    let id = 0;
+    const submission = {
+      id: () => String(++id),
+      now: new Date(),
+      submittedBy: owner.userId,
+    };
+    const input = {
+      documentType: 'PEDIGREE' as const,
+      file: {
+        fileName: 'a.pdf',
+        fileReference: 'file',
+        contentType: 'application/pdf' as const,
+        size: PDF.length,
       },
-    });
-
-  it('returns the verified flag of the forwarded identity', async () => {
-    const account = { isVerified: true, accountState: 'APPROVED' };
-    expect(await verification(Response.json(account)).isVerified('jwt')).toBe(
-      true,
+    };
+    const { versions } = planSubmission([], [input, input], submission);
+    expect(documentsState([])).toBe('NOT_SUBMITTED');
+    expect(documentsState(versions)).toBe('PENDING');
+    versions[0]!.assessmentStatus = 'APPROVED';
+    versions[1]!.assessmentStatus = 'REJECTED';
+    expect(documentsState(versions)).toBe('APPROVED');
+    const replaced = planReplacement(
+      versions,
+      versions[1]!.id,
+      input,
+      submission,
     );
+    expect(documentsState(replaced.versions)).toBe('PENDING');
+    expect(historyOf(replaced.versions, versions[0]!.id)).toEqual([
+      versions[0],
+    ]);
     expect(
-      await verification(Response.json({ isVerified: false })).isVerified(
-        'jwt',
-      ),
-    ).toBe(false);
-  });
-
-  it('treats errors, non-2xx and malformed accounts as unavailable', async () => {
-    for (const response of [
-      new Error('ECONNREFUSED'),
-      new Response(null, { status: 401 }),
-      Response.json({ isVerified: 'yes' }),
-      new Response('not json'),
-    ])
-      await expect(verification(response).isVerified('jwt')).rejects.toThrow();
+      historyOf(replaced.versions, versions[1]!.id).map(({ id }) => id),
+    ).toEqual([versions[1]!.id, replaced.created[0]!.id]);
+    replaced.created[0]!.assessmentStatus = 'REJECTED';
+    expect(documentsState(replaced.versions)).toBe('APPROVED');
+    replaced.versions[0]!.assessmentStatus = 'REJECTED';
+    expect(documentsState(replaced.versions)).toBe('REJECTED');
   });
 });

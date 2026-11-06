@@ -55,9 +55,10 @@ for name, container in containers.items():
     assert re.fullmatch('ghcr.io/geo-cube/anico-' + repository + '@sha256:[a-f0-9]{64}', container['Config']['Image'])
     networks = set(container['NetworkSettings']['Networks'])
     assert 'anico-dev-app' in networks
+    assert not any(value.startswith(('NATS_PASSWORD=', 'NATS_URL=', 'NATS_USER=', 'BREEDER_VERIFICATION_BROKER_PASSWORD=', 'ANIMAL_VERIFICATION_BROKER_PASSWORD=')) for value in container['Config']['Env'])
     publisher_enabled = 'AUTH_REGISTRATION_PUBLISHER_ENABLED=true' in container['Config']['Env']
     allowed_networks = {'anico-dev-app', 'anico-dev-data', identity}
-    if name == 'auth' and publisher_enabled:
+    if (name == 'auth' and publisher_enabled) or name in ('animal', 'breeder'):
         allowed_networks.add('anico-dev-events')
     assert networks <= allowed_networks
     if name == 'frontend':
@@ -74,7 +75,16 @@ for name, container in containers.items():
         assert uri.username == 'anico_dev_app'
         assert uri.path == '/anico_breeding'
     elif name in ('animal', 'breeder'):
-        assert 'anico-dev-events' not in networks
+        assert 'anico-dev-events' in networks
+        broker_secret = '/run/secrets/' + name + '-verification-broker-json'
+        assert name.upper() + '_VERIFICATION_BROKER_FILE=' + broker_secret in container['Config']['Env']
+        assert any(mount['Destination'] == broker_secret and not mount['RW'] for mount in container['Mounts'])
+        broker_credentials = json.loads(subprocess.check_output(['docker', 'exec', name + '-' + identity, 'cat', broker_secret], text=True))
+        assert broker_credentials['server'] == 'nats://anico-dev-events:4222'
+        assert broker_credentials['user'] == ('breeder-publisher' if name == 'breeder' else 'animal-consumer')
+        assert re.fullmatch(r'[a-f0-9]{64}', broker_credentials['password'])
+        assert all(broker_credentials['password'] not in value for value in container['Config']['Env'])
+        assert not any(value.startswith('BREEDER_SERVICE_URL=') for value in container['Config']['Env'])
         assert 'anico-dev-data' in networks
         assert not any(value.startswith('MONGODB_URI=') for value in container['Config']['Env'])
         secret = '/run/secrets/' + name + '-mongodb-uri'

@@ -22,7 +22,6 @@ import {
 } from './api';
 
 export const optionalFields = [
-  { key: 'name', label: 'Jméno', max: 120 },
   { key: 'birthDate', label: 'Datum narození', type: 'date' },
   { key: 'coatColor', label: 'Barva srsti', max: 60 },
   { key: 'weightKg', label: 'Hmotnost (kg)', type: 'number' },
@@ -75,6 +74,7 @@ function AnimalForm({ animal }: { animal?: Animal }) {
   );
   const [breedId, setBreedId] = useState(animal?.breedId ?? '');
   const [sex, setSex] = useState<AnimalSex>(animal?.sex ?? 'male');
+  const [name, setName] = useState(animal?.name ?? '');
   const [values, setValues] = useState(() =>
     Object.fromEntries(
       optionalFields.map(({ key }) => [key, String(animal?.[key] ?? '')]),
@@ -109,7 +109,12 @@ function AnimalForm({ animal }: { animal?: Animal }) {
   });
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!name.trim()) {
+      setValidation(['Vyplňte jméno zvířete.']);
+      return;
+    }
     const profile = {
+      name,
       species,
       breedId,
       sex,
@@ -134,6 +139,7 @@ function AnimalForm({ animal }: { animal?: Animal }) {
         : {};
     const changes = initialAnimal
       ? {
+          ...(name !== initialAnimal.name ? { name } : {}),
           ...(species !== initialAnimal.species ||
           breedId !== initialAnimal.breedId
             ? { species, breedId }
@@ -207,10 +213,20 @@ function AnimalForm({ animal }: { animal?: Animal }) {
       <h1 className="text-2xl font-semibold text-brand">
         {animal ? 'Upravit zvíře' : 'Přidat zvíře'}
       </h1>
-      <form onSubmit={submit} className="space-y-6">
+      <form onSubmit={submit} noValidate className="space-y-6">
         <fieldset disabled={mutation.isPending} className="space-y-6">
           <legend className="sr-only">Profil zvířete</legend>
           <Card className="grid gap-4 p-6 sm:grid-cols-2">
+            <label className="space-y-1">
+              Jméno
+              <input
+                required
+                className={inputClass}
+                maxLength={120}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
             <label className="space-y-1">
               Druh
               <select

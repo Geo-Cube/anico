@@ -86,9 +86,6 @@ export function BreederRequestQueue() {
                 Chovatel
               </th>
               <th scope="col" className={HEADER_CELL}>
-                Typ chovatele
-              </th>
-              <th scope="col" className={HEADER_CELL}>
                 Odesláno
               </th>
               <th scope="col" className={HEADER_CELL}>
@@ -103,7 +100,7 @@ export function BreederRequestQueue() {
             {filteredItems.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={4}
                   className="px-4 py-10 text-center text-muted-foreground"
                 >
                   V tomto stavu nejsou žádné žádosti chovatelů.
@@ -118,9 +115,6 @@ export function BreederRequestQueue() {
                   <th scope="row" className="px-4 py-3 text-left font-semibold">
                     {breeder.first_name} {breeder.last_name}
                   </th>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {breeder.has_breeding_station ? 'Chovatelská stanice' : '-'}
-                  </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {verification_request.submitted_at}
                   </td>

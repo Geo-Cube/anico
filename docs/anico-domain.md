@@ -39,12 +39,12 @@ Správa zvířat a dokladů vyžaduje `is_verified=True` – ověřuje se **znov
 
 Vazby: Chovatel 1—0..1 Žádost o ověření; Chovatel 1—0..N Zvíře; Zvíře 1—0..N Doklad zvířete (verze). Fotografie a Soubor jsou vnořené struktury.
 
-**Chovatel:** `breeder_id` (= id účtu, neměnné), `first_name`, `last_name`, `email_address`, `has_breeding_station` (vždy True), `breeding_station_name` / `breeding_station_number` (NULL do prvního podání, pak povinné), `is_verified`.
+**Chovatel:** `breeder_id` (= id účtu, neměnné), `first_name`, `last_name`, `email_address`, `breeding_station_name` / `breeding_station_number` (NULL do prvního podání, pak povinné), `is_verified`. Jméno, příjmení a e-mail lze samostatně upravit jen před prvním podáním (`NOT_SUBMITTED`); oprava vrácené žádosti zůstává dle ADR-0004.
 
 **Žádost o ověření (`verification_request`):** `verification_request_id`, `breeder_id` (max. 1 žádost na chovatele), `status` PENDING/APPROVED/REJECTED, `submitted_at` (neměnné), `breeding_station_certificate` (Soubor, povinný), `reviewed_by`, `reviewed_at`, `rejection_reason` (NULL při podání a schválení, povinný při REJECTED).
 
-**Zvíře (`animal`):** `animal_id`, `breeder_id` (neměnný vlastník), `animal_name` (volitelné), `species` (Pes/Kůň), `breed` (povinné, musí odpovídat druhu), `sex` MALE/FEMALE (povinné), volitelné: `birth_date` (≤ dnes), `coat_color`, `weight_kg` (> 0), `city`, `pedigree_number`, `microchip_number` (text, zachovat celý zápis – žádné ořezávání nul/mezer bez rozhodnutí), `description`, `photos[]`.
-Bez jména UI zobrazí druh + plemeno + krátký identifikátor. Přesná adresa se neeviduje.
+**Zvíře (`animal`):** `animal_id`, `breeder_id` (neměnný vlastník), `animal_name` (povinné dle rozhodnutí vlastníka produktu 2026-11-06, odchylka od Products; oříznuté, 1–120 znaků), `species` (Pes/Kůň), `breed` (povinné, musí odpovídat druhu), `sex` MALE/FEMALE (povinné), volitelné: `birth_date` (≤ dnes), `coat_color`, `weight_kg` (> 0), `city`, `pedigree_number`, `microchip_number` (text, zachovat celý zápis – žádné ořezávání nul/mezer bez rozhodnutí), `description`, `photos[]`.
+Přesná adresa se neeviduje.
 
 **Doklad zvířete (`animal_document`):** `document_id` (id verze), `animal_id` (neměnné napříč řetězcem), `document_type` PEDIGREE/HEALTH_RESULTS/BREEDING_APPROVAL (neměnné napříč řetězcem), `version_number` (1, +1), `previous_document_id` (NULL u v1, jinak odkaz na nahrazenou REJECTED verzi), `file`, `assessment_status` PENDING/APPROVED/REJECTED, `submitted_at`, `reviewed_by`, `reviewed_at`, `rejection_reason`.
 
@@ -73,7 +73,7 @@ Bez jména UI zobrazí druh + plemeno + krátký identifikátor. Přesná adresa
 
 ### UC-02 – Zvíře a fotografie
 
-1. Povinné: `species`, `breed` (shodné s druhem dle číselníku), `sex`. Ostatní volitelné (prázdné → NULL). `weight_kg > 0` je-li vyplněno; `birth_date ≤ dnes`.
+1. Povinné: `animal_name` (nelze vymazat ani při úpravě), `species`, `breed` (shodné s druhem dle číselníku), `sex`. Ostatní volitelné (prázdné → NULL). `weight_kg > 0` je-li vyplněno; `birth_date ≤ dnes`.
 2. Bez `microchip_number` nelze doklad ověřit (jen informační; nebrání uložení profilu).
 3. Fotografie volitelné, JPEG/PNG. Neprázdný seznam má **právě jednu** `is_primary=True`. Bez výběru je hlavní první. Po odebrání hlavní se hlavní stane první zbývající. Prázdný seznam je legální.
 4. Vytvoření a úprava (profil + fotografie + soubory) = **jedna transakce**. Úprava zachovává `animal_id`, `breeder_id`, `photo_id` zachovaných fotek a **dřívější rozhodnutí o dokladech**.
@@ -83,10 +83,10 @@ Bez jména UI zobrazí druh + plemeno + krátký identifikátor. Přesná adresa
 
 ### UC-03 – Doklady
 
-> **Schválená odchylka od analýzy (5. 11. 2026, [ADR-0005](adr/0005-doklady-zvirat-vnorene-ve-zvireti.md)):** zvíře má
-> pro každý typ dokladu nejvýše jednu řadu verzí. Nové podání dokladu existujícího typu vytvoří další verzi této řady
-> i nad `PENDING` nebo `APPROVED` verzí; starší verze, její soubor i rozhodnutí zůstávají v historii. Bod 4 níže
-> (nová verze jen nad `REJECTED`) platí pro explicitní náhradu konkrétní verze. Tím je rozhodnuta i otevřená otázka §6/1.
+> **Rozhodnutí vlastníka (6. 11. 2026, [ADR-0005](adr/0005-doklady-zvirat-vnorene-ve-zvireti.md)):** odchylka R7
+> (jedna řada verzí podle typu) je zrušena. Každá příloha zakládá samostatný doklad v1 i při opakování typu
+> v jednom nebo dalším podání; existující doklady se nemění. Nová verze vzniká jen explicitní náhradou aktuální
+> `REJECTED` verze. Tím je rozhodnuta otevřená otázka §6/1.
 
 1. Podání obsahuje ≥ 1 přílohu; ke každé povinný typ. Doklady PDF/JPEG/PNG. Každá příloha = **samostatný doklad** s v1, `previous_document_id=NULL`, `PENDING`. Celé podání v jedné transakci.
 2. Admin posuzuje **každý doklad zvlášť**; rozhodnutí se týká konkrétní verze. Schválení/zamítnutí jen ze `PENDING` a jen u **aktuální** verze; atomicky (A4 jako u UC-01). Zamítnutí vyžaduje důvod.
@@ -110,7 +110,7 @@ Krátká zavíratelná zpráva nahoře; zavření nemění data. Výsledek a dů
 
 ## 6. Otevřené otázky (nerozhodnuto v analýze – neuhaď, ohlas)
 
-1. Smí chovatel nahrát další doklad **téhož typu** ke zvířeti, které už má aktuální doklad toho typu (PENDING/APPROVED)? UC-03 to nezakazuje ani nepovoluje.
+1. **Rozhodnuto vlastníkem 6. 11. 2026:** další doklad téhož typu je povolen jako samostatná řada v1, i když existuje aktuální `PENDING`/`APPROVED` doklad; viz UC-03 výše.
 2. Co se stane s **APPROVED dokladem**, když chovatel později změní `microchip_number` / `species` / `breed` zvířete? Analýza říká, že dřívější rozhodnutí zůstane (UC-02 CAF) – riziko, že „ověřený“ doklad už neodpovídá profilu.
 3. Chovatel koní: analýza mluví o „jménu hospodářství a reg. čísle hospodářství“, datový model má jen `breeding_station_name/number`. Použít stejná pole?
 4. Odkaz na kontrolu čipu koně: Processes uvádí integrovaný zemědělský registr, UC-03 Centrální přístupové místo pro evidenci koní. (Jen manuální kontrola admina, systém ji neautomatizuje.)

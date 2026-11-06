@@ -33,7 +33,6 @@ const BreedIdSchema = z.string().min(1).max(160);
 const text = (max: number) => z.string().trim().min(1).max(max);
 /** Hodnoty volitelných údajů profilu; prázdné se neukládají jako text, ale jako `null`. */
 const optionalValues = {
-  name: text(120),
   birthDate: z.iso
     .date()
     .refine(
@@ -60,7 +59,6 @@ function blankAsNull<T extends z.ZodType>(schema: T) {
     .optional();
 }
 const optionalInput = {
-  name: blankAsNull(optionalValues.name),
   birthDate: blankAsNull(optionalValues.birthDate),
   coatColor: blankAsNull(optionalValues.coatColor),
   weightKg: blankAsNull(optionalValues.weightKg),
@@ -70,6 +68,7 @@ const optionalInput = {
   description: blankAsNull(optionalValues.description),
 };
 const requiredInput = {
+  name: text(120),
   species: AnimalSpeciesSchema,
   breedId: BreedIdSchema,
   sex: AnimalSexSchema,
@@ -97,11 +96,12 @@ export const CreateAnimalSchema = z
 
 /**
  * Úprava profilu a fotografií v jednom zápisu. Vynechané pole zůstává, `null` nebo prázdný
- * text údaj vymaže. Nové fotografie se přidávají za zachované v pořadí nahrání.
+ * text vymaže pouze volitelný údaj; jméno je vždy povinné. Nové fotografie se přidávají za zachované v pořadí nahrání.
  */
 export const UpdateAnimalSchema = z
   .strictObject({
     ...optionalInput,
+    name: text(120).optional(),
     species: AnimalSpeciesSchema.optional(),
     breedId: BreedIdSchema.optional(),
     sex: AnimalSexSchema.optional(),
@@ -147,7 +147,7 @@ export const AnimalSchema = z
   .strictObject({
     id: AnimalIdSchema,
     ownerUserId: z.uuid(),
-    name: optionalValues.name.nullable(),
+    name: text(120),
     species: AnimalSpeciesSchema,
     breedId: BreedIdSchema,
     sex: AnimalSexSchema,

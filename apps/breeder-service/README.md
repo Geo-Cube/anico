@@ -89,6 +89,7 @@ rozhodnutí o vrácení: [ADR-0004](../../docs/adr/0004-vraceni-zadosti-k-doplne
 | Metoda a cesta                                      | Role         | Popis                                                                                                                                                                     |
 | --------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /breeders/me`                                  | přihlášený   | Převzetí účtu (idempotentní) a stav ověření                                                                                                                               |
+| `PATCH /breeders/me`                                | přihlášený   | Alespoň jedno z `firstName`, `lastName`, `emailAddress`; pouze `NOT_SUBMITTED`, jinak 409 s `current`. Neznámá pole včetně údajů stanice → 400.                           |
 | `POST /breeders/me/verification-request`            | přihlášený   | Podání nebo oprava vrácené žádosti, `multipart/form-data`, soubor v poli `breedingStationCertificate` (PDF/JPEG/PNG, max. 5 MB)                                           |
 | `GET /breeders/me/verification-request/certificate` | přihlášený   | Stažení vlastního certifikátu                                                                                                                                             |
 | `GET /verification-requests/summary`                | admin, owner | Počty `{ pending, returned, approved, rejected }`                                                                                                                         |
@@ -99,6 +100,9 @@ rozhodnutí o vrácení: [ADR-0004](../../docs/adr/0004-vraceni-zadosti-k-doplne
 
 Pravidla:
 
+- PATCH profil nejprve idempotentně převezme z identity. Zápis používá filtr `{ breederId, verificationRequest: null }`,
+  proto souběžné podání nelze přepsat editací. V `PENDING`, `RETURNED`, `APPROVED` a `REJECTED` je samostatná editace zakázaná;
+  oprava vrácené žádosti nadále funguje přes podání dle ADR-0004.
 - Podání je povolené v `NOT_SUBMITTED` a `RETURNED`, jinak 409 `{ error, current: MyAccount }`. Profil se při
   podání převezme z identity, předchozí `GET /breeders/me` není nutné.
 - Certifikát je povinný kromě opravy `RETURNED`: bez souboru zůstává původní, nový soubor nahradí starý a starý se
@@ -111,6 +115,22 @@ Pravidla:
   a rozhodnutí musí uvést revizi, kterou admin posoudil (bez ní 400). Pokud byla žádost mezitím vrácena a opravena,
   rozhodnutí o staré revizi vrací 409 `{ error: 'Verification revision mismatch', current }` a nic nezmění –
   admin posoudí `current` a rozhodne znovu s jeho `revision`.
+
+### Událost ověření chovatele
+
+Schválení uloží `isVerified`, rozhodnutí a `verificationEvent` v jediném podmíněném zápisu do dokumentu chovatele.
+`RETURNED` ani `REJECTED` událost nevytvářejí. Dispatcher publikuje kontrakt `BreederVerifiedEventSchema`
+na `anico.dev.breeder.verified.v1` do JetStream streamu `ANICO_BREEDER_VERIFICATIONS`; `Nats-Msg-Id` je `eventId`.
+Stav `published` zapisuje až po ACK brokeru. Lease s náhodným tokenem chrání souběžné workery; dočasné chyby
+opakují publikaci s odstupem 1–60 sekund, nevalidní payload končí ve `failed` s `invalid_event`.
+Zpracování je alespoň jednou; konzument musí deduplikovat podle `eventId`.
+
+Publisher se zapíná pouze přes `BREEDER_VERIFICATION_BROKER_FILE` (JSON soubor s `server`, `user`, `password`).
+Server musí být `nats://anico-dev-events:4222`, uživatel `breeder-publisher`, heslo 64 hex znaků.
+Bez konfigurace zůstávají události `pending` a start služby vypíše jediné varování. Payload ani přihlašovací údaje
+se nelogují. Při ukončení se dokončí rozpracovaná publikace před zavřením databáze.
+Nové migrace odstraňují zrušený příznak stanice a doplňují pending události dosud ověřeným chovatelům
+(čas ověření z `verificationRequest.reviewedAt`) včetně indexu pro claim.
 
 Chyby mají tvar `{ error }`, validace `{ error: 'Validation failed', issues }`, konflikt (409) `{ error, current }`.
 Kontrakty jsou v `@anico/shared-schemas`.

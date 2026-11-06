@@ -28,10 +28,16 @@ Pole `documents[]` a `documentsRevision` v dokumentu kolekce `animals` (ADR-0005
 `animalDocuments`. `fileReference` a `submittedBy` API nevrací. Migrace
 `20261105160825-animal-documents` přidává index fronty.
 
+Každá příloha podání vytváří vlastní řadu v1 (`previousDocumentId: null`, `PENDING`, `isCurrent: true`),
+i při opakovaném typu v jednom nebo dalším podání. Historie sleduje odkazy `previousDocumentId`, nikdy typ.
+Seznam vrací aktuální verzi každé řady. `documentsState` se odvozuje ze všech těchto verzí (i stejného typu):
+existuje-li `PENDING`, je `PENDING`; jinak existuje-li `APPROVED`, je `APPROVED`; jinak `REJECTED`;
+bez dokladů `NOT_SUBMITTED`. Historické verze stav neovlivňují; `APPROVED` neznamená schválení všech řad.
+
 | Invariant                                   | Vynucení                                                                                                                                                     |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Podání uloženo celé nebo vůbec              | soubory se ověří (formát) dřív, než se cokoli uloží; jeden `updateOne` s revizí; úklid souborů                                                               |
-| Nejvýše jeden nástupce verze, verze +1      | plán ze čerstvého stavu + zápis jen při nezměněné `documentsRevision`                                                                                        |
+| Nejvýše jeden nástupce verze, verze +1      | jen explicitní náhrada; `updateOne` s revizí a `$elemMatch {_id, isCurrent: true, assessmentStatus: REJECTED}`                                               |
 | Rozhodnutí jen o aktuální `PENDING`, jednou | `findOneAndUpdate` s `$elemMatch {_id, isCurrent: true, assessmentStatus: PENDING}`                                                                          |
 | Rozhodnutí se nepřepíše podáním             | rozhodnutí zvyšuje `documentsRevision`; podání ze starší revize se zopakuje                                                                                  |
 | Fronta jen aktuální `PENDING`               | agregace přes `documents.isCurrent` + `documents.assessmentStatus`, řazení `submittedAt`                                                                     |
@@ -40,8 +46,10 @@ Pole `documents[]` a `documentsRevision` v dokumentu kolekce `animals` (ADR-0005
 ## 3. Oprávnění a pořadí kontrol
 
 1. Identita z `req.auth` (`@anico/auth`), jinak 401.
-2. Chovatel: `GET /breeders/me` v breeder-service s přeposlanou `x-anico-identity` → `isVerified`
-   (`BREEDER_SERVICE_URL`). Neověřený 403, nedostupnost 503.
+2. Chovatel: lokální kolekce `verifiedBreeders` podle identity, plněná událostmi `breeder.verified`
+   přes NATS JetStream ([ADR-0007](../adr/0007-projekce-overenych-chovatelu-pres-nats.md)).
+   Chybějící projekce znamená 403 (i několik sekund po schválení), chyba čtení DB 503.
+   Při výpadku brokeru API dál používá uloženou projekci; breeder HTTP API se nevolá.
 3. Vlastnictví zvířete z uloženého `ownerUserId`; cizí i neexistující zvíře 404.
 4. Teprve potom se čte multipart (limity: 1–10 souborů, 10 MiB na soubor) a ověřuje formát (415).
 
@@ -50,19 +58,20 @@ za cizí zvíře nemůže.
 
 ## 4. Odchylky
 
-- R7 (ADR-0005 bod 3): nový doklad stejného typu pokračuje v řadě i nad `PENDING`/`APPROVED` verzí.
+- Odchylku R7 (jedna řada podle typu) vlastník 6. 11. 2026 zrušil; platí samostatné doklady dle UC-03/1
+  a nová verze jen nad aktuální zamítnutou verzí dle UC-03/4. Vnořený model z ADR-0005 zůstává.
 
 ## 5. Co chybí (možná budoucí rozšíření)
 
-Stav k 5. 11. 2026 po PR #33. Nic z toho neblokuje DoD UC-03; pořadí není závazné.
+Stav k 6. 11. 2026 po zrušení R7. Nic z toho neblokuje DoD UC-03; pořadí není závazné.
 
 **Provoz a nasazení**
 
 1. ~~**Nasazení animal-service a breeder-service**~~ – hotovo v PR #35: publish, deploy, vlastní DB účty,
-   routy `/api/animal` a `/api/breeder` přes ověření relace, interní `BREEDER_SERVICE_URL`. Ověřit, že
-   produkční gateway vydává identitu se stejnou audience pro obě služby (na devu společná `anico-api-dev`).
-2. ~~**`dev:remote` pro doklady**~~ – hotovo v PR #35: launcher s `--service animal-service` spustí i
-   breeder-service a nastaví `BREEDER_SERVICE_URL`.
+   routy `/api/animal` a `/api/breeder` přes ověření relace. Ověřit, že produkční gateway vydává
+   identitu se správnou audience (na devu `anico-api-dev`). Událostní propojení nově určuje ADR-0007.
+2. ~~**`dev:remote` pro doklady**~~ – launcher s `--service animal-service` spustí i breeder-service
+   a izolovaný lokální JetStream broker; do obou služeb předá jejich broker credential soubor.
 
 **Konzistence souborů**
 
@@ -88,8 +97,8 @@ Stav k 5. 11. 2026 po PR #33. Nic z toho neblokuje DoD UC-03; pořadí není zá
 
 12. **Paměť při uploadu:** soubory jsou v paměti do ověření formátu; jedno podání může mít až 10 × 10 MiB.
     Zvážit celkový limit těla požadavku nebo streamování s kontrolou prvních bajtů.
-13. **Volání breeder-service při každém požadavku:** bez cache; při zátěži zvážit krátkou cache výsledku
-    (sekundy) nebo projekci stavu ověření přes události z brokeru.
+13. ~~**Volání breeder-service při každém požadavku**~~ – hotovo: lokální projekce `verifiedBreeders`
+    z událostí `breeder.verified`, durable pull consumer a idempotentní zápis dle ADR-0007.
 14. **Duplikovaný kód s breeder-service:** detekce formátu, `sanitizeFileName`, GridFS adaptér a hlavičky stažení
     jsou kopie; kandidát na sdílený serverový balíček.
 15. **OpenAPI animal-service** už popisuje zvířata, fotografie i doklady; chybí servírování `/openapi.json`

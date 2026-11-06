@@ -14,7 +14,6 @@ function breeder(
     emailAddress: 'jan@example.com',
     breedingStationName: 'Stanice',
     breedingStationNumber: '123456',
-    hasBreedingStation: true,
     isVerified: status === 'APPROVED',
     verificationRequest: status
       ? {

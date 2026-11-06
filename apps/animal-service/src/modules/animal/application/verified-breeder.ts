@@ -6,18 +6,15 @@ export interface WarnLogger {
 }
 
 /**
- * Přihlášený chovatel s ověřeným účtem (UC-01 `isVerified`), zjištěno v breeder-service při
- * každém požadavku. Bez identity 401, neověřený 403, nedostupná breeder-service 503 (fail closed).
+ * Ověření z místní projekce: bez identity 401, chybějící projekce 403,
+ * nedostupné čtení databáze 503. Schválení je v MVP konečné.
  */
 export function verifiedBreeder(verification: BreederVerification) {
-  return async (
-    actor: Identity | undefined,
-    identityToken: string | undefined,
-  ): Promise<Identity> => {
-    if (!actor || !identityToken) throw new AuthorizationError(401);
+  return async (actor: Identity | undefined): Promise<Identity> => {
+    if (!actor) throw new AuthorizationError(401);
     let verified: boolean;
     try {
-      verified = await verification.isVerified(identityToken);
+      verified = await verification.isVerified(actor.userId);
     } catch {
       throw new AnimalError(503, 'Breeder verification unavailable');
     }

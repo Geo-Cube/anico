@@ -24,7 +24,6 @@ export interface Breeder {
   first_name: string;
   last_name: string;
   email_address: string;
-  has_breeding_station: boolean;
   breeding_station_name: string;
   breeding_station_number: string;
   is_verified: boolean;
@@ -77,7 +76,6 @@ const INITIAL_MOCK_DATA: BreederRequestItem[] = [
       first_name: 'Karel',
       last_name: 'Novák',
       email_address: 'karel.novak@example.com',
-      has_breeding_station: true,
       breeding_station_name: 'Modré údolí',
       breeding_station_number: '1234/2024',
       is_verified: false,
@@ -102,7 +100,6 @@ const INITIAL_MOCK_DATA: BreederRequestItem[] = [
       first_name: 'Lucie',
       last_name: 'Svobodová',
       email_address: 'lucie.svobodova@example.com',
-      has_breeding_station: true,
       breeding_station_name: 'Stříbrný vítr',
       breeding_station_number: '5678/2025',
       is_verified: false,

@@ -1,6 +1,7 @@
 import type {
   Breeder,
   NewBreeder,
+  ProfileUpdate,
   Resubmission,
   Submission,
 } from './breeder.js';
@@ -13,6 +14,11 @@ import type {
 export interface BreederRepository {
   findByBreederId(breederId: string): Promise<Breeder | null>;
   provision(input: NewBreeder): Promise<Breeder>;
+  /** Úprava pouze před prvním podáním; podmíněný atomický zápis. */
+  updateProfile(
+    breederId: string,
+    update: ProfileUpdate,
+  ): Promise<Breeder | null>;
   findByVerificationRequestId(requestId: string): Promise<Breeder | null>;
   /** První podání; `null`, pokud chovatel neexistuje nebo už žádost má. */
   submitVerification(

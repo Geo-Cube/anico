@@ -7,6 +7,8 @@ import { secret } from './private-config.mjs';
 import {
   devEventsCredentialsSchema,
   devRegistrationStream,
+  devBreederVerificationStream,
+  devAnimalVerificationConsumer,
 } from '../src/dev-events.ts';
 
 let tunnel, connection;
@@ -67,23 +69,57 @@ try {
   }
   if (!connection) throw new Error();
   const manager = await jetstreamManager(connection, { timeout: 5000 });
-  let current;
+  let changed = false;
+  const streams = [devRegistrationStream, devBreederVerificationStream];
+  for (const stream of streams) {
+    let current;
+    try {
+      current = await manager.streams.info(stream.name);
+    } catch (error) {
+      if (!(error instanceof JetStreamApiError) || error.status !== 404)
+        throw error;
+    }
+    if (!current) {
+      if (process.argv.includes('--verify')) throw new Error('Stream missing');
+      await manager.streams.add(stream);
+      changed = true;
+    } else {
+      for (const [key, value] of Object.entries(stream))
+        if (JSON.stringify(current.config[key]) !== JSON.stringify(value))
+          throw new Error('Existing stream differs; review required');
+    }
+  }
+  let consumer;
   try {
-    current = await manager.streams.info(devRegistrationStream.name);
+    consumer = await manager.consumers.info(
+      devBreederVerificationStream.name,
+      devAnimalVerificationConsumer.durable_name,
+    );
   } catch (error) {
     if (!(error instanceof JetStreamApiError) || error.status !== 404)
       throw error;
   }
-  let changed = false;
-  if (!current) {
-    if (process.argv.includes('--verify')) throw new Error('Stream missing');
-    await manager.streams.add(devRegistrationStream);
+  if (!consumer) {
+    if (process.argv.includes('--verify')) throw new Error('Consumer missing');
+    await manager.consumers.add(
+      devBreederVerificationStream.name,
+      devAnimalVerificationConsumer,
+    );
     changed = true;
-  } else
-    for (const [key, value] of Object.entries(devRegistrationStream))
-      if (JSON.stringify(current.config[key]) !== JSON.stringify(value))
-        throw new Error('Existing stream differs; review required');
-  console.log(JSON.stringify({ changed, stream: devRegistrationStream.name }));
+  } else {
+    if (consumer.config.deliver_subject)
+      throw new Error('Existing consumer is not pull; review required');
+    for (const [key, value] of Object.entries(devAnimalVerificationConsumer))
+      if (JSON.stringify(consumer.config[key]) !== JSON.stringify(value))
+        throw new Error('Existing consumer differs; review required');
+  }
+  console.log(
+    JSON.stringify({
+      changed,
+      streams: streams.map((stream) => stream.name),
+      consumer: devAnimalVerificationConsumer.durable_name,
+    }),
+  );
 } catch {
   console.error(
     'Dev event stream configuration failed; private values hidden. Check SSH, broker health and existing stream configuration.',

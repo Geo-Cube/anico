@@ -35,6 +35,33 @@
       ansible.builtin.assert:
         that: anico_deploy_image.stdout == (lookup('file', playbook_dir + '/../coolify.json') | from_json).images.coolify
   tasks:
+    - name: Require configured verification stream, consumer and runtime secrets
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop:
+        - /srv/anico/dev/events/verification-ready.json
+        - /srv/anico/dev/applications/secrets/breeder-verification-broker.json
+        - /srv/anico/dev/applications/secrets/animal-verification-broker.json
+      register: anico_verification_files
+    - name: Refuse deployment before events provisioning
+      ansible.builtin.assert:
+        that: item.stat.exists and item.stat.isreg
+        fail_msg: Deploy dev events with administrator approval before configuring services.
+      loop: '{{ anico_verification_files.results }}'
+    - name: Verify durable stream and consumer before configuring service releases
+      ansible.builtin.command:
+        argv:
+          - node
+          - --import
+          - tsx
+          - '{{ playbook_dir }}/../scripts/configure-dev-events.mjs'
+          - '{{ inventory_hostname }}'
+          - --verify
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
     - name: Prepare private dev application secret directory
       ansible.builtin.file:
         path: /srv/anico/dev/applications/secrets

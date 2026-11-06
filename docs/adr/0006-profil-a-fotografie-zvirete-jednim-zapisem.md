@@ -28,14 +28,17 @@ kontroloval jen přihlášení a pro cizí zvíře vracel 403, kdežto doklady 4
    úspěšném zápisu.
 4. **Hlavní fotografie:** zvolená (`primaryPhotoId`, nebo `primaryUploadIndex` nové), jinak dosavadní zachovaná,
    jinak první v pořadí (zachované v původním pořadí, za nimi nové). Pravidlo je čistá funkce domény.
-5. **Ověřený chovatel:** každá operace se zvířaty i fotografiemi se dotáže breeder-service
-   (`GET /breeders/me`, `isVerified`) stejným adaptérem jako doklady (ADR-0005 bod 4). Neověřený 403,
-   nedostupnost 503. Číselník plemen vyžaduje jen přihlášení.
+5. **Ověřený chovatel – nahrazeno [ADR-0007](0007-projekce-overenych-chovatelu-pres-nats.md):**
+   každá operace se zvířaty i fotografiemi čte lokální projekci `verifiedBreeders` stejně jako doklady.
+   Chybějící záznam znamená 403, chyba čtení DB 503. Číselník plemen vyžaduje jen přihlášení.
 6. **403/404 (§6/6):** cizí i neexistující zvíře nebo fotografie je 404 jako u dokladů; 403 jen neověřený
    chovatel nebo chybějící role.
 7. **Údaje podle Products:** `sex` jen `male` | `female` (hodnota `unknown` ze základu odpadá; migrace
    `20261105220513-animal-profiles` se při jejím výskytu zastaví místo hádání). Nevyplněné volitelné údaje včetně
    prázdného textu se ukládají jako `null`. `microchipNumber` se neořezává.
+   Rozhodnutí vlastníka produktu 2026-11-06 mění volitelnost jména: `name` je povinné, oříznuté,
+   1–120 znaků, nelze je vymazat ani při PATCH (odchylka od Products). Migrace
+   `20261106120000-required-animal-name` se při chybějícím, `null` nebo prázdném jménu zastaví.
 8. **Limity (§6/7):** nejvýše 10 fotografií na zvíře, 10 MiB na soubor, JPEG/PNG podle obsahu.
 
 ## Zvažované alternativy
@@ -47,8 +50,8 @@ kontroloval jen přihlášení a pro cizí zvíře vracel 403, kdežto doklady 4
 
 ## Důsledky
 
-- Lokální přihlášený běh i nasazení potřebují dostupnou breeder-service (`BREEDER_SERVICE_URL`), jinak
-  správa zvířat vrací 503 stejně jako doklady.
+- Lokální přihlášený běh i nasazení používají projekci z událostí NATS JetStream dle
+  [ADR-0007](0007-projekce-overenych-chovatelu-pres-nats.md); breeder HTTP API není závislostí požadavku.
 - Osiřelé soubory v GridFS (nejistý výsledek zápisu, pád mezi zápisem a úklidem) čekají na odložený úklid
   stejně jako u dokladů ([návrh UC-03 §5 bod 4](../design/uc-03-doklady.md)).
 - Soubory jsou v paměti do ověření formátu: jeden požadavek až 10 × 10 MiB.

@@ -11,6 +11,7 @@ import {
   SubmissionRevisionSchema,
   SubmitVerificationRequestSchema,
   VerificationRequestListSchema,
+  UpdateMyProfileSchema,
   VerificationRequestSchema,
   VerificationReviewSchema,
   VerificationStatusSchema,
@@ -72,6 +73,7 @@ const components = [
   ['VerificationRequest', VerificationRequestSchema],
   ['MyAccount', MyAccountSchema],
   ['SubmitVerificationRequest', SubmitVerificationRequestSchema],
+  ['UpdateMyProfile', UpdateMyProfileSchema],
   ['SubmitVerificationRequestForm', SubmitVerificationRequestFormSchema],
   ['DecideVerificationRequest', DecideVerificationRequestSchema],
   ['BreederProfile', BreederProfileSchema],
@@ -255,6 +257,33 @@ export function openApiDocument(): JsonObject {
               content: json(ref('MyAccount')),
             },
             '401': responseRef('Unauthorized'),
+            '500': responseRef('InternalError'),
+          },
+        },
+        patch: {
+          tags: ['breeder'],
+          operationId: 'updateMyProfile',
+          summary: 'Upravit profil před prvním podáním',
+          description:
+            'Idempotentně převezme profil z identity. Upraví alespoň jedno z polí firstName, lastName, emailAddress pouze ve stavu NOT_SUBMITTED. Údaje stanice zde měnit nelze.',
+          requestBody: {
+            required: true,
+            content: json(ref('UpdateMyProfile')),
+          },
+          responses: {
+            '200': {
+              description: 'Aktualizovaný účet chovatele.',
+              content: json(ref('MyAccount')),
+            },
+            '400': errorResponse(
+              'Neplatná, prázdná nebo nepovolená pole.',
+              ref('ValidationError'),
+            ),
+            '401': responseRef('Unauthorized'),
+            '409': errorResponse(
+              'Profil již má žádost o ověření; current je aktuální účet.',
+              ref('MyAccountConflict'),
+            ),
             '500': responseRef('InternalError'),
           },
         },

@@ -33,7 +33,6 @@ describe('POST /breeders/me/verification-request', () => {
     expect(response.body).toMatchObject({
       accountState: 'PENDING',
       isVerified: false,
-      hasBreedingStation: true,
       firstName: 'Jan',
       breedingStationName: 'Stanice U Nováků',
       verificationRequest: {

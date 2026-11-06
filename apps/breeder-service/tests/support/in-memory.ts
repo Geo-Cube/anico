@@ -1,6 +1,7 @@
 import type {
   Breeder,
   NewBreeder,
+  ProfileUpdate,
   Resubmission,
   Submission,
   VerificationRequest,
@@ -57,7 +58,6 @@ export function inMemoryBreeders(): BreederRepository {
         emailAddress: input.emailAddress,
         breedingStationName: null,
         breedingStationNumber: null,
-        hasBreedingStation: true,
         isVerified: false,
         verificationRequest: null,
       };
@@ -70,6 +70,13 @@ export function inMemoryBreeders(): BreederRepository {
     async findByBreederId(breederId: string): Promise<Breeder | null> {
       const breeder = breeders.get(breederId);
       return breeder ? copy(breeder) : null;
+    },
+
+    async updateProfile(breederId: string, update: ProfileUpdate) {
+      const breeder = breeders.get(breederId);
+      if (!breeder || breeder.verificationRequest) return null;
+      Object.assign(breeder, update);
+      return copy(breeder);
     },
 
     async findByVerificationRequestId(

@@ -68,6 +68,4 @@ export const speciesLabel = (species: AnimalSpecies) =>
 export const breedLabel = (animal: Animal) =>
   animalBreeds(animal.species).find((breed) => breed.id === animal.breedId)
     ?.name ?? animal.breedId;
-export const animalLabel = (animal: Animal) =>
-  animal.name ??
-  `${speciesLabel(animal.species)} · ${breedLabel(animal)} · ${animal.id.slice(-6)}`;
+export const animalLabel = (animal: Animal) => animal.name;
