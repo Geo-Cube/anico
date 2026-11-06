@@ -312,23 +312,35 @@ describe('Přidání zvířete (WF 02, 03)', () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
-  it('odmítne budoucí datum narození a nekladnou hmotnost', async () => {
-    renderApp('/zvirata/nove');
-    await fillProfile();
-    const tomorrow = new Date(Date.now() + 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    const date = screen.getByLabelText('Datum narození');
-    // jsdom zahodí neúplné datum, proto celá hodnota najednou místo psaní po znacích
-    fireEvent.change(date, { target: { value: tomorrow } });
-    await userEvent.type(field('Hmotnost (kg)'), '0');
-    await userEvent.click(button('Pokračovat na fotografie'));
-    expect(date).toHaveAccessibleDescription(
-      'Datum narození nesmí být v budoucnosti.',
-    );
-    expect(field('Hmotnost (kg)')).toHaveAccessibleDescription(
-      'Hmotnost musí být větší než 0 kg.',
-    );
+  it('odmítne budoucí datum narození podle českého dne a nekladnou hmotnost', async () => {
+    // 23:30 UTC 6. 11. je v Česku už 7. 11. (00:30 SEČ): „dnes“ i „zítra“ se liší od UTC.
+    vi.useFakeTimers({
+      toFake: ['Date'],
+      now: new Date('2026-11-06T23:30:00Z'),
+    });
+    try {
+      renderApp('/zvirata/nove');
+      await fillProfile();
+      const date = screen.getByLabelText('Datum narození');
+      await userEvent.type(field('Hmotnost (kg)'), '0');
+      // jsdom zahodí neúplné datum, proto celá hodnota najednou místo psaní po znacích
+      fireEvent.change(date, { target: { value: '2026-11-07' } });
+      await userEvent.click(button('Pokračovat na fotografie'));
+      expect(date).not.toHaveAccessibleDescription(
+        'Datum narození nesmí být v budoucnosti.',
+      );
+      expect(field('Hmotnost (kg)')).toHaveAccessibleDescription(
+        'Hmotnost musí být větší než 0 kg.',
+      );
+
+      fireEvent.change(date, { target: { value: '2026-11-08' } });
+      await userEvent.click(button('Pokračovat na fotografie'));
+      expect(date).toHaveAccessibleDescription(
+        'Datum narození nesmí být v budoucnosti.',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ukládá údaje i fotografie jedním multipart požadavkem a potvrdí výsledek', async () => {
