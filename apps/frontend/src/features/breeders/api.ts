@@ -1,12 +1,12 @@
 import {
   AdminVerificationRequestSchema,
-  DocumentReviewListSchema,
   VerificationRequestListSchema,
   VerificationSummarySchema,
   type AdminVerificationRequest,
   type DecideVerificationRequestInput,
   type VerificationStatus,
 } from '@anico/shared-schemas';
+import { DOCUMENT_QUEUE_LIMIT } from '@/features/documents/api';
 import { apiBlob, apiRequest, isApiError } from '@/shared/lib/http';
 
 const base = '/api/breeder/verification-requests';
@@ -41,18 +41,6 @@ export const requestDetailQuery = (id: string) => ({
       schema: AdminVerificationRequestSchema,
     }),
 });
-
-/** The animal-service queue holds at most this many pending documents. */
-export const DOCUMENT_QUEUE_LIMIT = 500;
-
-export const pendingDocumentsQuery = {
-  queryKey: ['document-reviews'],
-  queryFn: ({ signal }: { signal: AbortSignal }) =>
-    apiRequest('/api/animal/document-reviews', {
-      signal,
-      schema: DocumentReviewListSchema,
-    }),
-};
 
 export const decideRequest = (
   id: string,
@@ -92,12 +80,6 @@ export function decisionConflict(error: unknown): {
     current: parsed?.success ? parsed.data : null,
   };
 }
-
-const dateTime = new Intl.DateTimeFormat('cs-CZ', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
-export const formatDateTime = (iso: string) => dateTime.format(new Date(iso));
 
 export const breederName = ({ breeder }: AdminVerificationRequest) =>
   [breeder.firstName, breeder.lastName].filter(Boolean).join(' ') ||

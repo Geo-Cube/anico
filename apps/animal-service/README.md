@@ -121,7 +121,7 @@ Návrh v [`docs/design/uc-03-doklady.md`](../../docs/design/uc-03-doklady.md).
 | -------------------------------------------------------- | ------------------------------------------------------------------ |
 | `POST /animals/:animalId/documents`                      | Multipart `documentTypes` + `files` (1–10, PDF/JPEG/PNG, ≤ 10 MiB) |
 | `GET /animals/:animalId/documents`                       | Aktuální verze a odvozený stav dokladů                             |
-| `GET /animals/:animalId/documents/:documentId/history`   | Všechny verze řady, nejstarší první                                |
+| `GET /animals/:animalId/documents/:documentId/history`   | Všechny verze řady, nejstarší první, a údaje zvířete               |
 | `GET /animals/:animalId/documents/:documentId/file`      | Stažení verze jako `attachment`                                    |
 | `POST /animals/:animalId/documents/:documentId/versions` | Nová verze aktuálního zamítnutého dokladu (multipart `file`)       |
 | `POST /animals/:animalId/documents/:documentId/decision` | Admin: `APPROVED`, nebo `REJECTED` s `rejectionReason`             |

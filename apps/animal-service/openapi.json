@@ -1097,10 +1097,37 @@
         "required": ["animalId", "documentsState", "documents"],
         "additionalProperties": false
       },
+      "DocumentAnimal": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/AnimalId" },
+          "ownerUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "species": { "$ref": "#/components/schemas/AnimalSpecies" },
+          "breedId": { "type": "string" },
+          "sex": { "$ref": "#/components/schemas/AnimalSex" },
+          "microchipNumber": { "type": ["string", "null"] }
+        },
+        "required": [
+          "id",
+          "ownerUserId",
+          "name",
+          "species",
+          "breedId",
+          "sex",
+          "microchipNumber"
+        ],
+        "additionalProperties": false
+      },
       "AnimalDocumentHistory": {
         "type": "object",
         "properties": {
           "animalId": { "$ref": "#/components/schemas/AnimalId" },
+          "animal": { "$ref": "#/components/schemas/DocumentAnimal" },
           "documentType": { "$ref": "#/components/schemas/AnimalDocumentType" },
           "versions": {
             "minItems": 1,
@@ -1108,7 +1135,7 @@
             "items": { "$ref": "#/components/schemas/AnimalDocument" }
           }
         },
-        "required": ["animalId", "documentType", "versions"],
+        "required": ["animalId", "animal", "documentType", "versions"],
         "additionalProperties": false
       },
       "DecideAnimalDocument": {
@@ -1140,32 +1167,7 @@
         "type": "object",
         "properties": {
           "document": { "$ref": "#/components/schemas/AnimalDocument" },
-          "animal": {
-            "type": "object",
-            "properties": {
-              "id": { "$ref": "#/components/schemas/AnimalId" },
-              "ownerUserId": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-              },
-              "name": { "type": "string", "minLength": 1, "maxLength": 120 },
-              "species": { "$ref": "#/components/schemas/AnimalSpecies" },
-              "breedId": { "type": "string" },
-              "sex": { "$ref": "#/components/schemas/AnimalSex" },
-              "microchipNumber": { "type": ["string", "null"] }
-            },
-            "required": [
-              "id",
-              "ownerUserId",
-              "name",
-              "species",
-              "breedId",
-              "sex",
-              "microchipNumber"
-            ],
-            "additionalProperties": false
-          }
+          "animal": { "$ref": "#/components/schemas/DocumentAnimal" }
         },
         "required": ["document", "animal"],
         "additionalProperties": false

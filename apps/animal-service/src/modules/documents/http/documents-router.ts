@@ -152,10 +152,15 @@ export function DocumentsRouter(dependencies: {
     '/animals/:animalId/documents/:documentId/history',
     animalRoute(async (req, res, animalId) => {
       const documentId = documentIdOf(req);
-      const versions = await documents.history(req.auth, animalId, documentId);
+      const { animal, versions } = await documents.history(
+        req.auth,
+        animalId,
+        documentId,
+      );
       res.json(
         contract(AnimalDocumentHistorySchema, {
           animalId,
+          animal,
           documentType: versions[0]!.documentType,
           versions: versions.map((version) => toDto(animalId, version)),
         }),

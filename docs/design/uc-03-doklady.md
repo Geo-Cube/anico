@@ -103,4 +103,23 @@ Stav k 6. 11. 2026 po zrušení R7. Nic z toho neblokuje DoD UC-03; pořadí nen
     jsou kopie; kandidát na sdílený serverový balíček.
 15. **OpenAPI animal-service** už popisuje zvířata, fotografie i doklady; chybí servírování `/openapi.json`
     a Swagger UI (`/docs`) mimo produkci jako u breeder-service.
-16. **Frontend dokladů** (podání, historie, stažení, fronta a posouzení admina) zatím není.
+16. ~~**Frontend dokladů**~~ – hotovo, viz §6. Chybí ověření celého průchodu v prohlížeči proti devu.
+
+## 6. Frontend (WF 01–09)
+
+`apps/frontend/src/features/documents`, volání přes `/api/animal`.
+
+- **Chovatel** (pod `VerifiedBreederGate`): sekce Doklady na detailu zvířete `/zvirata/:id` (WF 01) se stavem
+  dokladů, aktuální verzí každé řady, výsledkem, datem posouzení a trvale zobrazeným důvodem zamítnutí (WF 08).
+  Nahrání `/zvirata/:id/doklady/nahrat` (WF 02/03): soubory se přidávají do seznamu, každý s povinným typem;
+  nepodporovaný formát (podle MIME typu) nebo soubor nad 10 MiB zůstane v seznamu označený a odeslání zablokuje,
+  nejvýše 10 souborů. Historie verzí `/zvirata/:id/doklady/:documentId`, doplnění
+  `/zvirata/:id/doklady/:documentId/doplnit` (WF 09). „Doplnit doklad“ je jen u `isCurrent` verze ve stavu
+  `REJECTED`; jinak stránka doplnění vysvětlí, proč nelze. Výsledek podání je zavíratelná zpráva na detailu.
+- **Administrátor** (`/administrace/chovatele/doklady`, role `admin`/`owner`): fronta (WF 04) s číslem čipu
+  (chybějící zvýrazněno), detail `doklady/:animalId/:documentId` s historií řady včetně dřívějších důvodů zamítnutí
+  (WF 05), schválení po potvrzení v dialogu, zamítnutí s povinným důvodem do 500 znaků (WF 06), po uložení
+  návrat do fronty se zavíratelnou zprávou (WF 07). 409 (A4) zobrazí uložený výsledek. Údaje o zvířeti (jméno,
+  plemeno, číslo čipu, vlastník) detail bere z odpovědi historie, takže funguje i u už posouzeného dokladu.
+- Soubory se otevírají i stahují přes `fetch` jako blob (`useFileDownload`), aby chyba oprávnění skončila
+  zprávou ve stránce. Názvy typů: Průkaz původu, Výsledky zdravotních vyšetření, Doklad o chovnosti.

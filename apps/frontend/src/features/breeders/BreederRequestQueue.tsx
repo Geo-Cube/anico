@@ -7,7 +7,8 @@ import { Alert } from '@/shared/ui/alert';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
 import { QueryErrorState } from '@/shared/ui/state-panel';
-import { breederName, formatDateTime, requestListQuery } from './api';
+import { formatDateTime } from '@/shared/lib/format';
+import { breederName, requestListQuery } from './api';
 import {
   isDecisionNoticeState,
   parseStatusFilter,

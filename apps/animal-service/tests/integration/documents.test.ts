@@ -423,6 +423,29 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
       reviewedBy: admin.userId,
     });
     expect((await download(animalId, v1).expect(200)).body).toEqual(PDF);
+    // posuzovatel nemá přístup ke správě zvířat: údaje pro ověření nese historie (stejně jako fronta)
+    const adminHistory = AnimalDocumentHistorySchema.parse(
+      (
+        await request(app)
+          .get(`/animals/${animalId}/documents/${v1}/history`)
+          .set(await auth(admin))
+          .expect(200)
+      ).body,
+    );
+    const queued = (
+      await request(app)
+        .get('/document-reviews')
+        .set(await auth(admin))
+        .expect(200)
+    ).body.items.find(
+      (item: { document: { id: string } }) => item.document.id === v2.id,
+    );
+    expect(adminHistory.animal).toEqual(queued.animal);
+    expect(adminHistory.animal).toMatchObject({
+      id: animalId,
+      ownerUserId: owner.userId,
+    });
+    expect(history.animal).toEqual(adminHistory.animal);
     const staleDecision = await decide(animalId, v1, { decision: 'APPROVED' });
     expect(staleDecision.status).toBe(409);
     expect(staleDecision.body.current.id).toBe(v2.id);
