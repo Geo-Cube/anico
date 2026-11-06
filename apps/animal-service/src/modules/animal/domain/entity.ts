@@ -1,9 +1,23 @@
-import type { AnimalProfile, ListAnimalsQuery } from '@anico/shared-schemas';
+import type {
+  AnimalDocumentsState,
+  AnimalPhotoSize,
+  AnimalProfile,
+  ListAnimalsQuery,
+} from '@anico/shared-schemas';
 import type { FileContentType } from '../../../files/file-content.js';
 
 export type PhotoContentType = Extract<FileContentType, `image/${string}`>;
 
-/** Uložená fotografie; `fileReference` nikdy neopouští službu. */
+/** Zmenšená kopie fotografie (vždy JPEG); soubor je v úložišti zmenšenin. */
+export interface PhotoVariant {
+  fileReference: string;
+  size: number;
+}
+
+/**
+ * Uložená fotografie; `fileReference` nikdy neopouští službu. `variants` jsou zmenšeniny
+ * pro karty a galerii; fotografie nahrané před jejich zavedením je nemají (`null`).
+ */
 export interface AnimalPhoto {
   id: string;
   file: {
@@ -12,7 +26,16 @@ export interface AnimalPhoto {
     contentType: PhotoContentType;
     size: number;
   };
+  variants: Record<AnimalPhotoSize, PhotoVariant> | null;
   isPrimary: boolean;
+}
+
+/**
+ * Vytváří zmenšeniny nahrané fotografie (otočené podle EXIF, bez metadat). Obsah, který
+ * nejde dekódovat jako obrázek, vrací `null`.
+ */
+export interface PhotoResizer {
+  variants(content: Buffer): Promise<Record<AnimalPhotoSize, Buffer> | null>;
 }
 
 /** Všechny údaje profilu; nevyplněné volitelné údaje jsou `null` (UC-02/1). */
@@ -20,7 +43,10 @@ export type ProfileValues = {
   [Key in keyof AnimalProfile]-?: Exclude<AnimalProfile[Key], undefined>;
 };
 
-/** Zvíře bez dokladů. `revision` chrání společný zápis profilu a fotografií před souběhem. */
+/**
+ * Zvíře bez dokladů, jen s jejich odvozeným stavem (UC-03/7) pro kartu a detail.
+ * `revision` chrání společný zápis profilu a fotografií před souběhem.
+ */
 export interface AnimalRecord extends ProfileValues {
   id: string;
   ownerUserId: string;
@@ -28,6 +54,7 @@ export interface AnimalRecord extends ProfileValues {
   revision: number;
   createdAt: Date;
   updatedAt: Date;
+  documentsState: AnimalDocumentsState;
 }
 
 export interface AnimalRepository {
@@ -60,7 +87,11 @@ export interface AnimalRepository {
   deleteOwned(
     id: string,
     ownerUserId: string,
-  ): Promise<{ documentFiles: string[]; photoFiles: string[] } | null>;
+  ): Promise<{
+    documentFiles: string[];
+    photoFiles: string[];
+    photoVariantFiles: string[];
+  } | null>;
 }
 
 /** Místní projekce ověřených chovatelů. Chyba čtení vyhazuje výjimku. */

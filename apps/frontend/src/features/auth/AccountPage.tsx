@@ -37,7 +37,7 @@ export function AccountPage() {
     ? isApiError(connect.error) &&
       connect.error.code === 'RECENT_LOGIN_REQUIRED'
       ? loginErrorMessages.RECENT_LOGIN_REQUIRED
-      : 'Propojení se nepodařilo spustit. Obnov stránku a zkus to znovu.'
+      : 'Propojení se nepodařilo spustit. Obnovte stránku a zkuste to znovu.'
     : undefined;
 
   return (
@@ -122,8 +122,8 @@ export function AccountPage() {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Propojení vyžaduje čerstvé přihlášení: spusť ho do pěti minut od
-                přihlášení.
+                Propojení vyžaduje čerstvé přihlášení: spusťte ho do pěti minut
+                od přihlášení.
               </p>
             </div>
           )

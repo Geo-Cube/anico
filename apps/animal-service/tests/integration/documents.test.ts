@@ -222,13 +222,20 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
     expect(AnimalDocumentListSchema.parse(listed.body).documentsState).toBe(
       'PENDING',
     );
-    // profil zvířete se nemění a doklady neprozrazuje
+    // profil zvířete nese jen odvozený stav dokladů, ne doklady samotné (WF 01)
     const animal = await request(app)
       .get(`/animals/${animalId}`)
       .set(await auth(owner))
       .expect(200);
-    expect(AnimalSchema.safeParse(animal.body).success).toBe(true);
+    expect(AnimalSchema.parse(animal.body).documentsState).toBe('PENDING');
     expect(animal.body).not.toHaveProperty('documents');
+    const animals = await request(app)
+      .get('/animals')
+      .set(await auth(owner))
+      .expect(200);
+    expect(animals.body.items).toEqual([
+      expect.objectContaining({ id: animalId, documentsState: 'PENDING' }),
+    ]);
   });
 
   it('rejects unsupported content and oversized files and stores nothing', async () => {

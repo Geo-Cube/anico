@@ -140,7 +140,7 @@ describe('stav ověření chovatele', () => {
       http.get('/api/breeder/breeders/me', handler),
     );
     renderApp();
-    await screen.findByRole('heading', { name: 'Vítej, Jana Nováková' });
+    await screen.findByRole('heading', { name: 'Vítejte, Jana Nováková' });
     expect(handler).not.toHaveBeenCalled();
     expect(screen.queryByText('Účet neověřen')).not.toBeInTheDocument();
     expect(screen.queryByText('Účet ověřen')).not.toBeInTheDocument();

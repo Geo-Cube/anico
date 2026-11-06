@@ -6,6 +6,7 @@ import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
+import sharp from 'sharp';
 import {
   createIdentityVerifier,
   requireAuth,
@@ -33,8 +34,23 @@ const dog = {
   breedId: animalBreeds('dog')[0]!.id,
   sex: 'female',
 };
-const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]);
-const JPEG = Buffer.from([255, 216, 255, 2]);
+// skutečné obrázky: služba je dekóduje do zmenšenin (JPEG větší než náhled, PNG s průhledností)
+const PNG = await sharp({
+  create: {
+    width: 40,
+    height: 30,
+    channels: 4,
+    background: { r: 200, g: 100, b: 50, alpha: 0.5 },
+  },
+})
+  .png()
+  .toBuffer();
+const JPEG = await sharp({
+  create: { width: 2400, height: 1600, channels: 3, background: '#3f8c5b' },
+})
+  .jpeg()
+  .toBuffer();
+const BROKEN_PNG = Buffer.concat([PNG.subarray(0, 8), Buffer.from('broken')]);
 const optionalKeys = [
   'birthDate',
   'coatColor',
@@ -59,6 +75,8 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
   const raw = (id: string) =>
     collection().findOne({ _id: new Types.ObjectId(id) });
   const files = () => collection('animalPhotos.files').find().toArray();
+  const variantFiles = () =>
+    collection('animalPhotoVariants.files').find().toArray();
   function multipart(
     method: 'post' | 'patch',
     path: string,
@@ -137,6 +155,8 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
       'animals',
       'animalPhotos.files',
       'animalPhotos.chunks',
+      'animalPhotoVariants.files',
+      'animalPhotoVariants.chunks',
       'animalDocuments.files',
       'animalDocuments.chunks',
     ])
@@ -412,8 +432,59 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
       await multipart('post', '/animals', dog, [PNG, invalid]).expect(415);
       expect(await collection().countDocuments()).toBe(0);
       expect(await files()).toHaveLength(0);
+      expect(await variantFiles()).toHaveLength(0);
     },
   );
+
+  it('rejects an image with a valid signature that cannot be decoded', async () => {
+    await multipart('post', '/animals', dog, [PNG, BROKEN_PNG]).expect(415);
+    expect(await collection().countDocuments()).toBe(0);
+    expect(await files()).toHaveLength(0);
+    expect(await variantFiles()).toHaveLength(0);
+  });
+
+  it('serves JPEG thumbnails and previews no larger than their limit, keeping the original', async () => {
+    const animal = await create(dog, [JPEG, PNG]);
+    expect(await variantFiles()).toHaveLength(4);
+    const get = (photoId: string, size?: string) =>
+      request(app)
+        .get(`/animals/${animal.id}/photos/${photoId}/file`)
+        .query(size ? { size } : {})
+        .set(auth())
+        .buffer(true)
+        .parse((response, done) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk: Buffer) => chunks.push(chunk));
+          response.on('end', () => done(null, Buffer.concat(chunks)));
+        });
+    const [large, small] = animal.photos;
+    for (const [size, edge] of [
+      ['thumbnail', 800],
+      ['preview', 1920],
+    ] as const) {
+      const res = await get(large!.id, size).expect(200);
+      expect(res.headers['content-type']).toBe('image/jpeg');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      const meta = await sharp(res.body as Buffer).metadata();
+      expect(Math.max(meta.width, meta.height)).toBe(edge);
+      expect((res.body as Buffer).length).toBeLessThan(JPEG.length);
+    }
+    // malý obrázek se nezvětšuje; průhledné PNG je JPEG na bílém pozadí
+    const thumb = await get(small!.id, 'thumbnail').expect(200);
+    expect(await sharp(thumb.body as Buffer).metadata()).toMatchObject({
+      format: 'jpeg',
+      width: 40,
+      height: 30,
+    });
+    expect((await get(large!.id).expect(200)).body).toEqual(JPEG);
+    await get(large!.id, 'huge').expect(400);
+
+    await request(app).delete(`/animals/${animal.id}`).set(auth()).expect(204);
+    expect(await variantFiles()).toHaveLength(0);
+    expect(
+      await collection('animalPhotoVariants.chunks').countDocuments(),
+    ).toBe(0);
+  });
 
   it('rejects invalid multipart profiles, primary indices without uploads, and oversized photos without storage', async () => {
     await multipart('post', '/animals', { ...dog, weightKg: 0 }, [PNG]).expect(

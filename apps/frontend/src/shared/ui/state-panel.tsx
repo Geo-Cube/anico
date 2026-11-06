@@ -32,7 +32,7 @@ export function StatePanel({
 export function ForbiddenState() {
   return (
     <StatePanel icon={<ShieldAlert />} title="Nedostatečné oprávnění">
-      Tvůj účet k této části AniCo nemá přístup. Pokud ho potřebuješ, požádej
+      Váš účet k této části AniCo nemá přístup. Pokud ho potřebujete, požádejte
       správce o přidělení role.
     </StatePanel>
   );
@@ -56,8 +56,8 @@ export function UnavailableState({
         </Button>
       }
     >
-      Spojení s AniCo se nepodařilo. Zkontroluj připojení a zkus to znovu. Při
-      vývoji ověř také přístup k týmovému devu.
+      Spojení s AniCo se nepodařilo. Zkontrolujte připojení a zkuste to znovu.
+      Při vývoji ověřte také přístup k týmovému devu.
     </StatePanel>
   );
 }

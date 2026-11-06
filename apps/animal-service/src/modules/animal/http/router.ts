@@ -6,6 +6,7 @@ import {
   AnimalIdSchema,
   AnimalListSchema,
   AnimalPhotoIdSchema,
+  AnimalPhotoSizeSchema,
   AnimalSchema,
   AnimalSpeciesSchema,
   CreateAnimalSchema,
@@ -29,6 +30,7 @@ import type {
   AnimalRecord,
   AnimalRepository,
   BreederVerification,
+  PhotoResizer,
 } from '../domain/entity.js';
 import { MAX_PHOTO_FILE_BYTES } from '../domain/photos.js';
 
@@ -39,6 +41,9 @@ export const MAX_ANIMAL_FIELD_BYTES = 32 * 1024;
 
 const AnimalFormFieldsSchema = z.strictObject({
   [ANIMAL_FIELD]: z.string().optional(),
+});
+const PhotoFileQuerySchema = z.strictObject({
+  size: AnimalPhotoSizeSchema.optional(),
 });
 
 function toDto(animal: AnimalRecord): Animal {
@@ -63,6 +68,8 @@ const animalIdOf = (req: Request) =>
 export function AnimalRouter(dependencies: {
   repository: AnimalRepository;
   photos: FileStorage;
+  photoVariants: FileStorage;
+  resizer: PhotoResizer;
   documentFiles: FileStorage;
   verification: BreederVerification;
   newId: () => string;
@@ -157,7 +164,8 @@ export function AnimalRouter(dependencies: {
   router.get('/animals/:animalId/photos/:photoId/file', async (req, res) => {
     const animalId = animalIdOf(req);
     const photoId = AnimalPhotoIdSchema.parse(req.params.photoId);
-    const opened = await animals.openPhoto(req.auth, animalId, photoId);
+    const { size } = PhotoFileQuerySchema.parse(req.query);
+    const opened = await animals.openPhoto(req.auth, animalId, photoId, size);
     res.set(storedFileHeaders(opened.file, opened.size, 'inline'));
     try {
       await pipeline(opened.stream, res);

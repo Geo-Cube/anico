@@ -1,5 +1,7 @@
 import {
+  AnimalPhotoSizeSchema,
   AnimalProfileSchema,
+  type AnimalPhotoSize,
   type CreateAnimalInput,
   type ListAnimalsQuery,
   type UpdateAnimalInput,
@@ -18,6 +20,8 @@ import {
   type AnimalRepository,
   type BreederVerification,
   type PhotoContentType,
+  type PhotoResizer,
+  type PhotoVariant,
   type ProfileValues,
 } from '../domain/entity.js';
 import {
@@ -52,6 +56,9 @@ type CheckedUpload = PhotoUpload & {
   id: string;
   contentType: PhotoContentType;
 };
+type ResizedUpload = CheckedUpload & {
+  variants: Record<AnimalPhotoSize, Buffer>;
+};
 
 /** Interní obálka: zápis mohl proběhnout, uložené soubory se proto nesmí uklidit. */
 class UnknownWriteOutcome extends Error {
@@ -76,13 +83,17 @@ function profileOf(values: Partial<Record<keyof ProfileValues, unknown>>) {
 export function animalUseCases(dependencies: {
   repository: AnimalRepository;
   photos: FileStorage;
+  /** Zmenšeniny fotografií (JPEG) v samostatném úložišti. */
+  photoVariants: FileStorage;
+  resizer: PhotoResizer;
   /** Úložiště dokladů: smazání zvířete odstraní i soubory všech verzí (UC-02/6). */
   documentFiles: FileStorage;
   verification: BreederVerification;
   newId: () => string;
   logger: WarnLogger;
 }) {
-  const { repository, photos, documentFiles, logger } = dependencies;
+  const { repository, photos, photoVariants, documentFiles, logger } =
+    dependencies;
   const breeder = verifiedBreeder(dependencies.verification);
 
   /** Ověřený chovatel a jeho zvíře; cizí i neexistující zvíře je 404. */
@@ -108,6 +119,23 @@ export function animalUseCases(dependencies: {
     });
   }
 
+  /**
+   * Zmenšeniny až po kontrole pravidel (dekódování je drahé); stále před uložením čehokoli.
+   * Poškozený obrázek se správnou hlavičkou je také 415.
+   */
+  async function resizeUploads(
+    uploads: readonly CheckedUpload[],
+  ): Promise<ResizedUpload[]> {
+    const resized: ResizedUpload[] = [];
+    for (const upload of uploads) {
+      const variants = await dependencies.resizer.variants(upload.content);
+      if (!variants)
+        throw new AnimalError(415, 'Photo must be a valid JPEG or PNG image');
+      resized.push({ ...upload, variants });
+    }
+    return resized;
+  }
+
   /** Náhradní fotografie pro kontrolu pravidel dřív, než se cokoli uloží. */
   const unsaved = (uploads: readonly CheckedUpload[]): NewPhoto[] =>
     uploads.map(({ id, contentType, content }) => ({
@@ -118,13 +146,17 @@ export function animalUseCases(dependencies: {
         contentType,
         size: content.length,
       },
+      variants: null,
     }));
 
+  /** Originály i zmenšeniny; při chybě uklidí vše, co z tohoto volání už uložil. */
   async function storePhotos(
-    uploads: readonly CheckedUpload[],
+    uploads: readonly ResizedUpload[],
   ): Promise<NewPhoto[]> {
-    const stored: NewPhoto[] = [];
+    const savedOriginals: string[] = [];
+    const savedVariants: string[] = [];
     try {
+      const stored: NewPhoto[] = [];
       for (const upload of uploads) {
         const fileName = sanitizeFileName(upload.fileName, 'photo');
         const fileReference = await photos.save({
@@ -132,6 +164,18 @@ export function animalUseCases(dependencies: {
           fileName,
           contentType: upload.contentType,
         });
+        savedOriginals.push(fileReference);
+        const variants = {} as Record<AnimalPhotoSize, PhotoVariant>;
+        for (const size of AnimalPhotoSizeSchema.options) {
+          const content = upload.variants[size];
+          const reference = await photoVariants.save({
+            content,
+            fileName: `${size}.jpg`,
+            contentType: 'image/jpeg',
+          });
+          savedVariants.push(reference);
+          variants[size] = { fileReference: reference, size: content.length };
+        }
         stored.push({
           id: upload.id,
           file: {
@@ -140,16 +184,37 @@ export function animalUseCases(dependencies: {
             contentType: upload.contentType,
             size: upload.content.length,
           },
+          variants,
         });
       }
       return stored;
     } catch (error) {
-      await removeFiles(photos, stored.map(fileReferenceOf), 'Photo');
+      await removeFiles(photos, savedOriginals, 'Photo');
+      await removeFiles(photoVariants, savedVariants, 'Photo');
       throw error;
     }
   }
 
-  const fileReferenceOf = (photo: NewPhoto) => photo.file.fileReference;
+  const variantReferencesOf = (photo: NewPhoto) =>
+    photo.variants
+      ? AnimalPhotoSizeSchema.options.map(
+          (size) => photo.variants![size].fileReference,
+        )
+      : [];
+
+  /** Soubory fotografií včetně zmenšenin; selhání se jen zaloguje. */
+  async function removePhotoFiles(removed: readonly NewPhoto[]) {
+    await removeFiles(
+      photos,
+      removed.map((photo) => photo.file.fileReference),
+      'Photo',
+    );
+    await removeFiles(
+      photoVariants,
+      removed.flatMap(variantReferencesOf),
+      'Photo',
+    );
+  }
 
   /** Úklid po zápisu; selhání se jen zaloguje (osiřelý soubor nemá cestu k otevření). */
   async function removeFiles(
@@ -188,7 +253,11 @@ export function animalUseCases(dependencies: {
       }
     if (added.length > 0)
       logger.warn(
-        { animalId: id, fileReferences: added.map(fileReferenceOf) },
+        {
+          animalId: id,
+          fileReferences: added.map((photo) => photo.file.fileReference),
+          variantReferences: added.flatMap(variantReferencesOf),
+        },
         'Animal write outcome unknown; photo files kept for deferred cleanup',
       );
     return null;
@@ -223,7 +292,7 @@ export function animalUseCases(dependencies: {
         primaryUploadIndex,
       });
       planPhotos([], change(unsaved(checked)));
-      const added = await storePhotos(checked);
+      const added = await storePhotos(await resizeUploads(checked));
       const id = dependencies.newId();
       try {
         return await repository.create({
@@ -278,7 +347,7 @@ export function animalUseCases(dependencies: {
         }),
       });
       next(animal, unsaved(checked));
-      const added = await storePhotos(checked);
+      const added = await storePhotos(await resizeUploads(checked));
       try {
         let current = animal;
         for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
@@ -298,18 +367,14 @@ export function animalUseCases(dependencies: {
             saved = persisted;
           }
           if (saved) {
-            await removeFiles(
-              photos,
-              planned.removed.map(fileReferenceOf),
-              'Photo',
-            );
+            await removePhotoFiles(planned.removed);
             return saved;
           }
         }
         throw new AnimalError(409, 'Animal changed concurrently; retry');
       } catch (error) {
         if (error instanceof UnknownWriteOutcome) throw error.cause;
-        await removeFiles(photos, added.map(fileReferenceOf), 'Photo');
+        await removePhotoFiles(added);
         throw error;
       }
     },
@@ -321,15 +386,36 @@ export function animalUseCases(dependencies: {
       if (!deleted) throw animalNotFound();
       await removeFiles(documentFiles, deleted.documentFiles, 'Document');
       await removeFiles(photos, deleted.photoFiles, 'Photo');
+      await removeFiles(photoVariants, deleted.photoVariantFiles, 'Photo');
     },
 
-    /** Soubor fotografie jen pro ověřeného vlastníka zvířete. */
-    async openPhoto(actor: Identity | undefined, id: string, photoId: string) {
+    /**
+     * Soubor fotografie jen pro ověřeného vlastníka zvířete. Zmenšenina (`size`) je JPEG;
+     * fotografie bez zmenšenin (nahrané dřív) vrací originál.
+     */
+    async openPhoto(
+      actor: Identity | undefined,
+      id: string,
+      photoId: string,
+      size?: AnimalPhotoSize,
+    ) {
       const { animal } = await ownedAnimal(actor, id);
       const photo = animal.photos.find(
         (candidate) => candidate.id === photoId.toLowerCase(),
       );
       if (!photo) throw photoNotFound();
+      const variant = size ? photo.variants?.[size] : undefined;
+      if (variant) {
+        const opened = await photoVariants.open(variant.fileReference);
+        if (!opened) throw new Error('Stored photo variant file is missing');
+        return {
+          ...opened,
+          file: {
+            fileName: photo.file.fileName.replace(/\.[^.]*$/, '') + '.jpg',
+            contentType: 'image/jpeg' as const,
+          },
+        };
+      }
       const opened = await photos.open(photo.file.fileReference);
       if (!opened) throw new Error('Stored photo file is missing');
       return { ...opened, file: photo.file };

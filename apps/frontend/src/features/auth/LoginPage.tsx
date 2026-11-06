@@ -111,7 +111,7 @@ export function LoginPage() {
       )}
       {!error && state.sessionEnded && (
         <PageNotice tone="warning" onDismiss={dismissNotice}>
-          Přihlášení vypršelo. Přihlas se znovu.
+          Přihlášení vypršelo. Přihlaste se znovu.
         </PageNotice>
       )}
 
@@ -130,7 +130,7 @@ export function LoginPage() {
             Ověřený katalog chovných zvířat.
           </p>
           <p className="mt-5 text-lg leading-relaxed text-white/70">
-            Najdi vhodného partnera pro svůj chov u ověřených chovatelů.
+            Najděte vhodného partnera pro svůj chov u ověřených chovatelů.
           </p>
         </div>
         <p className="relative text-sm text-white/50">
@@ -145,7 +145,7 @@ export function LoginPage() {
             Přihlášení
           </h1>
           <p className="mt-2 text-center text-[15px] text-muted-foreground">
-            Pokračuj účtem, který už používáš.
+            Pokračujte účtem, který už používáte.
           </p>
 
           <div className="mt-9 flex flex-col gap-3">
@@ -180,7 +180,9 @@ export function LoginPage() {
               <Alert variant="error">
                 <TriangleAlert aria-hidden />
                 <div className="flex flex-col items-start gap-2">
-                  <p>Přihlášení je teď nedostupné. Zkus to prosím za chvíli.</p>
+                  <p>
+                    Přihlášení je teď nedostupné. Zkuste to prosím za chvíli.
+                  </p>
                   <Button
                     size="sm"
                     variant="outline"

@@ -56,7 +56,8 @@ src/
 Modul `animal` spravuje profily vlastních zvířat a jejich fotografie (UC-02), modul
 `documents` doklady (UC-03). Kolekce je `animals`; vlastník se bere výhradně
 z ověřeného `req.auth.userId`, ne z formuláře. Soubory jsou v GridFS bucketech
-`animalPhotos` a `animalDocuments`. Návrh: [`docs/design/uc-02-zvirata.md`](../../docs/design/uc-02-zvirata.md).
+`animalPhotos` (originály), `animalPhotoVariants` (JPEG zmenšeniny ze `sharp`) a `animalDocuments`.
+Návrh: [`docs/design/uc-02-zvirata.md`](../../docs/design/uc-02-zvirata.md).
 
 ## Entita zvířete
 
