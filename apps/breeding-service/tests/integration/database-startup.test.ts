@@ -41,7 +41,14 @@ function start(uri: string, port: number) {
   child.stderr!.on('data', (value) => {
     output += value.toString();
   });
-  return { child, output: () => output };
+  /** Čeká na skutečný signál procesu („Server listening“), ne na odhadnutý čas; `false` při ukončení. */
+  const listening = new Promise<boolean>((resolve) => {
+    child.stdout!.on('data', () => {
+      if (output.includes('Server listening')) resolve(true);
+    });
+    child.once('exit', () => resolve(false));
+  });
+  return { child, output: () => output, listening };
 }
 async function stop(child: ChildProcess) {
   if (child.exitCode !== null || child.signalCode !== null) return;
@@ -65,63 +72,63 @@ describe('migration gate before actual HTTP startup', () => {
     await connection.close();
     await mongo.stop();
   });
-  it('finishes migrations before readiness and refuses an unfinished migration on restart', async () => {
-    const id = new Types.ObjectId();
-    await connection
-      .db!.collection('breedingplans')
-      .insertOne({ _id: id, name: 'Legacy plan' });
-    const port = await freePort();
-    const uri = mongo.getUri('anico_breeding_startup_test');
-    const running = start(uri, port);
-    try {
-      let ready = false;
-      for (let attempt = 0; attempt < 100; attempt++) {
-        try {
-          const response = await fetch(`http://127.0.0.1:${port}/ready`);
-          if (response.ok) {
-            ready = true;
-            break;
-          }
-        } catch {}
-        if (running.child.exitCode !== null) break;
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      expect(ready, running.output()).toBe(true);
-      expect(
-        (await fetch(`http://127.0.0.1:${port}/api/breeding-plans`)).status,
-      ).toBe(401);
-      expect(
-        (await connection.db!.collection('breedingplans').findOne({ _id: id }))
-          ?.createdAt,
-      ).toEqual(id.getTimestamp());
-      const change = (await loadMigrations())[0]!;
-      const history = connection.db!.collection<{ _id: string; state: string }>(
-        HISTORY,
-      );
-      expect((await history.findOne({ _id: change.id }))?.state).toBe(
-        'applied',
-      );
-      await stop(running.child);
-      await history.updateOne(
-        { _id: change.id },
-        { $set: { state: 'failed' } },
-      );
-      const blocked = start(uri, port);
+  // Dva skutečné starty přes tsx: na CI pod coverage trvá každý i přes 5 s.
+  it(
+    'finishes migrations before readiness and refuses an unfinished migration on restart',
+    { timeout: 60_000 },
+    async () => {
+      const id = new Types.ObjectId();
+      await connection
+        .db!.collection('breedingplans')
+        .insertOne({ _id: id, name: 'Legacy plan' });
+      const port = await freePort();
+      const uri = mongo.getUri('anico_breeding_startup_test');
+      const running = start(uri, port);
       try {
-        const [code] = await once(blocked.child, 'exit');
-        expect(code).toBe(1);
-        expect(blocked.output()).toContain('Database migrations failed');
-        expect(blocked.output()).not.toContain(uri);
-        await expect(
-          fetch(`http://127.0.0.1:${port}/ready`, {
-            signal: AbortSignal.timeout(1000),
-          }),
-        ).rejects.toThrow();
+        expect(await running.listening, running.output()).toBe(true);
+        expect((await fetch(`http://127.0.0.1:${port}/ready`)).status).toBe(
+          200,
+        );
+        expect(
+          (await fetch(`http://127.0.0.1:${port}/api/breeding-plans`)).status,
+        ).toBe(401);
+        expect(
+          (
+            await connection
+              .db!.collection('breedingplans')
+              .findOne({ _id: id })
+          )?.createdAt,
+        ).toEqual(id.getTimestamp());
+        const change = (await loadMigrations())[0]!;
+        const history = connection.db!.collection<{
+          _id: string;
+          state: string;
+        }>(HISTORY);
+        expect((await history.findOne({ _id: change.id }))?.state).toBe(
+          'applied',
+        );
+        await stop(running.child);
+        await history.updateOne(
+          { _id: change.id },
+          { $set: { state: 'failed' } },
+        );
+        const blocked = start(uri, port);
+        try {
+          const [code] = await once(blocked.child, 'exit');
+          expect(code).toBe(1);
+          expect(blocked.output()).toContain('Database migrations failed');
+          expect(blocked.output()).not.toContain(uri);
+          await expect(
+            fetch(`http://127.0.0.1:${port}/ready`, {
+              signal: AbortSignal.timeout(1000),
+            }),
+          ).rejects.toThrow();
+        } finally {
+          await stop(blocked.child);
+        }
       } finally {
-        await stop(blocked.child);
+        await stop(running.child);
       }
-    } finally {
-      await stop(running.child);
-    }
-  });
+    },
+  );
 });
