@@ -20,6 +20,7 @@ import {
   downloadCertificate,
   requestDetailKey,
   requestDetailQuery,
+  STATUS_LABEL,
   verificationKey,
 } from './api';
 import { formatDateTime } from '@/shared/lib/format';
@@ -30,6 +31,7 @@ import {
 } from './queue-location';
 import { ApproveRequestDialog } from './ApproveRequestDialog';
 import { RejectRequestDialog } from './RejectRequestDialog';
+import { ReturnRequestDialog } from './ReturnRequestDialog';
 import { StatusChip } from './StatusChip';
 
 const FORMAT_LABEL: Record<
@@ -51,7 +53,10 @@ const CONFLICT_TEXT = {
 const SAVED_TEXT = {
   APPROVED: 'Ověření účtu bylo schváleno.',
   REJECTED: 'Ověření účtu bylo zamítnuto.',
+  RETURNED: 'Žádost byla vrácena chovateli k doplnění.',
 } as const;
+
+type DecisionKind = 'approve' | 'reject' | 'return';
 
 /** E-maily se zatím nedoručují (notifikátor jen loguje); zpráva je simulace. */
 const EMAIL_SIMULATION_TEXT =
@@ -62,7 +67,7 @@ function decisionErrorText(error: unknown): string {
     return 'K posuzování žádostí nemáte oprávnění.';
   if (isApiError(error) && error.status === 404) return 'Žádost už neexistuje.';
   if (isApiError(error) && error.status === 400)
-    return 'Rozhodnutí není platné. Zkontrolujte důvod zamítnutí (nejvýše 500 znaků).';
+    return 'Rozhodnutí není platné. Zkontrolujte uvedený důvod (nejvýše 500 znaků).';
   return 'Rozhodnutí se nepodařilo uložit kvůli chybě spojení. Zkuste to znovu.';
 }
 
@@ -134,7 +139,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
   // Revize, kterou administrátor viděl při otevření dialogu; rozhodnutí ji
   // posílá, takže nikdy neschválí novější, nezkontrolované podání.
   const [openDialog, setOpenDialog] = useState<{
-    kind: 'approve' | 'reject';
+    kind: DecisionKind;
     revision: number;
   } | null>(null);
   const [conflict, setConflict] = useState<keyof typeof CONFLICT_TEXT | null>(
@@ -157,7 +162,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
       client.setQueryData(requestDetailKey(request.id), saved);
       await client.invalidateQueries({ queryKey: verificationKey });
       if (generation !== sessionGeneration(client)) return;
-      if (saved.status !== 'APPROVED' && saved.status !== 'REJECTED') return;
+      if (saved.status === 'PENDING') return;
       const notice: DecisionNoticeState = {
         notice: `${SAVED_TEXT[saved.status]} ${EMAIL_SIMULATION_TEXT}`,
       };
@@ -209,7 +214,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
   const dialog = outdated ? null : openDialog;
   const shownConflict = conflict ?? outdated;
 
-  const openDecision = (kind: 'approve' | 'reject') => {
+  const openDecision = (kind: DecisionKind) => {
     decide.reset();
     setConflict(null);
     setOpenDialog({ kind, revision: request.revision });
@@ -276,7 +281,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
               <time dateTime={request.lastSubmittedAt}>
                 {formatDateTime(request.lastSubmittedAt)}
               </time>
-              {request.revision > 1 && ` (oprava č. ${request.revision - 1})`}
+              {request.revision > 1 && ` (verze ${request.revision})`}
             </dd>
           </dl>
         </Card>
@@ -332,8 +337,15 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
           Stav žádosti
         </p>
         <StatusChip status={request.status} />
+        {request.status === 'PENDING' && request.revision > 1 && (
+          <p className="text-sm font-semibold">
+            Opravené podání (verze {request.revision})
+          </p>
+        )}
         <p className="text-sm text-muted-foreground">
-          Údaje a přílohu porovnejte s příslušnou evidencí chovu.
+          {request.status === 'RETURNED'
+            ? 'Žádost čeká na opravu od chovatele. Rozhodnout bude možné po jejím opětovném odeslání.'
+            : 'Údaje a přílohu porovnejte s příslušnou evidencí chovu.'}
         </p>
         {request.reviewedAt && (
           <div className="flex flex-col gap-2 border-t border-border pt-3 text-sm">
@@ -366,6 +378,44 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
         )}
       </Card>
 
+      {request.reviewHistory.length >
+        (request.status === 'PENDING' ? 0 : 1) && (
+        <Card className="flex flex-col gap-3 p-6">
+          <h2 id="review-history-title" className="text-lg font-semibold">
+            Historie posouzení
+          </h2>
+          <ol
+            aria-labelledby="review-history-title"
+            className="flex flex-col divide-y divide-border text-sm"
+          >
+            {request.reviewHistory.map((review) => (
+              <li
+                key={`${review.revision}-${review.reviewedAt}`}
+                className="flex flex-col gap-1 py-2 first:pt-0 last:pb-0"
+              >
+                <p>
+                  <strong className="font-semibold">
+                    {STATUS_LABEL[review.decision]}
+                  </strong>{' '}
+                  <span className="text-muted-foreground">
+                    · verze {review.revision} ·{' '}
+                    <time dateTime={review.reviewedAt}>
+                      {formatDateTime(review.reviewedAt)}
+                    </time>
+                  </span>
+                </p>
+                {review.reason && (
+                  <p>
+                    <span className="font-semibold">Důvod:</span>{' '}
+                    {review.reason}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ol>
+        </Card>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button
           variant="outline"
@@ -382,6 +432,13 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
               disabled={isSaving}
             >
               Zamítnout
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => openDecision('return')}
+              disabled={isSaving}
+            >
+              Vrátit k doplnění
             </Button>
             <Button onClick={() => openDecision('approve')} disabled={isSaving}>
               Schválit ověření
@@ -429,6 +486,27 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
             decision: 'REJECTED',
             revision: dialog.revision,
             rejectionReason: reason,
+          })
+        }
+      />
+      <ReturnRequestDialog
+        open={dialog?.kind === 'return'}
+        isSaving={isSaving}
+        error={
+          dialog?.kind === 'return' && decisionError !== null
+            ? decisionErrorText(decisionError)
+            : null
+        }
+        title="Vrátit žádost k doplnění"
+        placeholder="Např.: Nahrajte čitelný sken certifikátu včetně registračního čísla stanice."
+        note="Důvod uvidí chovatel u žádosti a v e-mailu; podle něj žádost opraví a odešle znovu."
+        onClose={() => setOpenDialog(null)}
+        onConfirm={(reason) =>
+          dialog &&
+          decide.mutate({
+            decision: 'RETURNED',
+            revision: dialog.revision,
+            returnReason: reason,
           })
         }
       />

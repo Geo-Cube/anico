@@ -77,6 +77,9 @@ describe('stav ověření chovatele', () => {
     expect(
       screen.queryByRole('link', { name: 'Pokračovat' }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /žádost/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('vysvětluje stav před prvním odesláním', async () => {
@@ -86,6 +89,9 @@ describe('stav ověření chovatele', () => {
         'Žádost o ověření chovatele jste zatím neodeslali.',
       ),
     ).toBeVisible();
+    expect(
+      screen.getByRole('link', { name: 'Podat žádost o ověření' }),
+    ).toHaveAttribute('href', '/overeni-chovatele');
   });
 
   it('ukazuje důvod zamítnutí a datum rozhodnutí', async () => {
@@ -110,6 +116,9 @@ describe('stav ověření chovatele', () => {
       await screen.findByText('Žádost byla vrácena k doplnění.'),
     ).toBeVisible();
     expect(screen.getByText('Důvod: Přiložte čitelný doklad.')).toBeVisible();
+    expect(
+      screen.getByRole('link', { name: 'Doplnit žádost' }),
+    ).toHaveAttribute('href', '/overeni-chovatele');
   });
 
   it('ověřenému chovateli umožní pokračovat ke zvířatům', async () => {

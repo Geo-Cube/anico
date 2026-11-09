@@ -8,6 +8,8 @@ export const STATUS_FILTER_PARAM = 'stav';
 
 export const PENDING_QUEUE_SEARCH = `?${STATUS_FILTER_PARAM}=PENDING`;
 
+export const RETURNED_QUEUE_SEARCH = `?${STATUS_FILTER_PARAM}=RETURNED`;
+
 /** Unknown or missing filter falls back to the pending queue. */
 export function parseStatusFilter(value: string | null): VerificationStatus {
   const parsed = VerificationStatusSchema.safeParse(value);
