@@ -43,6 +43,34 @@ const rejectedByOther: AdminVerificationRequest = {
   reviewedAt: '2026-11-01T09:40:00.000Z',
   rejectionReason: 'Nečitelný certifikát.',
 };
+const returnReason = 'Doplňte čitelný sken certifikátu.';
+const returned: AdminVerificationRequest = {
+  ...pending,
+  id: '65a000000000000000000002',
+  status: 'RETURNED',
+  revision: 1,
+  reviewedBy: '7c1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b',
+  reviewedAt: '2026-11-02T10:00:00.000Z',
+  returnReason,
+  reviewHistory: [
+    {
+      decision: 'RETURNED',
+      revision: 1,
+      reviewedBy: '7c1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b',
+      reviewedAt: '2026-11-02T10:00:00.000Z',
+      reason: returnReason,
+    },
+  ],
+};
+/** Oprava vrácené žádosti: znovu PENDING, revize 2, historie s vrácením. */
+const resubmitted: AdminVerificationRequest = {
+  ...returned,
+  status: 'PENDING',
+  revision: 2,
+  reviewedBy: null,
+  reviewedAt: null,
+  returnReason: null,
+};
 
 function renderApp(path: string, client = createQueryClient()) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
@@ -180,13 +208,20 @@ describe('administrace ověření chovatelů', () => {
         }),
       ),
     );
-    renderApp('/administrace/chovatele');
+    const router = renderApp('/administrace/chovatele');
     expect(
       await screen.findByText('3 žádosti čekají na posouzení'),
     ).toBeInTheDocument();
     expect(
       await screen.findByText('0 dokladů čeká na posouzení'),
     ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('link', { name: '2 žádosti jsou vráceny k doplnění' }),
+    );
+    expect(router.state.location.pathname).toBe(
+      '/administrace/chovatele/zadosti',
+    );
+    expect(router.state.location.search).toBe('?stav=RETURNED');
   });
 
   it('otevře administraci i vlastníkovi bez role admin', async () => {
@@ -223,6 +258,148 @@ describe('administrace ověření chovatelů', () => {
       await screen.findByText('V tomto stavu nejsou žádné žádosti chovatelů.'),
     ).toBeInTheDocument();
     expect(statuses).toEqual(['PENDING', 'REJECTED']);
+  });
+
+  it('filtr Vrácené vypíše vrácené žádosti a jejich detail ukáže důvod bez akcí', async () => {
+    server.use(
+      http.get(api, ({ request }) =>
+        HttpResponse.json({
+          items:
+            new URL(request.url).searchParams.get('status') === 'RETURNED'
+              ? [returned]
+              : [pending],
+        }),
+      ),
+      http.get(`${api}/:id`, () => HttpResponse.json(returned)),
+    );
+    renderApp('/administrace/chovatele/zadosti');
+    await screen.findByRole('rowheader', { name: 'Karel Novák' });
+    await userEvent.click(screen.getByRole('link', { name: 'Vrácené' }));
+    const row = (
+      await screen.findByRole('cell', { name: 'Vráceno k doplnění' })
+    ).parentElement!;
+    expect(
+      screen.getByRole('columnheader', { name: 'Vráceno' }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      within(row).getByRole('link', { name: 'Zobrazit žádost: Karel Novák' }),
+    );
+    expect(await screen.findByText(returnReason)).toBeInTheDocument();
+    for (const name of ['Zamítnout', 'Vrátit k doplnění', 'Schválit ověření'])
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+  });
+
+  it('vrácení k doplnění vyžaduje důvod do 500 znaků a odešle oříznutý důvod', async () => {
+    const decide = vi.fn<(body: unknown, csrf: string | null) => void>();
+    server.use(
+      http.post(`${api}/:id/decision`, async ({ request }) => {
+        decide(await request.json(), request.headers.get('X-CSRF-Token'));
+        return HttpResponse.json({ ...returned, id: pending.id, revision: 2 });
+      }),
+    );
+    const router = renderApp(`/administrace/chovatele/zadosti/${pending.id}`);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Vrátit k doplnění' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    const confirm = within(dialog).getByRole('button', {
+      name: 'Potvrdit vrácení',
+    });
+    const reason = within(dialog).getByRole('textbox');
+
+    await userEvent.click(confirm);
+    expect(
+      within(dialog).getByText('Důvod vrácení je povinný.'),
+    ).toBeInTheDocument();
+    await userEvent.type(reason, '   ');
+    await userEvent.click(confirm);
+    expect(
+      within(dialog).getByText('Důvod vrácení je povinný.'),
+    ).toBeInTheDocument();
+    await userEvent.clear(reason);
+    await userEvent.click(reason);
+    await userEvent.paste('x'.repeat(501));
+    await userEvent.click(confirm);
+    expect(
+      within(dialog).getByText('Důvod může mít nejvýše 500 znaků.'),
+    ).toBeInTheDocument();
+    expect(decide).not.toHaveBeenCalled();
+
+    await userEvent.clear(reason);
+    await userEvent.type(reason, `  ${returnReason}  `);
+    await userEvent.click(confirm);
+    expect(
+      await screen.findByText(
+        /Žádost byla vrácena chovateli k doplnění\. .*simulace/,
+      ),
+    ).toBeInTheDocument();
+    expect(decide).toHaveBeenCalledExactlyOnceWith(
+      { decision: 'RETURNED', revision: 2, returnReason },
+      'csrf-token',
+    );
+    expect(router.state.location.pathname).toBe(
+      '/administrace/chovatele/zadosti',
+    );
+    expect(router.state.location.search).toBe('?stav=PENDING');
+  });
+
+  it('opravené podání ukáže verzi a historii s předchozím důvodem vrácení', async () => {
+    server.use(http.get(`${api}/:id`, () => HttpResponse.json(resubmitted)));
+    renderApp(`/administrace/chovatele/zadosti/${resubmitted.id}`);
+    expect(
+      await screen.findByText('Opravené podání (verze 2)'),
+    ).toBeInTheDocument();
+    const history = screen.getByRole('list', { name: 'Historie posouzení' });
+    const [entry] = within(history).getAllByRole('listitem');
+    expect(entry).toHaveTextContent('Vráceno k doplnění');
+    expect(entry).toHaveTextContent('verze 1');
+    expect(entry).toHaveTextContent(returnReason);
+    expect(
+      screen.getByRole('button', { name: 'Vrátit k doplnění' }),
+    ).toBeInTheDocument();
+  });
+
+  it('konflikt 409 při vrácení zavře dialog a ukáže novější podání', async () => {
+    const decide = vi.fn<(body: unknown) => void>();
+    server.use(
+      http.post(`${api}/:id/decision`, async ({ request }) => {
+        decide(await request.json());
+        return HttpResponse.json(
+          {
+            error: 'Verification revision mismatch',
+            current: { ...resubmitted, id: pending.id, revision: 3 },
+          },
+          { status: 409 },
+        );
+      }),
+    );
+    const router = renderApp(`/administrace/chovatele/zadosti/${pending.id}`);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Vrátit k doplnění' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByRole('textbox'), returnReason);
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Potvrdit vrácení' }),
+    );
+    expect(
+      await screen.findByText(/Chovatel mezitím žádost opravil/),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+    expect(
+      await screen.findByText('Opravené podání (verze 3)'),
+    ).toBeInTheDocument();
+    expect(decide).toHaveBeenCalledWith({
+      decision: 'RETURNED',
+      revision: 2,
+      returnReason,
+    });
+    expect(router.state.location.pathname).toBe(
+      `/administrace/chovatele/zadosti/${pending.id}`,
+    );
   });
 
   it('chyba načtení fronty nabídne opakování', async () => {

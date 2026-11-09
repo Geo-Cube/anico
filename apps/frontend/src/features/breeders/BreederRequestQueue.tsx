@@ -19,6 +19,7 @@ import { StatusChip } from './StatusChip';
 
 const FILTERS: { status: VerificationStatus; label: string }[] = [
   { status: 'PENDING', label: 'Čekající' },
+  { status: 'RETURNED', label: 'Vrácené' },
   { status: 'APPROVED', label: 'Schválené' },
   { status: 'REJECTED', label: 'Zamítnuté' },
 ];
@@ -126,7 +127,7 @@ export function BreederRequestQueue() {
                   Typ
                 </th>
                 <th scope="col" className={HEADER_CELL}>
-                  Odesláno
+                  {statusFilter === 'RETURNED' ? 'Vráceno' : 'Odesláno'}
                 </th>
                 <th scope="col" className={HEADER_CELL}>
                   Stav
@@ -151,6 +152,11 @@ export function BreederRequestQueue() {
                   const name = breederName(request);
                   const action =
                     request.status === 'PENDING' ? 'Posoudit' : 'Zobrazit';
+                  // Vrácená žádost čeká na chovatele od okamžiku vrácení.
+                  const shownAt =
+                    request.status === 'RETURNED' && request.reviewedAt
+                      ? request.reviewedAt
+                      : request.lastSubmittedAt;
                   return (
                     <tr
                       key={request.id}
@@ -164,8 +170,8 @@ export function BreederRequestQueue() {
                       </th>
                       <td className="px-4 py-3">{REQUEST_TYPE}</td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        <time dateTime={request.lastSubmittedAt}>
-                          {formatDateTime(request.lastSubmittedAt)}
+                        <time dateTime={shownAt}>
+                          {formatDateTime(shownAt)}
                         </time>
                       </td>
                       <td className="px-4 py-3">

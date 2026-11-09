@@ -7,9 +7,10 @@ import { reviewQueueQuery } from '@/features/documents/api';
 import {
   formatPendingCountText,
   formatPendingDocumentsText,
+  formatReturnedCountText,
   summaryQuery,
 } from './api';
-import { PENDING_QUEUE_SEARCH } from './queue-location';
+import { PENDING_QUEUE_SEARCH, RETURNED_QUEUE_SEARCH } from './queue-location';
 
 function CountText({
   query,
@@ -74,6 +75,14 @@ export function BreedersOverview() {
                 summary.data && formatPendingCountText(summary.data.pending)
               }
             />
+            {summary.data && (
+              <Link
+                to={`zadosti${RETURNED_QUEUE_SEARCH}`}
+                className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              >
+                {formatReturnedCountText(summary.data.returned)}
+              </Link>
+            )}
           </div>
           <Link
             to={`zadosti${PENDING_QUEUE_SEARCH}`}

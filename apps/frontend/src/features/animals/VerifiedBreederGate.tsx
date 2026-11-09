@@ -1,7 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { LoaderCircle, ShieldCheck } from 'lucide-react';
 import { Link, Outlet } from 'react-router';
-import { myAccountQuery } from '@/features/verification/api';
+import {
+  myAccountQuery,
+  requestActionLabel,
+  VERIFICATION_REQUEST_PATH,
+} from '@/features/verification/api';
 import { buttonVariants } from '@/shared/ui/button';
 import { StatePanel } from '@/shared/ui/state-panel';
 
@@ -22,14 +26,18 @@ export function VerifiedBreederGate() {
         Ověřuji chovatelský účet…
       </p>
     );
-  if (account.data && !account.data.isVerified)
+  if (account.data && !account.data.isVerified) {
+    const action = requestActionLabel(account.data.accountState);
     return (
       <StatePanel
         icon={<ShieldCheck />}
         title="Nejdřív ověřte chovatelský účet"
         action={
-          <Link to="/ucet" className={buttonVariants()}>
-            Přejít na účet
+          <Link
+            to={action ? VERIFICATION_REQUEST_PATH : '/ucet'}
+            className={buttonVariants()}
+          >
+            {action ?? 'Přejít na účet'}
           </Link>
         }
       >
@@ -37,5 +45,6 @@ export function VerifiedBreederGate() {
         žádost o ověření chovatele.
       </StatePanel>
     );
+  }
   return <Outlet />;
 }

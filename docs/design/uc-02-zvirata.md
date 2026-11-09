@@ -102,8 +102,8 @@ breeder-service správu neblokuje a rozhodne 403 animal-service).
 
 ## 7. Co chybí
 
-- **Ověření UC-02 na devu v prohlížeči:** služby běží na devu (`/api/animal`, `/api/breeder`, PR #35);
-  verze s UC-02 se nasadí po merge do `dev`. Frontend vyžaduje `documentsState`, proto se nasazuje spolu s animal-service.
+- **Ověření UC-02 na devu v prohlížeči:** backend i frontend jsou na devu nasazené (PR #37, #39; release `a26bbf9`
+  k 9. 11. 2026); průchod proti API podle [testování na devu](../qa/dev-testovani.md) ještě neproběhl.
 - **Odložený úklid osiřelých souborů** v `animalPhotos` a `animalPhotoVariants` (stejně jako u dokladů).
 - **Zmenšeniny starších fotografií:** dávkové doplnění pro fotografie nahrané před zavedením zmenšenin.
 - **Filtr podle stavu dokladů** (UC-03 §5).

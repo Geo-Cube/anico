@@ -257,8 +257,8 @@ describe('ověřený chovatel', () => {
       }),
     ).toBeVisible();
     expect(
-      screen.getByRole('link', { name: 'Přejít na účet' }),
-    ).toHaveAttribute('href', '/ucet');
+      screen.getByRole('link', { name: 'Podat žádost o ověření' }),
+    ).toHaveAttribute('href', '/overeni-chovatele');
     expect(list).not.toHaveBeenCalled();
   });
 

@@ -45,11 +45,12 @@ Doporučená sada (jména drž kvůli dohledatelnosti v protokolu):
 | `Tester Schválit`   | breeder       | K posouzení → Ověřený                                             |
 | `Tester Zamítnout`  | breeder       | K posouzení → Zamítnuto                                           |
 | `Tester Souběh`     | breeder       | souběh dvou administrátorů                                        |
+| `Tester Vrátit`     | breeder       | K posouzení → Vráceno k doplnění → oprava → Ověřený (ADR-0004)    |
 | `Tester Chovatel A` | breeder       | ověřený: zvířata, fotografie, doklady (UC-02, UC-03)              |
 | `Tester Chovatel B` | breeder       | ověřený: pokusy o cizí zvíře a soubory                            |
 | `Tester Admin 2`    | breeder+admin | druhý administrátor (zakládá owner)                               |
 
-Ověření `Tester Chovatel A/B`: podání (§1.4) → schválení v administraci. Animal-service
+Ověření `Tester Chovatel A/B`: podání (formulář, nebo §1.4) → schválení v administraci. Animal-service
 odemkne správu zvířat po doručení události `breeder.verified` přes NATS, obvykle do pár
 sekund; do té doby vrací 403 „Breeder is not verified“.
 
@@ -68,8 +69,10 @@ gateway, prohlížeč a stažení.
 
 ### 1.4 Konzole prohlížeče pro kroky bez obrazovky
 
-Formulář žádosti o ověření (UC-01) ve frontendu zatím chybí; podání a pokusy o cizí data
-se dělají z konzole DevTools na `https://dev.anico.online` (stejná relace, stejný CSRF):
+Formulář žádosti (`/overeni-chovatele`, §2.3) je na devu až po nasazení větve s formulářem; ověř to
+odkazem **Podat žádost o ověření** na přehledu neověřeného účtu. Konzole DevTools na
+`https://dev.anico.online` (stejná relace, stejný CSRF) dál slouží pro serverové kontroly, které formulář
+nepustí (prázdná pole, neznámá pole, dva soubory), a pro pokusy o cizí data:
 
 ```js
 // Vlož jednou; pak volej funkce níže.
@@ -156,10 +159,17 @@ Užitečné čtení: `call('GET', '/api/breeder/breeders/me')`,
 | DEV-UC01-3 | Opakované načtení Přehledu                                                                                                                                   | Stav se nemění, nevznikne druhý profil (`GET /api/breeder/breeders/me` stejné `breederId`)                                                                               | —        |
 | DEV-UC01-4 | Matice podle stavu: projdi Přehled, Můj účet, Moje zvířata, nahrání dokladu u účtů bez žádosti / K posouzení / Zamítnuto / Ověřený                           | Jen Ověřený má správu zvířat a doklady; ostatní vidí stav a důvod (u Zamítnuto důvod admina), žádnou akci správy zvířat                                                  | —        |
 
-### 2.3 První podání (konzole, `Tester Podání`)
+### 2.3 První podání (`Tester Podání`)
+
+Formulářové kroky DEV-UC01-F\* vyžadují nasazený formulář; konzolové DEV-UC01-5 až 14 ověřují server.
 
 | ID          | Scénář a kroky                                                                                               | Očekávání                                                                                                                               | Výsledek |
 | ----------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| DEV-UC01-F1 | Přehled → **Podat žádost o ověření** → formulář                                                              | Jméno, příjmení a e-mail předvyplněné z identity; stanice prázdná; certifikát povinný                                                   | —        |
+| DEV-UC01-F2 | **Odeslat žádost** bez údajů stanice a souboru; pak `animace.gif`, `certifikat-5MiB-plus-1B.pdf`             | Chyby u polí, nic se neodešle (v Síti žádný POST); **Zrušit** vrátí na přehled bez uložení                                              | —        |
+| DEV-UC01-F3 | `podvrzene-html.pdf` (přípona PDF, obsah HTML)                                                               | Prohlížeč ho pustí, server vrátí 415; chyba u pole osvědčení, žádost neodeslaná                                                         | —        |
+| DEV-UC01-F4 | Platné údaje + `Průkaz původu – …pdf` → **Odeslat žádost**                                                   | Potvrzení „Žádost byla odeslána“; přehled ukazuje čekání na posouzení; formulář už nejde otevřít (vysvětlení stavu)                     | —        |
+| DEV-UC01-F5 | Druhé okno se starým otevřeným formulářem téhož účtu odešle znovu                                            | Upozornění, že žádost už je podaná; zobrazí se aktuální stav, nic se nepřepíše                                                          | —        |
 | DEV-UC01-5  | Postupně každé povinné pole `null`, pak `'   '`                                                              | 400 `Validation failed` s názvem pole; `GET …/breeders/me` stále `NOT_SUBMITTED`                                                        | —        |
 | DEV-UC01-6  | `emailAddress: 'abc'`, `firstName` 101 znaků                                                                 | 400                                                                                                                                     | —        |
 | DEV-UC01-7  | Navíc `isVerified: 'true'` nebo `status: 'APPROVED'`                                                         | 400 (neznámé pole), účet neověřen                                                                                                       | —        |
@@ -183,6 +193,17 @@ Užitečné čtení: `call('GET', '/api/breeder/breeders/me')`,
 | DEV-UC01-20 | Chovatel na admin funkce: `Tester Neověřený` → `/administrace/chovatele`; konzole `call('GET','/api/breeder/verification-requests')`, `call('POST','/api/breeder/verification-requests/<id>/decision', JSON.stringify({decision:'APPROVED',revision:1}))` | Stránka „Nedostatečné oprávnění“; API 403; žádost beze změny                                                                  | —        |
 | DEV-UC01-21 | Cizí certifikát: chovatel `call('GET','/api/breeder/verification-requests/<id cizí žádosti>/certificate')`                                                                                                                                                | 403; vlastní certifikát jde stáhnout jen přes `/breeders/me/…` (ID z URL se nepoužívá)                                        | —        |
 | DEV-UC01-22 | Odebrání role: owner odebere roli admin účtu `Tester Admin 2` (`PUT /api/auth/users/<id>/admin`), okno 2 obnoví administraci                                                                                                                              | Okno 2 přijde o administraci (403 / Nedostatečné oprávnění) bez nového přihlášení                                             | —        |
+
+### 2.5 Vrácení k doplnění (`Tester Vrátit`, po nasazení formuláře)
+
+| ID          | Scénář a kroky                                                                                                             | Očekávání                                                                                                                      | Výsledek |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| DEV-UC01-23 | Admin: detail čekající žádosti → **Vrátit k doplnění** bez důvodu, s mezerami, s 501 znaky, pak s platným důvodem          | Neplatný důvod formulář nepustí; po uložení návrat do fronty se zprávou; žádost je ve filtru **Vrácené** a v počtu na přehledu | —        |
+| DEV-UC01-24 | Chovatel: přehled                                                                                                          | „Žádost byla vrácena k doplnění“, důvod admina, tlačítko **Doplnit žádost**; správa zvířat dál nedostupná                      | —        |
+| DEV-UC01-25 | **Doplnit žádost** → otevřít uložené osvědčení → změnit číslo stanice → odeslat bez nového souboru                         | Formulář předvyplněný, důvod vidět; potvrzení „Doplněná žádost byla odeslána“; uložené osvědčení zůstalo stejné                | —        |
+| DEV-UC01-26 | Admin: detail opravené žádosti                                                                                             | „Opravené podání (verze 2)“, nové číslo stanice, Historie posouzení s předchozím důvodem vrácení; lze znovu vrátit/rozhodnout  | —        |
+| DEV-UC01-27 | Souběh: admin otevře detail (verze 1), druhý admin žádost vrátí a chovatel ji opraví; první admin pak schválí starý detail | Konflikt „chovatel mezitím žádost opravil“, zobrazí se verze 2; nic se neschválí bez nového posouzení                          | —        |
+| DEV-UC01-28 | Druhá oprava s novým souborem (po dalším vrácení), pak schválení                                                           | Nové osvědčení nahradí staré; po schválení „Účet ověřen“ a do pár sekund správa zvířat                                         | —        |
 
 ## 3. UC-02 – Zvířata (`Tester Chovatel A`, ověřený)
 

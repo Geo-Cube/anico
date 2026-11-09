@@ -6,7 +6,11 @@ import { isApiError } from '@/shared/lib/http';
 import { Alert } from '@/shared/ui/alert';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
-import { myAccountQuery } from './api';
+import {
+  myAccountQuery,
+  requestActionLabel,
+  VERIFICATION_REQUEST_PATH,
+} from './api';
 
 const unverifiedMessages = {
   NOT_SUBMITTED: 'Žádost o ověření chovatele jste zatím neodeslali.',
@@ -57,6 +61,7 @@ export function VerificationStatusCard() {
       : accountState === 'REJECTED'
         ? verificationRequest?.rejectionReason
         : null;
+  const action = requestActionLabel(accountState);
 
   return (
     <Card
@@ -92,6 +97,11 @@ export function VerificationStatusCard() {
       {approved && (
         <Link to="/zvirata" className={buttonVariants()}>
           Pokračovat
+        </Link>
+      )}
+      {action && (
+        <Link to={VERIFICATION_REQUEST_PATH} className={buttonVariants()}>
+          {action}
         </Link>
       )}
     </Card>

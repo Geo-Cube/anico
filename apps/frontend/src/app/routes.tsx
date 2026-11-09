@@ -11,6 +11,7 @@ import { animalsRoutes } from '@/features/animals/routes';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { ProfileGate } from '@/features/profile/ProfileGate';
 import { TestAccountsPage } from '@/features/test-accounts';
+import { VerificationRequestPage } from '@/features/verification/VerificationRequestPage';
 import { buttonVariants } from '@/shared/ui/button';
 import { StatePanel } from '@/shared/ui/state-panel';
 import { AppLayout } from './AppLayout';
@@ -38,6 +39,10 @@ export const routes: RouteObject[] = [
             children: [
               { index: true, element: <DashboardPage /> },
               { path: 'ucet', element: <AccountPage /> },
+              {
+                path: 'overeni-chovatele',
+                element: <VerificationRequestPage />,
+              },
               ...animalsRoutes,
               {
                 path: 'administrace/chovatele',

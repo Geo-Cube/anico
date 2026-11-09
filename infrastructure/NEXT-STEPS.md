@@ -1,13 +1,13 @@
 # Co ještě zbývá
 
-Aktualizováno 3. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
+Aktualizováno 9. 11. 2026. Detailní historii inicializace nahrazuje tento pracovní seznam.
 Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
 
 ## Nejbližší kroky
 
 - [x] Propojit CI → GHCR → Coolify pro automatické dev nasazení.
 - [x] Po sloučení auth a dokumentace ověřit zelené CI a odpovídající release na devu.
-- [ ] Předat osobní DB konfigurace všem kolegům a ověřit jejich první spuštění.
+- [x] Předat osobní DB konfigurace kolegům; podle týmu fungují (potvrzeno 9. 11. 2026).
 - [ ] Potvrdit týmový stack, hranice mikroservis a API kontrakty.
 - [x] Nasadit Google přihlášení, společnou auth DB, runtime secrets a ForwardAuth;
       ověřit skutečné přihlášení i odhlášení. [Kontrakt](../docs/AUTENTIZACE.md).
@@ -19,15 +19,24 @@ Krátký přehled pro tým: [co máme a co zbývá](../docs/STAV-PROJEKTU.md).
       Vlastník zvolil účty ponechat oddělené; skutečné propojení neprovádíme.
 - [x] Review/CI PR #22 a #23, gateway 3, migrace a skutečný Google/Microsoft test [lokálního přihlášení](../docs/LOKALNI-PRIHLASENI.md); ověřené obě API, logout a aktualizovaný recovery release.
 - [ ] Propojit business obrazovky Reactu s API; doplnit autorizaci podle doménových pravidel.
+      Na devu UC-01 administrace a stav ověření, UC-02 a UC-03 (PR #38–#40, release `a26bbf9`).
+      Formulář žádosti UC-01 a vrácení k doplnění jsou hotové ve větvi a čekají na PR;
+      onboarding profilu zatím neřešíme.
+- [x] Nasadit testovací účty na dev (PR #43); `AUTH_TEST_ACCOUNTS_ENABLED=true` jen v `APP_ENV=dev`.
+- [ ] Dokončit probíhající kolo [testování na devu](../docs/qa/dev-testovani.md) UC-01–UC-03.
 - [x] Jmenovat a ověřit prvního skutečného Google vlastníka na společném devu; audit potvrzený.
 - [x] Review/CI PR #25, nasazení registračního kontraktu, backfill migrace a ověření payloadů i vlastníka.
 - [x] Review/CI PR #26, nasazení privátního NATS JetStream a publisheru, runtime 4; shodné payloady obou registrací v outboxu/brokeru, nulové pending/failed a aktualizovaný recovery release. [Postup](../docs/REGISTRACNI-UDALOSTI.md).
-- [ ] Po výslovném schválení správcem aplikovat `init:dev-events` → `deploy:dev-events`
-      → konfiguraci/deploy služeb: nový stream `ANICO_BREEDER_VERIFICATIONS`,
-      durable pull consumer `animal-verified-breeders`, oddělené účty/secrets a
-      lokální projekce ověřených chovatelů v animal-service. IaC je připravené,
-      změny zatím nebyly aplikované; po nasazení ověřit celý tok včetně duplicit
-      a výpadků. Registrační animal consumer zůstává oddělenou budoucí potřebou.
+- [x] Dne 6. 11. 2026 aplikovat `init:dev-events` → `deploy:dev-events`
+      → konfiguraci a CI nasazení PR #37: stream `ANICO_BREEDER_VERIFICATIONS`,
+      durable consumer `animal-verified-breeders`, oddělené účty/secrets a projekce.
+      Release `175815060b94a026a0d07854e1d81b98def3d05b` je zdravý; migrace,
+      NATS přihlášení obou služeb a odmítnutí neověřené identity (401) ověřené.
+      Reference releasu a lokální recovery kopie jsou uložené pro obnovu.
+- [ ] Ověřit první skutečné schválení chovatele na společném devu až do animal API.
+      Při nasazení nebyl žádný schválený chovatel ani pending událost; duplicity
+      a výpadky pokrývají integrační testy s NATS/MongoDB. Consumer registračních
+      událostí auth zůstává oddělenou budoucí potřebou.
 - [x] Připravit migrace, evidenci, zámek, seed a osobní reset pro breeding-service.
 - [x] Review a merge generátorů, diagnostiky a tří vývojových režimů (PR #15).
 - [x] Review auth-service a sdíleného kontraktu identity (PR #17), oprava gateway (PR #19).

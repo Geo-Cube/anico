@@ -99,6 +99,13 @@ export function formatPendingCountText(count: number): string {
   return `${count} žádostí čeká na posouzení`;
 }
 
+export function formatReturnedCountText(count: number): string {
+  if (count === 1) return '1 žádost je vrácena k doplnění';
+  if (count >= 2 && count <= 4)
+    return `${count} žádosti jsou vráceny k doplnění`;
+  return `${count} žádostí je vráceno k doplnění`;
+}
+
 export function formatPendingDocumentsText(count: number): string {
   const shown = count >= DOCUMENT_QUEUE_LIMIT ? `${count}+` : String(count);
   if (count === 1) return '1 doklad čeká na posouzení';
