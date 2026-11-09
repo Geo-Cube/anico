@@ -7,12 +7,41 @@ export const ProvidersResponseSchema = z.strictObject({
   providers: z.array(AuthProviderSchema),
 });
 
+/** Real account that switched into a dev test account and may return to it. */
+export const TestAccountActorSchema = z.strictObject({
+  userId: z.uuid(),
+  givenName: z.string().max(200).nullable(),
+  familyName: z.string().max(200).nullable(),
+});
+
 export const SessionSchema = z.strictObject({
   identity: IdentitySchema,
   csrfToken: z.string().min(1),
   expiresAt: z.iso.datetime(),
   linkedProviders: z.array(AuthProviderSchema),
   canManageAccounts: z.boolean(),
+  /** Dev only: admin/owner may create and switch into test accounts. */
+  canUseTestAccounts: z.boolean().optional(),
+  /** Present while a test account session was opened by this real account. */
+  testAccountActor: TestAccountActorSchema.optional(),
+});
+
+export const TestAccountSchema = z.strictObject({
+  identity: IdentitySchema,
+  createdAt: z.iso.datetime(),
+  createdBy: z.uuid(),
+});
+
+export const TestAccountsResponseSchema = z.strictObject({
+  accounts: z.array(TestAccountSchema),
+});
+
+/** Without e-mail the service generates a unique address in the reserved .test domain. */
+export const CreateTestAccountSchema = z.strictObject({
+  givenName: z.string().trim().min(1).max(100),
+  familyName: z.string().trim().min(1).max(100),
+  email: z.email().max(254).optional(),
+  admin: z.boolean().optional(),
 });
 
 export const ConnectionStartResponseSchema = z.strictObject({
@@ -68,3 +97,7 @@ export type ConnectionStartResponse = z.infer<
 >;
 export type SafeReturnPath = z.infer<typeof SafeReturnPathSchema>;
 export type LoginErrorCode = z.infer<typeof LoginErrorCodeSchema>;
+export type TestAccountActor = z.infer<typeof TestAccountActorSchema>;
+export type TestAccount = z.infer<typeof TestAccountSchema>;
+export type TestAccountsResponse = z.infer<typeof TestAccountsResponseSchema>;
+export type CreateTestAccountInput = z.infer<typeof CreateTestAccountSchema>;

@@ -10,6 +10,34 @@ import type {
   Provider,
 } from '../domain/auth.js';
 
+/** Profile plus durable `user.registered` record, stored atomically with the user. */
+export function registrationRecord(
+  userId: string,
+  profile: Pick<User, 'givenName' | 'familyName' | 'email'>,
+  createdAt: Date,
+): NonNullable<User['registration']> {
+  const event = UserRegisteredEventSchema.parse({
+    eventId: randomUUID(),
+    type: 'user.registered',
+    schemaVersion: 1,
+    producer: 'auth-service',
+    occurredAt: createdAt.toISOString(),
+    data: {
+      userId,
+      givenName: profile.givenName,
+      familyName: profile.familyName,
+      email: profile.email,
+    },
+  });
+  return {
+    id: event.eventId,
+    type: 'user.registered',
+    status: 'pending',
+    createdAt,
+    event,
+  };
+}
+
 export function mongoAuthRepository(connection: Connection): AuthRepository {
   const db = connection.db!;
   const users = db.collection<
@@ -42,19 +70,6 @@ export function mongoAuthRepository(connection: Connection): AuthRepository {
       };
       const userId = randomUUID();
       const createdAt = new Date();
-      const event = UserRegisteredEventSchema.parse({
-        eventId: randomUUID(),
-        type: 'user.registered',
-        schemaVersion: 1,
-        producer: 'auth-service',
-        occurredAt: createdAt.toISOString(),
-        data: {
-          userId,
-          givenName: identity.givenName,
-          familyName: identity.familyName,
-          email: identity.email,
-        },
-      });
       try {
         await users.updateOne(
           filter,
@@ -68,13 +83,7 @@ export function mongoAuthRepository(connection: Connection): AuthRepository {
               ...profile,
               roles: initialRoles(),
               status: 'active',
-              registration: {
-                id: event.eventId,
-                type: 'user.registered',
-                status: 'pending',
-                createdAt,
-                event,
-              },
+              registration: registrationRecord(userId, identity, createdAt),
             },
           },
           { upsert: true },

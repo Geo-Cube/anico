@@ -50,7 +50,8 @@
     "test:dev-tools": "turbo run build --filter=@anico/auth && node --test scripts/tests/dev-tools.test.mjs scripts/tests/frontend-proxy.test.mjs scripts/tests/dev-api.test.mjs scripts/tests/dev-app-auth.test.mjs",
     "dev:fullstack": "node scripts/dev-remote.mjs --frontend",
     "test:prepare-db": "node scripts/prepare-test-db.mjs",
-    "test:prepare-broker": "node scripts/prepare-test-broker.mjs"
+    "test:prepare-broker": "node scripts/prepare-test-broker.mjs",
+    "qa:fixtures": "node scripts/qa/upload-fixtures.mjs"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

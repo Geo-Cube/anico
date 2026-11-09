@@ -10,6 +10,7 @@ import { breedersRoutes } from '@/features/breeders';
 import { animalsRoutes } from '@/features/animals/routes';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { ProfileGate } from '@/features/profile/ProfileGate';
+import { TestAccountsPage } from '@/features/test-accounts';
 import { buttonVariants } from '@/shared/ui/button';
 import { StatePanel } from '@/shared/ui/state-panel';
 import { AppLayout } from './AppLayout';
@@ -43,6 +44,7 @@ export const routes: RouteObject[] = [
                 element: <RequireRole roles={['admin', 'owner']} />,
                 children: breedersRoutes,
               },
+              { path: 'testovaci-ucty', element: <TestAccountsPage /> },
               {
                 path: '*',
                 element: (

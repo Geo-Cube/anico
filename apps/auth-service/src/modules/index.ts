@@ -10,6 +10,8 @@ import { authRouter } from './auth/http/router.js';
 import type { Provider, ProviderClient } from './auth/domain/auth.js';
 import { mongoDevelopmentRepository } from './auth/infrastructure/development-repository.js';
 import { createDevelopmentAuthService } from './auth/application/development.js';
+import { createTestAccountService } from './auth/application/test-accounts.js';
+import { mongoTestAccountRepository } from './auth/infrastructure/test-account-repository.js';
 export async function createModules(connection: Connection) {
   const providerEnv = process.env.AUTH_PROVIDER_ENV_FILE
     ? parseEnv(await readFile(process.env.AUTH_PROVIDER_ENV_FILE, 'utf8'))
@@ -63,6 +65,7 @@ export async function createModules(connection: Connection) {
     providers,
     publicOrigin: env.AUTH_PUBLIC_ORIGIN,
     sessionSeconds: env.AUTH_SESSION_SECONDS,
+    testAccountsEnabled: env.AUTH_TEST_ACCOUNTS_ENABLED === 'true',
   });
   return authRouter({
     service,
@@ -76,6 +79,16 @@ export async function createModules(connection: Connection) {
             auth: service,
             users: repository,
             repository: mongoDevelopmentRepository(connection),
+            sessionSeconds: env.AUTH_SESSION_SECONDS,
+          }),
+        }
+      : {}),
+    ...(env.AUTH_TEST_ACCOUNTS_ENABLED === 'true'
+      ? {
+          testAccounts: createTestAccountService({
+            auth: service,
+            users: repository,
+            repository: mongoTestAccountRepository(connection),
             sessionSeconds: env.AUTH_SESSION_SECONDS,
           }),
         }

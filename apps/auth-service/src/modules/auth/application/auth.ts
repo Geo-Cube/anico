@@ -29,6 +29,8 @@ export function createAuthService(options: {
   providers: Partial<Record<Provider, ProviderClient>>;
   publicOrigin: string;
   sessionSeconds: number;
+  /** Test account sessions stop working as soon as the dev feature is off. */
+  testAccountsEnabled?: boolean;
   now?: () => Date;
 }) {
   const { repository, providers } = options;
@@ -39,7 +41,13 @@ export function createAuthService(options: {
     const session = await repository.session(hash(token), now());
     if (!session) throw new AuthError(401, 'SESSION_EXPIRED');
     const user = await repository.user(session.userId);
-    if (!user || user.status !== 'active' || user.fixture)
+    if (
+      !user ||
+      user.status !== 'active' ||
+      user.fixture ||
+      ((session.testAccount || user.testAccount) &&
+        !options.testAccountsEnabled)
+    )
       throw new AuthError(401, 'ACCOUNT_DISABLED');
     return { user: publicIdentity(user), session };
   }

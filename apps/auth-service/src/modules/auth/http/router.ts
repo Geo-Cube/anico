@@ -3,16 +3,19 @@ import { parse, serialize } from 'cookie';
 import { z } from 'zod';
 import {
   AuthProviderSchema,
+  CreateTestAccountSchema,
   type ConnectionStartResponse,
   type LoginErrorCode,
   type ProvidersResponse,
   type Session,
+  type TestAccountsResponse,
 } from '@anico/shared-schemas';
 import type { AuthService } from '../application/auth.js';
 import { equalSecret } from '../application/auth.js';
 import { AuthError, type Provider } from '../domain/auth.js';
 import type { IdentitySigner } from '../infrastructure/signer.js';
 import type { DevelopmentAuthService } from '../application/development.js';
+import type { TestAccountService } from '../application/test-accounts.js';
 import { developmentRouter } from './development-router.js';
 
 const providerSchema = AuthProviderSchema;
@@ -48,12 +51,17 @@ export function authRouter(options: {
   gatewayKey: string;
   sessionSeconds: number;
   development?: DevelopmentAuthService;
+  /** Dev-only switching into test accounts (AUTH_TEST_ACCOUNTS_ENABLED). */
+  testAccounts?: TestAccountService;
 }) {
   const { service, signer, publicOrigin } = options;
   const router = Router();
   const secure = new URL(publicOrigin).protocol === 'https:';
   const sessionName = secure ? '__Host-anico-session' : 'anico-local-session';
   const loginName = secure ? '__Host-anico-login' : 'anico-local-login';
+  const returnName = secure ? '__Host-anico-return' : 'anico-local-return';
+  const seconds = (until: Date) =>
+    Math.max(0, Math.floor((until.getTime() - Date.now()) / 1000));
   const cookies = (req: Request) => parse(req.headers.cookie ?? '');
   const cookie = (name: string, value: string, maxAge: number, apple = false) =>
     serialize(name, value, {
@@ -74,14 +82,14 @@ export function authRouter(options: {
         throw new AuthError(401, 'DEVELOPMENT_LOGIN_UNAVAILABLE');
       return {
         ...(await options.development.authenticate(token, req.headers.origin)),
-        native: true,
+        native: true as const,
         token,
       };
     }
     const browserToken = cookies(req)[sessionName];
     return {
       ...(await service.authenticate(browserToken)),
-      native: false,
+      native: false as const,
       token: browserToken!,
     };
   }
@@ -95,6 +103,64 @@ export function authRouter(options: {
         sessionName,
       }),
     );
+  if (options.testAccounts) {
+    const testAccounts = options.testAccounts;
+    /** Cookie session with CSRF; delegated local tokens never switch accounts. */
+    const browserMutation = async (req: Request) => {
+      if (req.get('x-anico-development-token'))
+        throw new AuthError(403, 'ACCOUNT_MANAGEMENT_REQUIRES_BROWSER');
+      const token = cookies(req)[sessionName];
+      const current = await service.authenticate(token);
+      service.csrf(
+        current.session,
+        req.headers.origin,
+        req.get('x-csrf-token'),
+      );
+      return token;
+    };
+    router.get('/test-accounts', async (req, res) => {
+      if (req.get('x-anico-development-token'))
+        throw new AuthError(403, 'ACCOUNT_MANAGEMENT_REQUIRES_BROWSER');
+      res.json({
+        accounts: await testAccounts.list(cookies(req)[sessionName]),
+      } satisfies TestAccountsResponse);
+    });
+    router.post('/test-accounts', async (req, res) => {
+      const token = await browserMutation(req);
+      const input = CreateTestAccountSchema.parse(req.body);
+      res.status(201).json(await testAccounts.create(token, input));
+    });
+    router.post('/test-accounts/return', async (req, res) => {
+      const token = await browserMutation(req);
+      const own = await testAccounts.returnToOwn(
+        token,
+        cookies(req)[returnName],
+      );
+      res.setHeader('Set-Cookie', [
+        cookie(sessionName, own.token, seconds(own.expiresAt)),
+        cookie(returnName, '', 0),
+      ]);
+      res.sendStatus(204);
+    });
+    router.post('/test-accounts/:userId/session', async (req, res) => {
+      const token = await browserMutation(req);
+      const userId = z.uuid().parse(req.params.userId);
+      const opened = await testAccounts.switchTo(token, userId);
+      res.setHeader('Set-Cookie', [
+        cookie(sessionName, opened.token, seconds(opened.expiresAt)),
+        ...(opened.returnSession
+          ? [
+              cookie(
+                returnName,
+                opened.returnSession.token,
+                seconds(opened.returnSession.expiresAt),
+              ),
+            ]
+          : []),
+      ]);
+      res.sendStatus(204);
+    });
+  }
   router.get('/providers', (_req, res) =>
     res.json({ providers: service.providers } satisfies ProvidersResponse),
   );
@@ -160,9 +226,13 @@ export function authRouter(options: {
       );
       const old = cookies(req)[sessionName];
       if (old) await service.logout(old);
+      // A fresh login replaces a test account session including its return path.
+      const returning = cookies(req)[returnName];
+      if (returning) await service.logout(returning);
       res.setHeader('Set-Cookie', [
         cookie(sessionName, result.token, options.sessionSeconds),
         cookie(loginName, '', 0),
+        ...(returning ? [cookie(returnName, '', 0)] : []),
       ]);
       res.redirect(303, publicOrigin + result.returnTo);
     } catch (error) {
@@ -185,12 +255,17 @@ export function authRouter(options: {
   router.post('/login/:provider/callback', callback);
   router.get('/session', async (req, res) => {
     const result = await authenticate(req);
+    const testAccount =
+      options.testAccounts && !result.native
+        ? await options.testAccounts.describe(result)
+        : {};
     res.json({
       identity: result.user,
       csrfToken: result.session.csrfToken,
       expiresAt: result.session.expiresAt.toISOString(),
       linkedProviders: await service.linkedProviders(result.user.userId),
-      canManageAccounts: !result.native,
+      canManageAccounts: !result.native && !result.session.testAccount,
+      ...testAccount,
     } satisfies Session);
   });
   router.post('/logout', async (req, res) => {
@@ -200,7 +275,14 @@ export function authRouter(options: {
     else {
       service.csrf(result.session, req.headers.origin, req.get('x-csrf-token'));
       await service.logout(result.token);
-      res.setHeader('Set-Cookie', cookie(sessionName, '', 0));
+      if (result.session.testAccount) {
+        // Logging out of a test account ends the actor's own session as well.
+        await options.testAccounts!.endActorSession(result.session);
+        res.setHeader('Set-Cookie', [
+          cookie(sessionName, '', 0),
+          cookie(returnName, '', 0),
+        ]);
+      } else res.setHeader('Set-Cookie', cookie(sessionName, '', 0));
     }
     res.sendStatus(204);
   });
