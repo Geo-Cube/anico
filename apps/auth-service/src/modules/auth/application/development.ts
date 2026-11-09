@@ -58,7 +58,8 @@ export function createDevelopmentAuthService(options: {
     if (origin !== session.origin)
       throw new AuthError(403, 'DEVELOPMENT_ORIGIN_REJECTED');
     const user = await users.user(session.userId);
-    if (!user || user.status !== 'active' || user.fixture)
+    // Test accounts are never delegated, regardless of the dev feature flag.
+    if (!user || user.status !== 'active' || user.fixture || user.testAccount)
       throw new AuthError(401, 'ACCOUNT_DISABLED');
     return { user: publicIdentity(user), session };
   }
@@ -81,6 +82,8 @@ export function createDevelopmentAuthService(options: {
     async approve(id: string, browserToken: string, approved: boolean) {
       await pending(id);
       const current = await auth.authenticate(browserToken);
+      if (current.session.testAccount)
+        throw new AuthError(403, 'TEST_ACCOUNT_DELEGATION_FORBIDDEN');
       const request = await repository.consumeRequest(hash(id), now());
       if (!request) throw new AuthError(401, 'DEVELOPMENT_REQUEST_EXPIRED');
       const redirect = developmentRedirect(request.redirectUri);
@@ -120,7 +123,8 @@ export function createDevelopmentAuthService(options: {
         parent.userId !== grant.userId ||
         !user ||
         user.status !== 'active' ||
-        user.fixture
+        user.fixture ||
+        user.testAccount
       )
         throw new AuthError(401, 'ACCOUNT_DISABLED');
       const token = random();

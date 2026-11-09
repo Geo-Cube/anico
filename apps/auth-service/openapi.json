@@ -19,7 +19,7 @@
     },
     {
       "name": "Testovací účty",
-      "description": "Pouze při AUTH_TEST_ACCOUNTS_ENABLED=true v APP_ENV=dev; jinak všechny /test-accounts cesty vracejí 404 a existující testovací relace přestanou platit (ACCOUNT_DISABLED). Admin/owner si založí účet bez poskytovatele identity a přepne do něj browser relaci; vlastní relace zůstává a lze se do ní vrátit."
+      "description": "Pouze při AUTH_TEST_ACCOUNTS_ENABLED=true v APP_ENV=dev; jinak všechny /test-accounts cesty vracejí 404 a existující testovací relace přestanou platit (ACCOUNT_DISABLED). Admin/owner si založí účet bez poskytovatele identity a přepne do něj browser relaci; vlastní relace zůstává a lze se do ní vrátit. Každé ověření testovací relace včetně /internal/verify vyžaduje platnou vlastní relaci (jinak SESSION_EXPIRED) a aktivního admina/ownera (jinak ACCOUNT_DISABLED). Testovací účet nelze delegovat do místního vývoje (/development/approve: TEST_ACCOUNT_DELEGATION_FORBIDDEN)."
     },
     { "name": "Provoz" }
   ],

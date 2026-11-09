@@ -320,9 +320,12 @@ a testovací relace se odmítají. Příznak navíc hlídají tři nezávislé p
 - Přepnutí vytvoří novou relaci testovacího účtu (nejvýše do konce vlastní relace).
   Vlastní relace zůstává platná v HttpOnly cookie `__Host-anico-return`; testovací relace
   zná jen její hash. Návrat tedy nevytváří novou privilegovanou relaci.
-- Každé volání ověřuje aktuální roli skutečného účtu, který přepnul; odebrání admin role
-  platí okamžitě i uvnitř testovacího účtu. Odhlášení z testovacího účtu ukončí i vlastní relaci,
-  nové přihlášení zahodí návratovou cookie.
+- Každé ověření testovací relace, včetně gateway (`/internal/verify`), kontroluje, že vlastní
+  relace skutečného účtu stále platí a že je to aktivní admin nebo owner. Odebrání role,
+  odhlášení nebo vypršení vlastní relace ukončí testovací relaci okamžitě. Odhlášení z testovacího
+  účtu ukončí i vlastní relaci, nové přihlášení zahodí návratovou cookie.
+- Testovací účet nelze delegovat do místního vývoje (`/development/*`): schválení odmítne
+  `TEST_ACCOUNT_DELEGATION_FORBIDDEN` a vývojový token testovacího účtu se nikdy neověří.
 - Po vypnutí příznaku cesty `/test-accounts` neexistují (404) a existující testovací relace
   i účty se odmítnou jako `ACCOUNT_DISABLED`. Gateway je zpřístupňuje explicitním pravidlem
   v `scripts/dev-deployment.mjs`.

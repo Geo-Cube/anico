@@ -9,12 +9,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../../src/app.js';
 import { authConfiguration } from '../../src/config.js';
-import { createAuthService } from '../../src/modules/auth/application/auth.js';
+import {
+  createAuthService,
+  hash,
+} from '../../src/modules/auth/application/auth.js';
+import { createDevelopmentAuthService } from '../../src/modules/auth/application/development.js';
 import { createTestAccountService } from '../../src/modules/auth/application/test-accounts.js';
 import type { ProviderClient } from '../../src/modules/auth/domain/auth.js';
 import { authRouter } from '../../src/modules/auth/http/router.js';
 import { appointInitialOwner } from '../../src/modules/auth/infrastructure/appoint-owner.js';
 import { mongoAuthRepository } from '../../src/modules/auth/infrastructure/repository.js';
+import { mongoDevelopmentRepository } from '../../src/modules/auth/infrastructure/development-repository.js';
 import { identitySigner } from '../../src/modules/auth/infrastructure/signer.js';
 import { mongoTestAccountRepository } from '../../src/modules/auth/infrastructure/test-account-repository.js';
 import { migrateDatabase } from '../../src/database/engine.js';
@@ -39,6 +44,7 @@ describe('dev test accounts: create, switch, return and logout', () => {
   let mongo: MongoMemoryServer, connection: Connection, folder: string;
   let signer: Awaited<ReturnType<typeof identitySigner>>;
   let app: ReturnType<typeof createApp>;
+  let development: ReturnType<typeof createDevelopmentAuthService>;
   let subject = 'admin';
   const fake: ProviderClient = {
     async authorize(input) {
@@ -64,6 +70,12 @@ describe('dev test accounts: create, switch, return and logout', () => {
       sessionSeconds: 3600,
       testAccountsEnabled: enabled,
     });
+    development = createDevelopmentAuthService({
+      auth: service,
+      users: repository,
+      repository: mongoDevelopmentRepository(connection),
+      sessionSeconds: 3600,
+    });
     app = createApp({
       logger: pino({ level: 'silent' }),
       isReady: () => true,
@@ -73,6 +85,7 @@ describe('dev test accounts: create, switch, return and logout', () => {
         publicOrigin: origin,
         gatewayKey,
         sessionSeconds: 3600,
+        development,
         ...(enabled
           ? {
               testAccounts: createTestAccountService({
@@ -274,32 +287,84 @@ describe('dev test accounts: create, switch, return and logout', () => {
     expect(listed.body.accounts).toHaveLength(2);
   });
 
-  it('inside a test session the real actor decides, so a demoted admin loses access immediately', async () => {
+  it('a test admin identity dies with the actor role: gateway verification is refused immediately', async () => {
     const owner = await login('owner', 'owner');
     const testAdmin = await switchTo(
       owner,
       await createAccount(owner, { admin: true }),
     );
-    // The actor (owner) decides, not the test admin identity itself.
     expect(testAdmin.current.body.canUseTestAccounts).toBe(true);
+    const signed = await verify(testAdmin).expect(204);
+    expect(
+      decodeJwt(signed.headers['x-anico-identity']!).identity,
+    ).toMatchObject({ roles: ['breeder', 'admin'] });
 
-    const admin = await login('admin', 'admin');
-    const tester = await switchTo(admin, await createAccount(admin));
     await connection
       .db!.collection<{ userId: string; roles: string[] }>('users')
       .updateOne(
-        { userId: admin.current.body.identity.userId },
-        { $pull: { roles: 'admin' } },
+        { userId: owner.current.body.identity.userId },
+        { $set: { roles: ['breeder'] } },
       );
-    const after = await request(app)
+    await verify(testAdmin).expect(401, { error: 'ACCOUNT_DISABLED' });
+    await request(app)
       .get('/session')
-      .set('Cookie', tester.cookie)
-      .expect(200);
-    expect(after.body.canUseTestAccounts).toBe(false);
+      .set('Cookie', testAdmin.session)
+      .expect(401);
     await request(app)
       .get('/test-accounts')
-      .set('Cookie', tester.cookie)
-      .expect(403);
+      .set('Cookie', testAdmin.session)
+      .expect(401);
+  });
+
+  it('a test session ends as soon as the actor own session is logged out or expired', async () => {
+    const admin = await login('admin', 'admin');
+    const tester = await switchTo(admin, await createAccount(admin));
+    await verify(tester).expect(204);
+    // The actor's own session is logged out (e.g. with its token before the switch).
+    await mutate(admin, '/logout').expect(204);
+    await verify(tester).expect(401, { error: 'SESSION_EXPIRED' });
+
+    const again = await login('admin');
+    const second = await switchTo(again, await createAccount(again));
+    await connection
+      .db!.collection<{ _id: string; expiresAt: Date }>('sessions')
+      .updateOne(
+        { _id: hash(again.session.split('=')[1]!) },
+        { $set: { expiresAt: new Date(Date.now() - 1000) } },
+      );
+    await verify(second).expect(401, { error: 'SESSION_EXPIRED' });
+  });
+
+  it('test accounts are never delegated to local development tokens, even with the feature off', async () => {
+    const admin = await login('admin', 'admin');
+    const tester = await switchTo(admin, await createAccount(admin));
+    const id = await development.begin({
+      redirectUri: 'http://127.0.0.1:43210/callback',
+      state: 'a'.repeat(43),
+      challenge: 'b'.repeat(43),
+    });
+    await expect(
+      development.approve(id, tester.session.split('=')[1]!, true),
+    ).rejects.toMatchObject({ code: 'TEST_ACCOUNT_DELEGATION_FORBIDDEN' });
+
+    // A grant that exists anyway (e.g. issued by an older release) is refused.
+    const token = 'c'.repeat(43);
+    await connection.db!.collection('development_sessions').insertOne({
+      _id: hash(token) as never,
+      userId: tester.current.body.identity.userId,
+      origin: 'http://127.0.0.1:43210',
+      csrfToken: 'd'.repeat(43),
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    for (const enabled of [true, false]) {
+      build(enabled);
+      await request(app)
+        .get('/internal/verify')
+        .set('X-Anico-Gateway-Key', gatewayKey)
+        .set('X-Anico-Development-Token', token)
+        .set('Origin', 'http://127.0.0.1:43210')
+        .expect(401, { error: 'ACCOUNT_DISABLED' });
+    }
   });
 
   it('logout from a test account ends the own session too; a fresh login drops the way back', async () => {

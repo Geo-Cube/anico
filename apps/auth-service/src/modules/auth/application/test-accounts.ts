@@ -6,17 +6,18 @@ import type {
   TestAccount,
   TestAccountActor,
 } from '@anico/shared-schemas';
-import {
-  AuthError,
-  type AuthRepository,
-  type Session,
-  type User,
-} from '../domain/auth.js';
+import { AuthError, type AuthRepository, type User } from '../domain/auth.js';
 import {
   TEST_ACCOUNT_LIST_LIMIT,
   type TestAccountRepository,
 } from '../domain/test-accounts.js';
-import { equalSecret, hash, publicIdentity, type AuthService } from './auth.js';
+import {
+  equalSecret,
+  hash,
+  publicIdentity,
+  type AuthenticatedSession,
+  type AuthService,
+} from './auth.js';
 
 const random = () => randomBytes(32).toString('base64url');
 const canAdminister = (identity: Identity) =>
@@ -25,11 +26,11 @@ const canAdminister = (identity: Identity) =>
 /**
  * Dev-only switching into test accounts. The acting admin/owner keeps their own
  * session; the test session only stores its hash, so returning never mints a new
- * privileged session. Every call re-checks the actor's current roles.
+ * privileged session. `auth.authenticate` re-checks the actor on every use.
  */
 export function createTestAccountService(options: {
   auth: AuthService;
-  users: Pick<AuthRepository, 'user' | 'session' | 'createSession' | 'revoke'>;
+  users: Pick<AuthRepository, 'user' | 'createSession' | 'revoke'>;
   repository: TestAccountRepository;
   sessionSeconds: number;
   now?: () => Date;
@@ -37,27 +38,12 @@ export function createTestAccountService(options: {
   const { auth, users, repository } = options;
   const now = options.now ?? (() => new Date());
 
-  /** Real account behind the current session, or null if it may not act. */
-  async function actorOf(current: { user: Identity; session: Session }) {
-    const link = current.session.testAccount;
-    if (!link) return { identity: current.user, session: current.session };
-    const own = await users.session(link.returnSessionHash, now());
-    const user = await users.user(link.actorUserId);
-    if (
-      !own ||
-      !user ||
-      own.userId !== user.userId ||
-      user.status !== 'active' ||
-      user.fixture ||
-      user.testAccount
-    )
-      return null;
-    return { identity: publicIdentity(user), session: own };
-  }
   async function requireActor(token: string | undefined) {
     const current = await auth.authenticate(token);
-    const actor = await actorOf(current);
-    if (!actor) throw new AuthError(401, 'SESSION_EXPIRED');
+    const actor = current.actor ?? {
+      identity: current.user,
+      session: current.session,
+    };
     if (!canAdminister(actor.identity))
       throw new AuthError(403, 'TEST_ACCOUNTS_FORBIDDEN');
     return { current, actor };
@@ -69,20 +55,20 @@ export function createTestAccountService(options: {
   });
 
   return {
-    /** Extra /session fields; never throws for a valid session. */
-    async describe(current: { user: Identity; session: Session }): Promise<{
+    /** Extra /session fields for an already authenticated session. */
+    describe(current: AuthenticatedSession): {
       canUseTestAccounts: boolean;
       testAccountActor?: TestAccountActor;
-    }> {
-      const actor = await actorOf(current);
+    } {
+      const actor = current.actor?.identity;
       return {
-        canUseTestAccounts: !!actor && canAdminister(actor.identity),
-        ...(current.session.testAccount && actor
+        canUseTestAccounts: canAdminister(actor ?? current.user),
+        ...(actor
           ? {
               testAccountActor: {
-                userId: actor.identity.userId,
-                givenName: actor.identity.givenName,
-                familyName: actor.identity.familyName,
+                userId: actor.userId,
+                givenName: actor.givenName,
+                familyName: actor.familyName,
               },
             }
           : {}),
@@ -161,7 +147,7 @@ export function createTestAccountService(options: {
       return { token: returnToken, expiresAt: own.session.expiresAt };
     },
     /** Logout from a test account also ends the actor's own session. */
-    async endActorSession(session: Session) {
+    async endActorSession(session: AuthenticatedSession['session']) {
       if (session.testAccount)
         await users.revoke(session.testAccount.returnSessionHash);
     },

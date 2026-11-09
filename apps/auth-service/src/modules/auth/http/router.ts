@@ -257,7 +257,7 @@ export function authRouter(options: {
     const result = await authenticate(req);
     const testAccount =
       options.testAccounts && !result.native
-        ? await options.testAccounts.describe(result)
+        ? options.testAccounts.describe(result)
         : {};
     res.json({
       identity: result.user,
