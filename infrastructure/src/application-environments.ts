@@ -52,6 +52,9 @@ export function prepareApplicationEnvironments(
       z.literal('production').parse(values.NODE_ENV);
       z.literal(name).parse(values.APP_ENV);
       logLevel.parse(values.LOG_LEVEL);
+      // Dev-only switching into test accounts must never reach production.
+      if (name !== 'dev' && values.AUTH_TEST_ACCOUNTS_ENABLED !== undefined)
+        throw new Error('AUTH_TEST_ACCOUNTS_ENABLED is allowed only in dev');
       return [name, { sourceBranch: defaults.sourceBranch, variables: values }];
     }),
   );

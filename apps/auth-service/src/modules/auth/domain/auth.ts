@@ -16,6 +16,8 @@ export interface ExternalIdentity {
 export interface User extends Identity {
   status: 'active' | 'disabled';
   fixture?: boolean;
+  /** Dev-only account created by an admin/owner; it has no provider identity. */
+  testAccount?: { createdBy: string; createdAt: Date };
   registration?: {
     id: string;
     type: 'user.registered';
@@ -29,6 +31,11 @@ export interface Session {
   csrfToken: string;
   expiresAt: Date;
   authenticatedAt?: Date;
+  /**
+   * Dev-only test account session opened by a real admin/owner. The actor's own
+   * session stays valid and is identified only by its hash.
+   */
+  testAccount?: { actorUserId: string; returnSessionHash: string };
 }
 export interface LoginAttempt {
   provider: Provider;

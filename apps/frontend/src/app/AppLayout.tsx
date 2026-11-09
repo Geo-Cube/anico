@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router';
 import { canAdminister, useCurrentSession, UserMenu } from '@/features/auth';
+import { TestAccountBanner } from '@/features/test-accounts';
 import { cn } from '@/shared/lib/cn';
 import { Logo } from '@/shared/ui/logo';
 
@@ -32,12 +33,18 @@ export function AppLayout() {
                 Administrace
               </NavLink>
             )}
+            {session.canUseTestAccounts && (
+              <NavLink to="/testovaci-ucty" className={navClass}>
+                Testovací účty
+              </NavLink>
+            )}
           </nav>
           <div className="ml-auto shrink-0">
             <UserMenu />
           </div>
         </div>
       </header>
+      <TestAccountBanner />
       <main className="mx-auto max-w-[1480px] px-5 py-7 md:px-9 md:py-9">
         <Outlet />
       </main>

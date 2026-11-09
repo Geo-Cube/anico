@@ -32,6 +32,7 @@ Připravený kód nebo uložené credentials nejsou totéž jako ověřené nasa
 - [Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md): `PATCH /breeders/me` už ukládá jméno a e-mail před prvním podáním; označení dokončení a frontend `ProfileGate` chybí, povinná pole včetně IČO je potřeba upřesnit.
 
 - Apple je odložený dle domluvy; není součástí aktuálního dokončení auth.
+- Testování na devu (9. 11. 2026, zatím nenasazeno): admin/owner zakládá [testovací účty](AUTENTIZACE.md#testovací-účty-na-devu) a přepíná se do nich bez dalších e-mailů; `npm run qa:fixtures` generuje soubory pro nahrávání. Scénáře UC-01–UC-03 a protokol jsou v [testování na devu](qa/dev-testovani.md); kolo na devu ještě neproběhlo.
 - Business obrazovky: přihlašovací stránka, chráněné routy, stránka účtu, správa zvířat UC-02, doklady zvířat UC-03 (chovatel i administrace) a administrace ověření chovatelů UC-01 používají skutečné API.
 - Administrace UC-01 (rozhodnutí 6. 11. 2026): stavy pro admina jsou K posouzení / Schváleno / Zamítnuto. Vrácení k doplnění (`RETURNED`, [ADR-0004](adr/0004-vraceni-zadosti-k-doplneni.md)) zůstává jen v backendu, UI pro něj nemá filtr ani akci. `reviewedBy` a historii rozhodnutí vrací jen administrátorské API (admin, vlastník); `GET /breeders/me` je chovateli nevrací. E-mail po rozhodnutí je v UI jen simulovaná zpráva.
 - Stav ověření chovatele (WF 10, 11, `GET /breeders/me`) je na přehledu a v Mém účtu: neověřený účet červeně, ověřený s tlačítkem Pokračovat. Formulář pro podání žádosti ve frontendu zatím chybí.

@@ -29,7 +29,7 @@ Klíče vzniknou v ignorovaném `apps/auth-service/.secrets/` a při opakování
 Vyžaduje tvůj osobní `.env.remote.local`; launcher vybere `anico_auth_LOGIN`.
 Backend běží na `127.0.0.1:3001`. Pro lokální UI použij místo backendového příkazu
 `npm run dev:fullstack -- --service auth`; routy jsou pak pod `/api/auth`.
-`GET /providers` vrací jen poskytovatele skutečně nakonfigurované v privátním `.env` nebo v auth-only secret mountu. Neexistuje heslový ani testovací HTTP login.
+`GET /providers` vrací jen poskytovatele skutečně nakonfigurované v privátním `.env` nebo v auth-only secret mountu. Neexistuje heslový ani testovací přihlašovací endpoint; [testovací účty na devu](#testovací-účty-na-devu) jsou přístupné jen přepnutím z již přihlášeného admina nebo ownera.
 
 ## Identita pro ostatní backendy
 
@@ -98,6 +98,9 @@ backend poslouchá následující cesty bez prefixu:
 | `POST /connections/:provider`                   | Zahájení propojení Google/Microsoft; čerstvá relace, Origin a CSRF |
 | `POST /logout`                                  | Zneplatnění aktuální relace; vyžaduje Origin a CSRF                |
 | `PUT /users/:userId/admin`                      | `{ "admin": true/false }`, pouze owner a CSRF                      |
+| `GET/POST /test-accounts`                       | Jen dev: seznam a založení testovacího účtu (admin/owner, CSRF)    |
+| `POST /test-accounts/:userId/session`           | Jen dev: přepnout browser do testovacího účtu                      |
+| `POST /test-accounts/return`                    | Jen dev: vrátit se do vlastní relace                               |
 | `GET /.well-known/jwks.json`                    | Veřejný klíč pro ověření identity                                  |
 | `GET /internal/verify`                          | Soukromý ForwardAuth endpoint, nikdy veřejná route                 |
 
@@ -295,6 +298,37 @@ identity a vytvoří unikátní index. Lokálně ji proveď přes
 `npm run db:remote:migrate -- --service auth`; na devu se spustí před startem.
 Starší auth image bez této migrace po změně DB odmítne neznámou migrační historii;
 případnou opravu proto nasazuj dopředu, nikoli prostým návratem starého auth image.
+
+## Testovací účty na devu
+
+Tester nepotřebuje zakládat další Google/Microsoft účty. Na devu (`AUTH_TEST_ACCOUNTS_ENABLED=true`)
+admin nebo owner na stránce **Testovací účty** (`/testovaci-ucty`) založí účet a přepne do
+něj prohlížeč. Postup a doporučená sada účtů:
+[testování na devu](qa/dev-testovani.md#12-testovací-účty-místo-nových-e-mailů).
+
+**Na produkci se funkce nesmí dostat.** Kód je v image, ale bez příznaku se routy nepřipojí
+a testovací relace se odmítají. Příznak navíc hlídají tři nezávislé pojistky:
+
+1. auth-service nenastartuje, pokud je příznak zapnutý a zároveň neplatí `APP_ENV=dev`
+   a origin `https://dev.anico.online` (nebo lokální `http://127.0.0.1`/`localhost`);
+2. IaC proměnné prostředí `prod` příznak vůbec nepřijmou (`application-environments.ts`);
+3. příznak a gateway pravidlo `/api/auth/test-accounts` nastavuje jen `scripts/dev-deployment.mjs`.
+
+- Účet je běžný AniCo uživatel s rolí `breeder` a příznakem `testAccount`; nemá identitu
+  poskytovatele, nepřihlásí se přes OIDC a nemůže propojit účet. Vzniká stejná událost
+  `user.registered` jako u první registrace. Roli `admin` mu může dát jen owner.
+- Přepnutí vytvoří novou relaci testovacího účtu (nejvýše do konce vlastní relace).
+  Vlastní relace zůstává platná v HttpOnly cookie `__Host-anico-return`; testovací relace
+  zná jen její hash. Návrat tedy nevytváří novou privilegovanou relaci.
+- Každé ověření testovací relace, včetně gateway (`/internal/verify`), kontroluje, že vlastní
+  relace skutečného účtu stále platí a že je to aktivní admin nebo owner. Odebrání role,
+  odhlášení nebo vypršení vlastní relace ukončí testovací relaci okamžitě. Odhlášení z testovacího
+  účtu ukončí i vlastní relaci, nové přihlášení zahodí návratovou cookie.
+- Testovací účet nelze delegovat do místního vývoje (`/development/*`): schválení odmítne
+  `TEST_ACCOUNT_DELEGATION_FORBIDDEN` a vývojový token testovacího účtu se nikdy neověří.
+- Po vypnutí příznaku cesty `/test-accounts` neexistují (404) a existující testovací relace
+  i účty se odmítnou jako `ACCOUNT_DISABLED`. Gateway je zpřístupňuje explicitním pravidlem
+  v `scripts/dev-deployment.mjs`.
 
 ## Přihlášení lokálních vývojových nástrojů
 

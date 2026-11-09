@@ -6,7 +6,14 @@ import {
   type Provider,
   type ProviderClient,
   type LoginAttempt,
+  type Session,
 } from '../domain/auth.js';
+export interface AuthenticatedSession {
+  user: Identity;
+  session: Session;
+  /** Real account behind a test account session. */
+  actor?: { identity: Identity; session: Session };
+}
 export const hash = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 const random = () => randomBytes(32).toString('base64url');
@@ -29,11 +36,20 @@ export function createAuthService(options: {
   providers: Partial<Record<Provider, ProviderClient>>;
   publicOrigin: string;
   sessionSeconds: number;
+  /** Test account sessions stop working as soon as the dev feature is off. */
+  testAccountsEnabled?: boolean;
   now?: () => Date;
 }) {
   const { repository, providers } = options;
   const now = options.now ?? (() => new Date());
-  async function authenticate(token: string | undefined) {
+  /**
+   * Every use of a session, including gateway verification, re-checks it. A
+   * test account session additionally requires the actor's own session to be
+   * alive and the actor to still be an active admin/owner.
+   */
+  async function authenticate(
+    token: string | undefined,
+  ): Promise<AuthenticatedSession> {
     if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token))
       throw new AuthError(401, 'AUTHENTICATION_REQUIRED');
     const session = await repository.session(hash(token), now());
@@ -41,7 +57,28 @@ export function createAuthService(options: {
     const user = await repository.user(session.userId);
     if (!user || user.status !== 'active' || user.fixture)
       throw new AuthError(401, 'ACCOUNT_DISABLED');
-    return { user: publicIdentity(user), session };
+    const link = session.testAccount;
+    if (!link && !user.testAccount)
+      return { user: publicIdentity(user), session };
+    if (!options.testAccountsEnabled || !link || !user.testAccount)
+      throw new AuthError(401, 'ACCOUNT_DISABLED');
+    const own = await repository.session(link.returnSessionHash, now());
+    if (!own || own.userId !== link.actorUserId || own.testAccount)
+      throw new AuthError(401, 'SESSION_EXPIRED');
+    const actor = await repository.user(link.actorUserId);
+    if (
+      !actor ||
+      actor.status !== 'active' ||
+      actor.fixture ||
+      actor.testAccount ||
+      !actor.roles.some((role) => role === 'admin' || role === 'owner')
+    )
+      throw new AuthError(401, 'ACCOUNT_DISABLED');
+    return {
+      user: publicIdentity(user),
+      session,
+      actor: { identity: publicIdentity(actor), session: own },
+    };
   }
   function requireRecentLogin(session: { authenticatedAt?: Date }) {
     const age = session.authenticatedAt

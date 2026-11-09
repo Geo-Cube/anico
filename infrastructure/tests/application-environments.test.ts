@@ -53,3 +53,14 @@ test('runtime identity and log levels stay validated', () => {
     );
   }
 });
+
+test('test accounts cannot be enabled outside dev', () => {
+  for (const value of ['true', 'false'])
+    assert.throws(
+      () =>
+        prepareApplicationEnvironments(settings, {
+          prod: { AUTH_TEST_ACCOUNTS_ENABLED: value },
+        }),
+      /only in dev/,
+    );
+});

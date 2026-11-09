@@ -235,12 +235,20 @@ export {
   SafeReturnPathSchema,
   LoginErrorCodeSchema,
   isSafeReturnPath,
+  TestAccountActorSchema,
+  TestAccountSchema,
+  TestAccountsResponseSchema,
+  CreateTestAccountSchema,
   type AuthProvider,
   type ProvidersResponse,
   type Session,
   type ConnectionStartResponse,
   type SafeReturnPath,
   type LoginErrorCode,
+  type TestAccountActor,
+  type TestAccount,
+  type TestAccountsResponse,
+  type CreateTestAccountInput,
 } from './auth.js';
 
 export {

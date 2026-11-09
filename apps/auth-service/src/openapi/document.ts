@@ -2,11 +2,14 @@ import { z } from 'zod';
 import {
   AuthProviderSchema,
   ConnectionStartResponseSchema,
+  CreateTestAccountSchema,
   IdentitySchema,
   LoginErrorCodeSchema,
   ProvidersResponseSchema,
   ServiceHealthResponseSchema,
   SessionSchema,
+  TestAccountSchema,
+  TestAccountsResponseSchema,
 } from '@anico/shared-schemas';
 
 type JsonObject = Record<string, unknown>;
@@ -205,6 +208,9 @@ export function openApiDocument(): JsonObject {
     ['ConnectionStartResponse', ConnectionStartResponseSchema],
     ['LoginErrorCode', LoginErrorCodeSchema],
     ['ServiceHealthResponse', ServiceHealthResponseSchema],
+    ['TestAccount', TestAccountSchema],
+    ['TestAccountsResponse', TestAccountsResponseSchema],
+    ['CreateTestAccount', CreateTestAccountSchema],
   ] as const)
     registry.add(schema, { id });
   const generated = z.toJSONSchema(registry, {
@@ -238,6 +244,11 @@ export function openApiDocument(): JsonObject {
         name: 'Místní vývoj',
         description:
           'Pouze při AUTH_DEVELOPMENT_ENABLED=true v APP_ENV=dev; jinak všechny /development cesty vracejí 404. Nejde o bypass loginu: vyžadují skutečný účet a souhlas v browseru.',
+      },
+      {
+        name: 'Testovací účty',
+        description:
+          'Pouze při AUTH_TEST_ACCOUNTS_ENABLED=true v APP_ENV=dev; jinak všechny /test-accounts cesty vracejí 404 a existující testovací relace přestanou platit (ACCOUNT_DISABLED). Admin/owner si založí účet bez poskytovatele identity a přepne do něj browser relaci; vlastní relace zůstává a lze se do ní vrátit. Každé ověření testovací relace včetně /internal/verify vyžaduje platnou vlastní relaci (jinak SESSION_EXPIRED) a aktivního admina/ownera (jinak ACCOUNT_DISABLED). Testovací účet nelze delegovat do místního vývoje (/development/approve: TEST_ACCOUNT_DELEGATION_FORBIDDEN).',
       },
       { name: 'Provoz' },
     ],
@@ -471,6 +482,89 @@ export function openApiDocument(): JsonObject {
             requestBody: body(object({ admin: { type: 'boolean' } })),
             description:
               'Vyžaduje roli owner, jinak OWNER_REQUIRED. Mění pouze admin roli způsobilého aktivního ne-fixture účtu, nikoli owner roli.',
+          },
+        ),
+      },
+      '/test-accounts': {
+        get: operation(
+          'Seznam testovacích účtů (nejnovější první, nejvýše 200)',
+          {
+            '200': response(
+              'Aktivní testovací účty.',
+              ref('TestAccountsResponse'),
+            ),
+            ...authErrors,
+          },
+          {
+            tags: ['Testovací účty'],
+            security: browserSecurity,
+            description:
+              'Admin nebo owner; v testovací relaci rozhoduje skutečný účet, který do ní přepnul. Jinak TEST_ACCOUNTS_FORBIDDEN. Development token: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.',
+          },
+        ),
+        post: operation(
+          'Založit testovací účet',
+          {
+            '201': response('Založený účet.', ref('TestAccount')),
+            ...authErrors,
+          },
+          {
+            tags: ['Testovací účty'],
+            security: browserSecurity,
+            parameters: [origin, csrf],
+            requestBody: body(ref('CreateTestAccount')),
+            description:
+              'Role breeder, s admin=true navíc admin (jen owner, jinak OWNER_REQUIRED). Bez e-mailu vznikne tester-<8 znaků userId>@anico.test. Účet nemá identitu poskytovatele, nepřihlásí se Google/Microsoft a nemůže propojit účet; zapíše se stejná událost user.registered jako u první registrace.',
+          },
+        ),
+      },
+      '/test-accounts/{userId}/session': {
+        post: operation(
+          'Přepnout browser do testovacího účtu',
+          {
+            '204': {
+              ...response(
+                'Nová relace testovacího účtu (expirace nejvýše do konce vlastní relace). Při prvním přepnutí se vlastní relace přesune do HttpOnly cookie __Host-anico-return (HTTP: anico-local-return); přepnutí mezi testovacími účty ji ponechá a předchozí testovací relaci zneplatní.',
+              ),
+              headers: { 'Cache-Control': noStore, 'Set-Cookie': cookieHeader },
+            },
+            ...authErrors,
+            '404': error(
+              'TEST_ACCOUNT_NOT_FOUND: cíl není aktivní testovací účet.',
+            ),
+          },
+          {
+            tags: ['Testovací účty'],
+            security: browserSecurity,
+            parameters: [
+              parameter('userId', 'path', { type: 'string', format: 'uuid' }),
+              origin,
+              csrf,
+            ],
+          },
+        ),
+      },
+      '/test-accounts/return': {
+        post: operation(
+          'Vrátit se z testovacího účtu do vlastní relace',
+          {
+            '204': {
+              ...response(
+                'Testovací relace zneplatněna, session cookie obnovena z návratové cookie, ta je smazána.',
+              ),
+              headers: { 'Cache-Control': noStore, 'Set-Cookie': cookieHeader },
+            },
+            ...authErrors,
+            '409': error(
+              'NOT_IN_TEST_ACCOUNT: aktuální relace není testovací.',
+            ),
+          },
+          {
+            tags: ['Testovací účty'],
+            security: browserSecurity,
+            parameters: [origin, csrf],
+            description:
+              'Chybějící nebo cizí návratová cookie: 401 RETURN_SESSION_MISMATCH; vypršelá vlastní relace: 401 SESSION_EXPIRED. Odhlášení z testovacího účtu ukončí i vlastní relaci.',
           },
         ),
       },

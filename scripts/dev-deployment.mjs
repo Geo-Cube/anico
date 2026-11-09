@@ -161,6 +161,7 @@ export function composeForRelease(references, revision, options = {}) {
         AUTH_GATEWAY_KEY_FILE: '/run/secrets/auth-gateway-key',
         AUTH_PROVIDER_ENV_FILE: '/run/secrets/auth-provider-env',
         AUTH_DEVELOPMENT_ENABLED: 'true',
+        AUTH_TEST_ACCOUNTS_ENABLED: 'true',
         AUTH_REGISTRATION_PUBLISHER_ENABLED: 'true',
         AUTH_REGISTRATION_BROKER_FILE:
           '/run/secrets/auth-registration-broker-json',
@@ -171,7 +172,7 @@ export function composeForRelease(references, revision, options = {}) {
       labels: {
         ...labels('auth', 3000),
         'traefik.http.routers.anico-dev-auth.rule':
-          'Host(`dev.anico.online`) && (Path(`/api/auth/providers`) || Path(`/api/auth/session`) || Path(`/api/auth/logout`) || Path(`/api/auth/.well-known/jwks.json`) || PathRegexp(`^/api/auth/login/(google|microsoft|apple)(/callback)?$`) || PathRegexp(`^/api/auth/development/(authorize|consent|approve|token|identity|logout)$`) || PathRegexp(`^/api/auth/connections/(google|microsoft)$`) || PathRegexp(`^/api/auth/users/[a-f0-9-]{36}/admin$`))',
+          'Host(`dev.anico.online`) && (Path(`/api/auth/providers`) || Path(`/api/auth/session`) || Path(`/api/auth/logout`) || Path(`/api/auth/.well-known/jwks.json`) || PathRegexp(`^/api/auth/login/(google|microsoft|apple)(/callback)?$`) || PathRegexp(`^/api/auth/development/(authorize|consent|approve|token|identity|logout)$`) || PathRegexp(`^/api/auth/connections/(google|microsoft)$`) || PathRegexp(`^/api/auth/users/[a-f0-9-]{36}/admin$`) || PathRegexp(`^/api/auth/test-accounts(/return|/[a-f0-9-]{36}/session)?$`))',
         'traefik.http.routers.anico-dev-auth.priority': '200',
         'traefik.http.routers.anico-dev-auth.middlewares': 'anico-auth-prefix',
         'traefik.http.middlewares.anico-auth-prefix.stripprefix.prefixes':
