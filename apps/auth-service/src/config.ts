@@ -31,8 +31,21 @@ export function authConfiguration(env: NodeJS.ProcessEnv) {
     throw new Error(
       'Development authorization is available only in the dev environment',
     );
-  if (value.AUTH_TEST_ACCOUNTS_ENABLED === 'true' && env.APP_ENV !== 'dev')
-    throw new Error('Test accounts are available only in the dev environment');
+  if (value.AUTH_TEST_ACCOUNTS_ENABLED === 'true') {
+    // Two independent guards: environment name and the public origin. A
+    // production deployment fails to start instead of exposing test accounts.
+    const { hostname, protocol } = new URL(value.AUTH_PUBLIC_ORIGIN);
+    if (
+      env.APP_ENV !== 'dev' ||
+      !(
+        (protocol === 'https:' && hostname === 'dev.anico.online') ||
+        (protocol === 'http:' && ['localhost', '127.0.0.1'].includes(hostname))
+      )
+    )
+      throw new Error(
+        'Test accounts are available only in the dev environment',
+      );
+  }
   const origin = new URL(value.AUTH_PUBLIC_ORIGIN);
   if (
     origin.origin !== value.AUTH_PUBLIC_ORIGIN ||

@@ -370,16 +370,25 @@ describe('dev test accounts: create, switch, return and logout', () => {
     expect(own.body).not.toHaveProperty('canUseTestAccounts');
   });
 
-  it('is configurable only in the dev environment', () => {
-    expect(() =>
-      authConfiguration({
-        AUTH_TEST_ACCOUNTS_ENABLED: 'true',
-        APP_ENV: 'prod',
-      }),
-    ).toThrow('only in the dev');
-    expect(
-      authConfiguration({ AUTH_TEST_ACCOUNTS_ENABLED: 'true', APP_ENV: 'dev' })
-        .AUTH_TEST_ACCOUNTS_ENABLED,
-    ).toBe('true');
+  it('is configurable only in the dev environment on the dev or local origin', () => {
+    const enabled = { AUTH_TEST_ACCOUNTS_ENABLED: 'true' };
+    for (const env of [
+      { APP_ENV: 'prod', AUTH_PUBLIC_ORIGIN: 'https://anico.online' },
+      { APP_ENV: 'prod', AUTH_PUBLIC_ORIGIN: 'https://dev.anico.online' },
+      // Even a mislabeled production environment keeps the feature off.
+      { APP_ENV: 'dev', AUTH_PUBLIC_ORIGIN: 'https://anico.online' },
+      { APP_ENV: 'dev', AUTH_PUBLIC_ORIGIN: 'https://www.anico.online' },
+    ])
+      expect(() => authConfiguration({ ...enabled, ...env })).toThrow(
+        'only in the dev',
+      );
+    for (const origin of ['https://dev.anico.online', 'http://127.0.0.1:5173'])
+      expect(
+        authConfiguration({
+          ...enabled,
+          APP_ENV: 'dev',
+          AUTH_PUBLIC_ORIGIN: origin,
+        }).AUTH_TEST_ACCOUNTS_ENABLED,
+      ).toBe('true');
   });
 });

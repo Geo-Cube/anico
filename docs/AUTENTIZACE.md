@@ -301,10 +301,18 @@ případnou opravu proto nasazuj dopředu, nikoli prostým návratem starého au
 
 ## Testovací účty na devu
 
-Tester nepotřebuje zakládat další Google/Microsoft účty. Na devu (`AUTH_TEST_ACCOUNTS_ENABLED=true`,
-povoleno jen s `APP_ENV=dev`, jinak start selže) admin nebo owner na stránce
-**Testovací účty** (`/testovaci-ucty`) založí účet a přepne do něj prohlížeč. Postup
-a doporučená sada účtů: [testování na devu](qa/dev-testovani.md#12-testovací-účty-místo-nových-e-mailů).
+Tester nepotřebuje zakládat další Google/Microsoft účty. Na devu (`AUTH_TEST_ACCOUNTS_ENABLED=true`)
+admin nebo owner na stránce **Testovací účty** (`/testovaci-ucty`) založí účet a přepne do
+něj prohlížeč. Postup a doporučená sada účtů:
+[testování na devu](qa/dev-testovani.md#12-testovací-účty-místo-nových-e-mailů).
+
+**Na produkci se funkce nesmí dostat.** Kód je v image, ale bez příznaku se routy nepřipojí
+a testovací relace se odmítají. Příznak navíc hlídají tři nezávislé pojistky:
+
+1. auth-service nenastartuje, pokud je příznak zapnutý a zároveň neplatí `APP_ENV=dev`
+   a origin `https://dev.anico.online` (nebo lokální `http://127.0.0.1`/`localhost`);
+2. IaC proměnné prostředí `prod` příznak vůbec nepřijmou (`application-environments.ts`);
+3. příznak a gateway pravidlo `/api/auth/test-accounts` nastavuje jen `scripts/dev-deployment.mjs`.
 
 - Účet je běžný AniCo uživatel s rolí `breeder` a příznakem `testAccount`; nemá identitu
   poskytovatele, nepřihlásí se přes OIDC a nemůže propojit účet. Vzniká stejná událost
