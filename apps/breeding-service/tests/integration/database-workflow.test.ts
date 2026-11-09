@@ -8,6 +8,7 @@ import {
   it,
 } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import mongoose, { type Connection, Types } from 'mongoose';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
@@ -42,7 +43,7 @@ describe('database lifecycle against isolated temporary MongoDB', () => {
   let connection: Connection;
   let sequence = 0;
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
   });
   beforeEach(async () => {
     connection = await mongoose

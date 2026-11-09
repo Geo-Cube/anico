@@ -306,6 +306,50 @@ describe('animal profile write consistency', () => {
     expect(opened.size).toBe(upload.content.length);
   });
 
+  it('deletes the animal and keeps cleaning remaining files when one file cleanup fails', async () => {
+    const s = setup();
+    const animal = await s.create([upload, upload]);
+    const [failing] = animal.photos.map((p) => p.file.fileReference);
+    const remove = vi.mocked(s.photos.delete).getMockImplementation()!;
+    vi.mocked(s.photos.delete).mockImplementation(async (id) => {
+      if (id === failing) throw new TypeError(`storage offline for ${id}`);
+      await remove(id);
+    });
+
+    await s.use.remove(actor, animal.id);
+
+    expect(s.records.has(animal.id)).toBe(false);
+    expect([...s.files.keys()]).toEqual([failing]);
+    expect(s.variantFiles.size).toBe(0);
+    // log nenese odkaz na soubor ani text chyby
+    expect(s.logger.warn).toHaveBeenCalledExactlyOnceWith(
+      { errorName: 'TypeError' },
+      'Photo file cleanup failed',
+    );
+  });
+
+  it.each(['create', 'update'] as const)(
+    'rethrows an uncertain %s failure without photos and reports no kept files',
+    async (operation) => {
+      const s = setup();
+      const animal = operation === 'update' ? await s.create() : undefined;
+      const error = new Error('write outcome unknown');
+      if (operation === 'create')
+        vi.mocked(s.repository.create).mockRejectedValue(error);
+      else vi.mocked(s.repository.update).mockRejectedValue(error);
+      await expect(
+        operation === 'create'
+          ? s.create()
+          : s.use.update(actor, animal!.id, async () => ({
+              input: { name: 'New' },
+              uploads: [],
+            })),
+      ).rejects.toBe(error);
+      expect(s.records.size).toBe(operation === 'create' ? 0 : 1);
+      expect(s.logger.warn).not.toHaveBeenCalled();
+    },
+  );
+
   it('does not read requests or write files before breeder verification', async () => {
     const s = setup();
     const read = vi.fn(async () => ({ input: dog, uploads: [upload] }));

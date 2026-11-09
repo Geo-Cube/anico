@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import mongoose, { Types, type Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -51,6 +52,18 @@ const JPEG = await sharp({
   .jpeg()
   .toBuffer();
 const BROKEN_PNG = Buffer.concat([PNG.subarray(0, 8), Buffer.from('broken')]);
+// šum se špatně komprimuje: fotografie zabere víc GridFS chunků (255 KiB)
+const MULTI_CHUNK_JPEG = await sharp({
+  create: {
+    width: 900,
+    height: 900,
+    channels: 3,
+    background: '#000000',
+    noise: { type: 'gaussian', mean: 128, sigma: 60 },
+  },
+})
+  .jpeg({ quality: 95 })
+  .toBuffer();
 const optionalKeys = [
   'birthDate',
   'coatColor',
@@ -102,7 +115,7 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
     return AnimalSchema.parse(res.body);
   }
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri('anico_animals_test'))
       .asPromise();
@@ -612,6 +625,236 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
       (await request(app).get('/document-reviews').set(auth(admin)).expect(200))
         .body.items,
     ).toEqual([]);
+  });
+
+  it('filters the owner list by species, breed and sex and pages it newest first with a cursor', async () => {
+    const first = await create();
+    const male = await create({ ...dog, sex: 'male' });
+    const third = await create({ ...dog, name: 'Mia' });
+    const horse = await create({
+      ...dog,
+      species: 'horse',
+      breedId: animalBreeds('horse')[0]!.id,
+    });
+    await request(app)
+      .post('/animals')
+      .set(auth(stranger))
+      .send(dog)
+      .expect(201);
+    const list = async (query: Record<string, string | number>) => {
+      const res = await request(app)
+        .get('/animals')
+        .query(query)
+        .set(auth())
+        .expect(200);
+      return {
+        ids: (res.body.items as { id: string }[]).map((a) => a.id),
+        nextCursor: res.body.nextCursor as string | null,
+      };
+    };
+
+    expect((await list({ species: 'horse' })).ids).toEqual([horse.id]);
+    expect(
+      (await list({ species: 'dog', breedId: dog.breedId, sex: 'female' })).ids,
+    ).toEqual([third.id, first.id]);
+    const page = await list({ limit: 3 });
+    expect(page).toEqual({
+      ids: [horse.id, third.id, male.id],
+      nextCursor: male.id,
+    });
+    expect(await list({ limit: 3, before: page.nextCursor! })).toEqual({
+      ids: [first.id],
+      nextCursor: null,
+    });
+    await request(app)
+      .get('/animals')
+      .query({ breedId: dog.breedId })
+      .set(auth())
+      .expect(400);
+  });
+
+  it('serves the breed catalogue of a species and rejects an unknown species', async () => {
+    const res = await request(app).get('/breeds/horse').set(auth()).expect(200);
+    expect(res.body).toEqual({
+      species: 'horse',
+      breeds: animalBreeds('horse'),
+    });
+    await request(app).get('/breeds/cat').set(auth()).expect(400);
+  });
+
+  it('rejects a multipart profile that is not valid JSON before storing any photo', async () => {
+    await request(app)
+      .post('/animals')
+      .set(auth())
+      .field('animal', '{"name":')
+      .attach('photos', PNG, {
+        filename: 'photo.png',
+        contentType: 'application/octet-stream',
+      })
+      .expect(400);
+    expect(await collection().countDocuments()).toBe(0);
+    expect(await files()).toHaveLength(0);
+    expect(await variantFiles()).toHaveLength(0);
+  });
+
+  it('rejects a PATCH without any change and accepts a multipart PATCH carrying only photos', async () => {
+    const animal = await create();
+    const before = await raw(animal.id);
+    await request(app)
+      .patch(`/animals/${animal.id}`)
+      .set(auth())
+      .send({})
+      .expect(400, { error: 'Provide at least one change' });
+    expect(await raw(animal.id)).toEqual(before);
+
+    const changed = AnimalSchema.parse(
+      (
+        await request(app)
+          .patch(`/animals/${animal.id}`)
+          .set(auth())
+          .attach('photos', JPEG, {
+            filename: 'photo.jpg',
+            contentType: 'application/octet-stream',
+          })
+          .expect(200)
+      ).body,
+    );
+    expect(changed).toMatchObject({ name: dog.name, sex: dog.sex });
+    expect(changed.photos).toEqual([
+      expect.objectContaining({ contentType: 'image/jpeg', isPrimary: true }),
+    ]);
+    expect(await files()).toHaveLength(1);
+  });
+
+  it('reads, edits and deletes a profile stored before profile fields, revisions and photo variants existed', async () => {
+    const animal = await create(dog, [JPEG, PNG]);
+    const [legacyPhoto, keptPhoto] = animal.photos;
+    const photoUrl = `/animals/${animal.id}/photos/${legacyPhoto!.id}/file`;
+    // stav z doby před UC-02: bez volitelných údajů, revize, dokladů i zmenšenin
+    await collection().updateOne(
+      { _id: new Types.ObjectId(animal.id) },
+      {
+        $unset: {
+          ...Object.fromEntries(optionalKeys.map((key) => [key, ''])),
+          profileRevision: '',
+          documents: '',
+          'photos.$[].variants': '',
+        },
+      },
+    );
+    await collection('animalPhotoVariants.files').deleteMany({});
+    await collection('animalPhotoVariants.chunks').deleteMany({});
+
+    const legacy = AnimalSchema.parse(
+      (await request(app).get(`/animals/${animal.id}`).set(auth()).expect(200))
+        .body,
+    );
+    for (const key of optionalKeys) expect(legacy[key]).toBeNull();
+    expect(legacy.documentsState).toBe(animal.documentsState);
+    const thumbnail = await request(app)
+      .get(photoUrl)
+      .query({ size: 'thumbnail' })
+      .set(auth())
+      .buffer(true)
+      .parse((response, done) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => done(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(thumbnail.body).toEqual(JPEG);
+
+    await request(app)
+      .patch(`/animals/${animal.id}`)
+      .set(auth())
+      .send({ city: 'Brno', removePhotoIds: [legacyPhoto!.id] })
+      .expect(200);
+    expect(await raw(animal.id)).toMatchObject({
+      city: 'Brno',
+      profileRevision: 1,
+      photos: [expect.objectContaining({ isPrimary: true })],
+    });
+    expect((await files()).map((f) => f.filename)).toEqual([
+      keptPhoto!.fileName,
+    ]);
+    await request(app).delete(`/animals/${animal.id}`).set(auth()).expect(204);
+    expect(await files()).toHaveLength(0);
+    expect(await collection('animalPhotos.chunks').countDocuments()).toBe(0);
+  });
+
+  it('lists and deletes an animal stored before photos existed', async () => {
+    const now = new Date();
+    const { insertedId } = await collection().insertOne({
+      ...dog,
+      ownerUserId: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const id = insertedId.toString();
+
+    const list = await request(app).get('/animals').set(auth()).expect(200);
+    expect(list.body.items).toEqual([
+      expect.objectContaining({ id, photos: [], city: null }),
+    ]);
+    await request(app).delete(`/animals/${id}`).set(auth()).expect(204);
+    expect(await raw(id)).toBeNull();
+  });
+
+  it('keeps both of two concurrent profile patches', async () => {
+    const animal = await create();
+    const patch = (change: object) =>
+      request(app)
+        .patch(`/animals/${animal.id}`)
+        .set(auth())
+        .send(change)
+        .expect(200);
+
+    await Promise.all([patch({ city: 'Brno' }), patch({ coatColor: 'black' })]);
+
+    expect(await raw(animal.id)).toMatchObject({
+      city: 'Brno',
+      coatColor: 'black',
+      profileRevision: 2,
+    });
+  });
+
+  it('never serves a photo whose stored file is missing or corrupted', async () => {
+    const animal = await create(dog, [MULTI_CHUNK_JPEG]);
+    const photoUrl = `/animals/${animal.id}/photos/${animal.photos[0]!.id}/file`;
+    const get = (size?: string) =>
+      request(app)
+        .get(photoUrl)
+        .query(size ? { size } : {})
+        .set(auth());
+    await request(app)
+      .get(`/animals/${animal.id}/photos/000000000000000000000099/file`)
+      .set(auth())
+      .expect(404);
+
+    // prostřední chunk chybí až po odeslání hlaviček a prvních dat: spojení se ukončí
+    await collection('animalPhotos.chunks').deleteOne({ n: 1 });
+    await expect(get()).rejects.toMatchObject({ code: 'ECONNRESET' });
+    await collection('animalPhotos.files').deleteMany({});
+    await get().expect(500, { error: 'Internal server error' });
+
+    await get('preview').expect(200);
+    await collection('animalPhotoVariants.files').deleteMany({});
+    await get('preview').expect(500, { error: 'Internal server error' });
+  });
+
+  it('lets exactly one of two concurrent deletes succeed and removes the files once', async () => {
+    const animal = await create(dog, [PNG]);
+    const statuses = await Promise.all(
+      [1, 2].map(
+        async () =>
+          (await request(app).delete(`/animals/${animal.id}`).set(auth()))
+            .status,
+      ),
+    );
+    expect(statuses.sort()).toEqual([204, 404]);
+    expect(await raw(animal.id)).toBeNull();
+    expect(await files()).toHaveLength(0);
+    expect(await variantFiles()).toHaveLength(0);
   });
 
   it('refuses the profile migration for unknown sex and applies it after explicit data correction', async () => {

@@ -8,6 +8,7 @@ import {
   it,
 } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import mongoose, { type Connection } from 'mongoose';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -64,7 +65,7 @@ describe('verificationEvent publisher with actual MongoDB and NATS JetStream', (
   const publishers: VerificationPublisher[] = [];
   beforeAll(async () => {
     binary = await prepareTestBroker();
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri('publisher_test'))
       .asPromise();

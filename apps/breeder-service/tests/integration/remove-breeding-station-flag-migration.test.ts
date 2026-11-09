@@ -1,4 +1,5 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import mongoose, { type Connection } from 'mongoose';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { loadMigrations } from '../../src/database/registry.js';
@@ -6,7 +7,7 @@ import { loadMigrations } from '../../src/database/registry.js';
 let mongo: MongoMemoryServer;
 let connection: Connection;
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
+  mongo = await startTestMongo(new MongoMemoryServer());
   connection = await mongoose.createConnection(mongo.getUri()).asPromise();
 });
 afterAll(async () => {

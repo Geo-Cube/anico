@@ -381,7 +381,9 @@ describe('GET /breeders/me/verification-request/certificate', () => {
   it('answers 500 when the stream fails before data and the process survives', async () => {
     const { app, files } = testApp();
     await takeOverAndSubmit(app, 'breeder-1');
-    vi.spyOn(files, 'open').mockResolvedValueOnce(failingCertificate(false));
+    vi.spyOn(files, 'open').mockResolvedValueOnce(
+      failingCertificate('before-data'),
+    );
     const own = '/breeders/me/verification-request/certificate';
 
     const response = await request(app).get(own).set(breederHeaders());
@@ -393,7 +395,9 @@ describe('GET /breeders/me/verification-request/certificate', () => {
   it('aborts the connection when the stream fails after data was sent', async () => {
     const { app, files } = testApp();
     await takeOverAndSubmit(app, 'breeder-1');
-    vi.spyOn(files, 'open').mockResolvedValueOnce(failingCertificate(true));
+    vi.spyOn(files, 'open').mockResolvedValueOnce(
+      failingCertificate('after-first-chunk'),
+    );
     const own = '/breeders/me/verification-request/certificate';
 
     await expect(request(app).get(own).set(breederHeaders())).rejects.toThrow();

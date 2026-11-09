@@ -6,16 +6,23 @@ import {
   type AnimalDocumentList,
   type DocumentAnimal,
   type DocumentReview,
+  type Role,
 } from '@anico/shared-schemas';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQueryClient } from '@/app/query-client';
 import { routes } from '@/app/routes';
-import { server, sessionFor, unsubmittedAccount } from './server';
+import { anonymous, server, sessionFor, unsubmittedAccount } from './server';
 
 const api = '/api/animal';
 const breed = animalBreeds('dog')[0]!;
@@ -124,6 +131,61 @@ function renderApp(path: string, client = createQueryClient()) {
 
 const pdf = (name: string) =>
   new File(['%PDF-1.7'], name, { type: 'application/pdf' });
+
+/** Limit animal-service na jeden doklad (R5, ADR-0005). */
+const MIB_10 = 10 * 1024 * 1024;
+const pdfOfSize = (name: string, size: number) =>
+  new File([new Uint8Array(size)], name, { type: 'application/pdf' });
+
+/** Odpověď serveru, kterou test pustí až ve zvoleném okamžiku. */
+function gate() {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { open, opened };
+}
+
+/** Přihlášení jiného účtu (např. v jiné záložce) během rozpracovaného požadavku. */
+function switchAccount(client: QueryClient, roles: Role[]) {
+  const base = sessionFor(roles);
+  const other = {
+    ...base,
+    identity: { ...base.identity, userId: crypto.randomUUID() },
+  };
+  server.use(http.get('/api/auth/session', () => HttpResponse.json(other)));
+  client.setQueryData(['session'], other);
+}
+
+function stubObjectUrls() {
+  const createObjectURL = vi.fn((_blob: Blob) => 'blob:document');
+  vi.stubGlobal(
+    'URL',
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }),
+  );
+  return createObjectURL;
+}
+
+/** Okno otevřené synchronně při kliknutí (`window.open`). */
+function stubNewTab() {
+  const tab = {
+    opener: window as unknown,
+    location: { href: '' },
+    close: vi.fn(),
+  };
+  const open = vi
+    .spyOn(window, 'open')
+    .mockReturnValue(tab as unknown as Window);
+  return { tab, open };
+}
+
+const fileResponse = () =>
+  // Typ odpovědi souboru se ignoruje; rozhoduje typ uložený u dokladu.
+  new HttpResponse('%PDF-1.7', { headers: { 'Content-Type': 'text/html' } });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 beforeEach(() => {
   server.use(
@@ -378,6 +440,467 @@ describe('doklady zvířete – chovatel', () => {
     });
     click.mockRestore();
   });
+
+  it('otevře doklad v novém okně bez odkazu zpět na aplikaci a s typem z dokladu; zablokované okno soubor stáhne', async () => {
+    const createObjectURL = stubObjectUrls();
+    server.use(
+      http.get(`${api}/animals/:id/documents/:documentId/file`, fileResponse),
+    );
+    const { tab, open } = stubNewTab();
+    renderApp(`/zvirata/${animal.id}`);
+    const openButton = await screen.findByRole('button', {
+      name: 'Otevřít pruk-v2.pdf',
+    });
+    await userEvent.click(openButton);
+
+    expect(open).toHaveBeenCalledWith('', '_blank');
+    expect(tab.opener).toBeNull();
+    await waitFor(() => expect(tab.location.href).toBe('blob:document'));
+    expect(createObjectURL.mock.calls[0]![0].type).toBe('application/pdf');
+    expect(tab.close).not.toHaveBeenCalled();
+
+    open.mockReturnValue(null);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+    await waitFor(() => expect(openButton).toBeEnabled());
+    await userEvent.click(openButton);
+    await waitFor(() => expect(click).toHaveBeenCalledOnce());
+    expect(click.mock.contexts[0]).toMatchObject({ download: 'pruk-v2.pdf' });
+  });
+
+  it('neúspěšné otevření zavře předem otevřené okno a ukáže důvod', async () => {
+    const createObjectURL = stubObjectUrls();
+    server.use(
+      http.get(`${api}/animals/:id/documents/:documentId/file`, () =>
+        HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      ),
+    );
+    const { tab } = stubNewTab();
+    renderApp(`/zvirata/${animal.id}`);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Otevřít pruk-v2.pdf' }),
+    );
+    expect(
+      await screen.findByText('K souboru nemáte oprávnění.'),
+    ).toBeInTheDocument();
+    expect(tab.close).toHaveBeenCalledOnce();
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('soubor, který dorazí až po odhlášení, se nezobrazí a předem otevřené okno se zavře', async () => {
+    const createObjectURL = stubObjectUrls();
+    const requested = gate();
+    const response = gate();
+    server.use(
+      http.get(`${api}/animals/:id/documents/:documentId/file`, async () => {
+        requested.open();
+        await response.opened;
+        return fileResponse();
+      }),
+      http.post(
+        '/api/auth/logout',
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    );
+    const { tab } = stubNewTab();
+    const router = renderApp(`/zvirata/${animal.id}`);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Otevřít pruk-v2.pdf' }),
+    );
+    await requested.opened;
+
+    server.use(http.get('/api/auth/session', anonymous));
+    await userEvent.click(
+      screen.getByRole('button', { name: /Uživatelská nabídka/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Odhlásit se' }),
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/prihlaseni'),
+    );
+    response.open();
+
+    await waitFor(() => expect(tab.close).toHaveBeenCalledOnce());
+    expect(tab.location.href).toBe('');
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('soubor nad 10 MiB a prázdný soubor odmítne už při přetažení; soubor přesně 10 MiB projde (R5)', async () => {
+    let body: FormData | undefined;
+    server.use(
+      http.post(`${api}/animals/:id/documents`, async ({ request }) => {
+        body = await request.formData();
+        return HttpResponse.json(
+          {
+            animalId: animal.id,
+            documentsState: 'PENDING',
+            documents: [pendingHealth],
+          },
+          { status: 201 },
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp(`/zvirata/${animal.id}/doklady/nahrat`);
+    const dropZone = (await screen.findByLabelText('Soubory dokladů')).closest(
+      'label',
+    )!;
+    // Bez zrušení výchozí akce by prohlížeč přetažený soubor otevřel místo aplikace.
+    expect(fireEvent.dragOver(dropZone)).toBe(false);
+    fireEvent.drop(dropZone, {
+      dataTransfer: {
+        files: [
+          pdfOfSize('velky.pdf', MIB_10 + 1),
+          pdfOfSize('prazdny.pdf', 0),
+          pdfOfSize('hranice.pdf', MIB_10),
+        ],
+      },
+    });
+    expect(
+      screen.getByRole('listitem', { name: 'velky.pdf' }),
+    ).toHaveTextContent('Soubor je větší než 10 MiB.');
+    expect(
+      screen.getByRole('listitem', { name: 'prazdny.pdf' }),
+    ).toHaveTextContent('Soubor je prázdný.');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Typ dokladu pro hranice.pdf' }),
+      'PEDIGREE',
+    );
+    const send = screen.getByRole('button', { name: 'Odeslat k posouzení' });
+    await user.click(send);
+    expect(
+      screen.getByText(
+        'Odeberte soubory, které nelze nahrát (označené červeně).',
+      ),
+    ).toBeInTheDocument();
+    expect(body).toBeUndefined();
+
+    await user.click(screen.getByRole('button', { name: 'Odebrat velky.pdf' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Odebrat prazdny.pdf' }),
+    );
+    await user.click(send);
+    expect(
+      await screen.findByText(
+        '1 doklad byl odeslán k posouzení. Výsledek uvidíte u dokladů.',
+      ),
+    ).toBeInTheDocument();
+    expect(body?.getAll('documentTypes')).toEqual(['PEDIGREE']);
+  });
+
+  it('nad 10 souborů v jednom podání další nepřidá; upozornění lze zavřít a Zrušit nic neodešle', async () => {
+    const submit = vi.fn();
+    server.use(http.post(`${api}/animals/:id/documents`, submit));
+    const user = userEvent.setup();
+    const router = renderApp(`/zvirata/${animal.id}/doklady/nahrat`);
+    await user.upload(
+      await screen.findByLabelText('Soubory dokladů'),
+      Array.from({ length: 11 }, (_, index) => pdf(`doklad-${index + 1}.pdf`)),
+    );
+    const limit = screen.getByText(
+      'Jedno podání může mít nejvýše 10 dokladů. Další soubory nebyly přidány.',
+    );
+    expect(
+      within(
+        screen.getByRole('list', { name: 'Vybrané soubory' }),
+      ).getAllByRole('listitem'),
+    ).toHaveLength(10);
+    expect(
+      screen.queryByRole('listitem', { name: 'doklad-11.pdf' }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Zavřít zprávu' }));
+    expect(limit).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Odeslat k posouzení' }),
+    );
+    const problems = screen.getByText(
+      'Ke každému souboru vyberte typ dokladu.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Zavřít zprávu' }));
+    expect(problems).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Zrušit' }));
+    expect(router.state.location.pathname).toBe(`/zvirata/${animal.id}`);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('obsah souboru odmítnutý serverem nic neuloží a výběr zůstane k opravě', async () => {
+    server.use(
+      http.post(`${api}/animals/:id/documents`, () =>
+        HttpResponse.json(
+          { error: 'Unsupported document content' },
+          { status: 415 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    const path = `/zvirata/${animal.id}/doklady/nahrat`;
+    const router = renderApp(path);
+    await user.upload(
+      await screen.findByLabelText('Soubory dokladů'),
+      pdf('pruk.pdf'),
+    );
+    const type = screen.getByRole('combobox', {
+      name: 'Typ dokladu pro pruk.pdf',
+    });
+    await user.selectOptions(type, 'PEDIGREE');
+    await user.click(
+      screen.getByRole('button', { name: 'Odeslat k posouzení' }),
+    );
+
+    const error = await screen.findByText(
+      'Doklad musí být soubor PDF, JPEG nebo PNG. Nic nebylo uloženo.',
+    );
+    expect(router.state.location.pathname).toBe(path);
+    expect(type).toHaveValue('PEDIGREE');
+    await user.click(screen.getByRole('button', { name: 'Zavřít zprávu' }));
+    expect(error).not.toBeInTheDocument();
+  });
+
+  it('neověřenému chovateli vysvětlí, proč doklady nahrát nejde', async () => {
+    server.use(
+      http.post(`${api}/animals/:id/documents`, () =>
+        HttpResponse.json(
+          { error: 'Breeder is not verified' },
+          { status: 403 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp(`/zvirata/${animal.id}/doklady/nahrat`);
+    await user.upload(
+      await screen.findByLabelText('Soubory dokladů'),
+      pdf('pruk.pdf'),
+    );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Typ dokladu pro pruk.pdf' }),
+      'PEDIGREE',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Odeslat k posouzení' }),
+    );
+    expect(
+      await screen.findByText(/Nejdřív musí být ověřen váš chovatelský účet\./),
+    ).toBeInTheDocument();
+  });
+
+  it('odpověď na podání doručená po přihlášení jiného účtu nepřesměruje ani neohlásí úspěch', async () => {
+    const requested = gate();
+    const response = gate();
+    server.use(
+      http.post(`${api}/animals/:id/documents`, async () => {
+        requested.open();
+        await response.opened;
+        return HttpResponse.json(
+          {
+            animalId: animal.id,
+            documentsState: 'PENDING',
+            documents: [pendingHealth],
+          },
+          { status: 201 },
+        );
+      }),
+    );
+    const client = createQueryClient();
+    const path = `/zvirata/${animal.id}/doklady/nahrat`;
+    const router = renderApp(path, client);
+    const user = userEvent.setup();
+    await user.upload(
+      await screen.findByLabelText('Soubory dokladů'),
+      pdf('pruk.pdf'),
+    );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Typ dokladu pro pruk.pdf' }),
+      'PEDIGREE',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Odeslat k posouzení' }),
+    );
+    await requested.opened;
+    switchAccount(client, ['breeder']);
+    response.open();
+
+    // Formulář zůstal (výběr je v něm) a odeslání skončilo.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Odeslat k posouzení' }),
+      ).toBeEnabled(),
+    );
+    expect(
+      screen.getByRole('listitem', { name: 'pruk.pdf' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(path);
+    expect(screen.queryByText(/odeslán k posouzení/)).not.toBeInTheDocument();
+  });
+
+  it('výpadek při načtení doplnění nabídne opakování, které formulář načte', async () => {
+    // Výpadek dotaz jednou sám zopakuje; až ruční opakování uspěje.
+    let failures = 2;
+    server.use(
+      http.get(`${api}/animals/:id/documents/:documentId/history`, () =>
+        failures-- > 0
+          ? HttpResponse.json({ error: 'Unavailable' }, { status: 503 })
+          : HttpResponse.json(pedigreeHistory),
+      ),
+    );
+    renderApp(`/zvirata/${animal.id}/doklady/${rejectedV2.id}/doplnit`);
+    expect(
+      await screen.findByText(
+        'Služba je dočasně nedostupná. Zkuste to prosím znovu.',
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Zkusit znovu' }));
+    expect(
+      await screen.findByRole('button', { name: 'Odeslat novou verzi' }),
+    ).toBeInTheDocument();
+  });
+
+  it('doklad mimo historii řady doplnit nelze a opakování nenabízí', async () => {
+    renderApp(`/zvirata/${animal.id}/doklady/${pendingHealth.id}/doplnit`);
+    expect(
+      await screen.findByText('Doklad nebyl nalezen.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Zkusit znovu' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Odeslat novou verzi' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('přetažený prázdný nebo příliš velký soubor neodešle; Zrušit vrátí na detail', async () => {
+    const submit = vi.fn();
+    server.use(
+      http.post(`${api}/animals/:id/documents/:documentId/versions`, submit),
+    );
+    const user = userEvent.setup();
+    const router = renderApp(
+      `/zvirata/${animal.id}/doklady/${rejectedV2.id}/doplnit`,
+    );
+    const input = await screen.findByLabelText(/Opravený soubor/);
+    const dropZone = input.closest('label')!;
+    const send = screen.getByRole('button', { name: 'Odeslat novou verzi' });
+
+    expect(fireEvent.dragOver(dropZone)).toBe(false);
+    fireEvent.drop(dropZone, {
+      dataTransfer: { files: [pdfOfSize('prazdny.pdf', 0)] },
+    });
+    expect(input).toHaveAccessibleDescription(/Soubor je prázdný\.$/);
+    await user.click(send);
+    fireEvent.drop(dropZone, {
+      dataTransfer: { files: [pdfOfSize('velky.pdf', MIB_10 + 1)] },
+    });
+    expect(input).toHaveAccessibleDescription(/Soubor je větší než 10 MiB\.$/);
+    await user.click(send);
+    expect(submit).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Zrušit' }));
+    expect(router.state.location.pathname).toBe(`/zvirata/${animal.id}`);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('doklad doplněný mezitím jinde (409 s aktuální verzí) ukáže aktuální stav místo formuláře (A3)', async () => {
+    const newer = version('aaaaaaaaaaaaaaaaaaaa0003', {
+      versionNumber: 3,
+      previousDocumentId: rejectedV2.id,
+    });
+    let replaced = false;
+    server.use(
+      http.post(`${api}/animals/:id/documents/:documentId/versions`, () => {
+        replaced = true;
+        return HttpResponse.json(
+          { error: 'Document is not current', current: newer },
+          { status: 409 },
+        );
+      }),
+      http.get(`${api}/animals/:id/documents/:documentId/history`, () =>
+        HttpResponse.json(
+          replaced
+            ? {
+                ...pedigreeHistory,
+                versions: [
+                  rejectedV1,
+                  { ...rejectedV2, isCurrent: false },
+                  newer,
+                ],
+              }
+            : pedigreeHistory,
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp(`/zvirata/${animal.id}/doklady/${rejectedV2.id}/doplnit`);
+    await user.upload(
+      await screen.findByLabelText(/Opravený soubor/),
+      pdf('pruk-v3.pdf'),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Odeslat novou verzi' }),
+    );
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Tento doklad už nelze doplnit',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Tato verze už byla nahrazena novější verzí. Doplnit lze jen aktuální zamítnutou verzi.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Odeslat novou verzi' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('souběžný zápis bez platné aktuální verze (409) nechá soubor vybraný a podání lze zopakovat', async () => {
+    let attempts = 0;
+    server.use(
+      http.post(`${api}/animals/:id/documents/:documentId/versions`, () =>
+        ++attempts === 1
+          ? HttpResponse.json(
+              {
+                error: 'Documents changed concurrently',
+                current: { id: rejectedV2.id },
+              },
+              { status: 409 },
+            )
+          : HttpResponse.json(
+              version('aaaaaaaaaaaaaaaaaaaa0003', {
+                versionNumber: 3,
+                previousDocumentId: rejectedV2.id,
+              }),
+              { status: 201 },
+            ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp(`/zvirata/${animal.id}/doklady/${rejectedV2.id}/doplnit`);
+    await user.upload(
+      await screen.findByLabelText(/Opravený soubor/),
+      pdf('pruk-v3.pdf'),
+    );
+    const send = screen.getByRole('button', { name: 'Odeslat novou verzi' });
+    await user.click(send);
+
+    const error = await screen.findByText(
+      'Doklady se mezitím změnily. Načtěte aktuální stav a zkuste to znovu.',
+    );
+    expect(screen.getByText('pruk-v3.pdf')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Zavřít zprávu' }));
+    expect(error).not.toBeInTheDocument();
+
+    await user.click(send);
+    expect(
+      await screen.findByText(
+        'Nová verze dokladu Průkaz původu byla odeslána k posouzení.',
+      ),
+    ).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
 });
 
 describe('doklady zvířete – administrátor', () => {
@@ -561,5 +1084,193 @@ describe('doklady zvířete – administrátor', () => {
     expect(
       screen.queryByRole('button', { name: 'Zamítnout' }),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      'historie řady neexistuje (404)',
+      () => HttpResponse.json({ error: 'Document not found' }, { status: 404 }),
+    ],
+    ['doklad v historii řady chybí', () => HttpResponse.json(pedigreeHistory)],
+  ])(
+    '%s → stránka „Doklad nebyl nalezen“ s cestou zpět do fronty',
+    async (_case, respond) => {
+      server.use(
+        http.get(`${api}/animals/:id/documents/:documentId/history`, respond),
+      );
+      const router = renderApp(
+        `/administrace/chovatele/doklady/${animal.id}/${pendingV3.id}`,
+      );
+      expect(
+        await screen.findByRole('heading', { name: 'Doklad nebyl nalezen' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Schválit doklad' }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole('link', { name: 'Zpět na doklady' }),
+      );
+      expect(router.state.location.pathname).toBe(
+        '/administrace/chovatele/doklady',
+      );
+    },
+  );
+
+  it('výpadek načtení detailu nabídne opakování, které doklad načte; Zpět vrátí do fronty', async () => {
+    // Výpadek dotaz jednou sám zopakuje; až ruční opakování uspěje.
+    let failures = 2;
+    server.use(
+      http.get(`${api}/animals/:id/documents/:documentId/history`, () =>
+        failures-- > 0
+          ? HttpResponse.json({ error: 'Unavailable' }, { status: 503 })
+          : HttpResponse.json(history),
+      ),
+    );
+    const router = renderApp(
+      `/administrace/chovatele/doklady/${animal.id}/${pendingV3.id}`,
+    );
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Služba je dočasně nedostupná',
+      }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Zkusit znovu' }));
+    expect(
+      await screen.findByRole('button', { name: 'Schválit doklad' }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Zpět na doklady' }),
+    );
+    expect(router.state.location.pathname).toBe(
+      '/administrace/chovatele/doklady',
+    );
+  });
+
+  it.each([
+    {
+      failure: 'chybějící oprávnění (403)',
+      decision: 'approve',
+      respond: () => HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      message: 'K posuzování dokladů nemáte oprávnění.',
+    },
+    {
+      failure: 'smazaný doklad (404)',
+      decision: 'approve',
+      respond: () =>
+        HttpResponse.json({ error: 'Document not found' }, { status: 404 }),
+      message: 'Doklad už neexistuje (zvíře mohlo být smazáno).',
+    },
+    {
+      failure: 'neplatné rozhodnutí (400)',
+      decision: 'reject',
+      respond: () =>
+        HttpResponse.json({ error: 'Invalid decision' }, { status: 400 }),
+      message:
+        'Rozhodnutí není platné. Zkontrolujte důvod zamítnutí (nejvýše 500 znaků).',
+    },
+    {
+      failure: 'výpadek spojení',
+      decision: 'reject',
+      respond: () => HttpResponse.error(),
+      message:
+        'Rozhodnutí se nepodařilo uložit kvůli chybě spojení. Zkuste to znovu.',
+    },
+  ] as const)(
+    'rozhodnutí odmítnuté kvůli: $failure zůstane neuložené a chyba je vidět v dialogu i po jeho zavření',
+    async ({ decision, respond, message }) => {
+      server.use(
+        http.post(`${api}/animals/:id/documents/:documentId/decision`, respond),
+      );
+      renderApp(`/administrace/chovatele/doklady/${animal.id}/${pendingV3.id}`);
+      if (decision === 'approve') {
+        await userEvent.click(
+          await screen.findByRole('button', { name: 'Schválit doklad' }),
+        );
+        await userEvent.click(
+          within(await screen.findByRole('dialog')).getByRole('button', {
+            name: 'Potvrdit schválení',
+          }),
+        );
+      } else {
+        await userEvent.click(
+          await screen.findByRole('button', { name: 'Zamítnout' }),
+        );
+        const dialog = await screen.findByRole('dialog');
+        await userEvent.type(
+          within(dialog).getByRole('textbox', { name: /Důvod zamítnutí/ }),
+          'Razítko chybí.',
+        );
+        await userEvent.click(
+          within(dialog).getByRole('button', { name: 'Potvrdit zamítnutí' }),
+        );
+      }
+      const dialog = screen.getByRole('dialog');
+      expect(await within(dialog).findByText(message)).toBeInTheDocument();
+
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Zrušit' }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      );
+      expect(screen.getByText(message)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Schválit doklad' }),
+      ).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Zamítnout' })).toBeEnabled();
+    },
+  );
+
+  it('souběžné rozhodnutí (409) bez uloženého stavu v odpovědi zavře dialog a obnoví detail', async () => {
+    const approved = {
+      ...pendingV3,
+      ...reviewed,
+      assessmentStatus: 'APPROVED' as const,
+    };
+    let decided = false;
+    server.use(
+      http.post(`${api}/animals/:id/documents/:documentId/decision`, () => {
+        decided = true;
+        return HttpResponse.json(
+          { error: 'Document already decided' },
+          { status: 409 },
+        );
+      }),
+      http.get(`${api}/animals/:id/documents/:documentId/history`, () =>
+        HttpResponse.json(
+          decided
+            ? {
+                ...history,
+                versions: [...history.versions.slice(0, 2), approved],
+              }
+            : history,
+        ),
+      ),
+    );
+    renderApp(`/administrace/chovatele/doklady/${animal.id}/${pendingV3.id}`);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Zamítnout' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(
+      within(dialog).getByRole('textbox', { name: /Důvod zamítnutí/ }),
+      'Razítko chybí.',
+    );
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Potvrdit zamítnutí' }),
+    );
+
+    expect(
+      await screen.findByText(
+        'Jiný administrátor už o tomto dokladu rozhodl. Zobrazuji uložený výsledek.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Zamítnout' }),
+      ).not.toBeInTheDocument(),
+    );
   });
 });

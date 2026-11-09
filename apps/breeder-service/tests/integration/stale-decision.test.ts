@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { createConnection, type Connection } from 'mongoose';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -31,7 +32,7 @@ describe('zastaralé rozhodnutí po opravě vrácené žádosti (MongoDB)', () =
   );
 
   beforeAll(async () => {
-    mongod = await MongoMemoryServer.create();
+    mongod = await startTestMongo(new MongoMemoryServer());
     connection = await createConnection(
       mongod.getUri('anico_breeder_stale_decision'),
     ).asPromise();

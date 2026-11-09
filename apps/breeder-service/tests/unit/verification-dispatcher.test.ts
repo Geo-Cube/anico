@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { pino } from 'pino';
 import { verificationDispatcher } from '../../src/modules/breeders/application/verification-dispatcher.js';
@@ -37,13 +37,14 @@ function setup(attempts = 1) {
     publish: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
+  const logger = pino({ level: 'silent' });
   const dispatcher = verificationDispatcher({
     outbox,
     publisher,
-    logger: pino({ level: 'silent' }),
+    logger,
     now: () => now,
   });
-  return { claim, outbox, publisher, dispatcher };
+  return { claim, outbox, publisher, dispatcher, logger };
 }
 
 describe('verification dispatcher', () => {
@@ -115,5 +116,125 @@ describe('verification dispatcher', () => {
     dispatcher.start();
     await dispatcher.stop();
     expect(publisher.close).toHaveBeenCalledOnce();
+  });
+
+  describe('loop', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('refuses a second start so two loops never claim concurrently', async () => {
+      const { dispatcher, outbox } = setup();
+      outbox.claim.mockResolvedValue(null);
+      dispatcher.start();
+      expect(() => dispatcher.start()).toThrow('already started');
+      await dispatcher.stop();
+    });
+
+    it('stop wakes an idle pause immediately instead of waiting a second', async () => {
+      vi.useFakeTimers();
+      const { dispatcher, outbox, publisher } = setup();
+      outbox.claim.mockResolvedValue(null);
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+      await dispatcher.stop();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(outbox.claim).toHaveBeenCalledOnce();
+      expect(publisher.close).toHaveBeenCalledOnce();
+    });
+
+    it('stop waits for the in-flight publish and closes the publisher only after it commits', async () => {
+      vi.useFakeTimers();
+      const { dispatcher, outbox, publisher, claim } = setup();
+      outbox.claim.mockResolvedValueOnce(claim).mockResolvedValue(null);
+      let acknowledge!: () => void;
+      publisher.publish.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            acknowledge = resolve;
+          }),
+      );
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publisher.publish).toHaveBeenCalledOnce();
+      let stopped = false;
+      const stopping = dispatcher.stop().then(() => {
+        stopped = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stopped).toBe(false);
+      expect(publisher.close).not.toHaveBeenCalled();
+      acknowledge();
+      await stopping;
+      expect(outbox.published).toHaveBeenCalledWith(claim, now);
+      expect(outbox.published.mock.invocationCallOrder[0]!).toBeLessThan(
+        publisher.close.mock.invocationCallOrder[0]!,
+      );
+      // Po zastavení už smyčka nebere další záznam.
+      expect(outbox.claim).toHaveBeenCalledOnce();
+    });
+
+    it('logs an outbox failure without details and retries on the next round', async () => {
+      vi.useFakeTimers();
+      const { dispatcher, outbox, logger } = setup();
+      const error = vi.spyOn(logger, 'error');
+      outbox.claim
+        .mockRejectedValueOnce(new Error('mongodb://user:secret@db'))
+        .mockResolvedValue(null);
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(error).toHaveBeenCalledOnce();
+      expect(JSON.stringify(error.mock.calls)).not.toContain('secret');
+      await vi.advanceTimersByTimeAsync(999);
+      expect(outbox.claim).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(outbox.claim).toHaveBeenCalledTimes(2);
+      await dispatcher.stop();
+    });
+
+    it('drains consecutive claims without pausing between them', async () => {
+      vi.useFakeTimers();
+      const { dispatcher, outbox, publisher, claim } = setup();
+      outbox.claim
+        .mockResolvedValueOnce(claim)
+        .mockResolvedValueOnce(claim)
+        .mockResolvedValue(null);
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publisher.publish).toHaveBeenCalledTimes(2);
+      expect(outbox.claim).toHaveBeenCalledTimes(3);
+      await dispatcher.stop();
+    });
+  });
+
+  it('warns about a lost lease after publishing instead of scheduling a retry', async () => {
+    const { dispatcher, outbox, publisher, logger } = setup();
+    const warn = vi.spyOn(logger, 'warn');
+    outbox.published.mockResolvedValue(false);
+    expect(await dispatcher.once()).toBe(true);
+    expect(publisher.publish).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('lease changed'));
+    expect(outbox.retry).not.toHaveBeenCalled();
+  });
+
+  it('uses the current wall clock for the lease when no clock is injected', async () => {
+    vi.useFakeTimers({ now: new Date('2027-01-02T03:04:05.000Z') });
+    try {
+      const { outbox } = setup();
+      outbox.claim.mockResolvedValue(null);
+      await verificationDispatcher({
+        outbox,
+        publisher: { publish: vi.fn(), close: vi.fn() },
+        logger: pino({ level: 'silent' }),
+      }).once();
+      expect(outbox.claim).toHaveBeenCalledWith(
+        new Date('2027-01-02T03:04:05.000Z'),
+        new Date('2027-01-02T03:04:35.000Z'),
+        expect.any(String),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

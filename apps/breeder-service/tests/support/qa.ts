@@ -78,21 +78,30 @@ export function faultyApp(
   return { app, breeders, files, notifyDecision, log };
 }
 
-/** Otevřený certifikát, jehož stream selže před daty, nebo až po prvním bloku. */
-export function failingCertificate(failAfterData: boolean) {
+/**
+ * Otevřený certifikát, jehož stream selže:
+ * - `before-data`: před prvními daty (odpověď ještě nezačala),
+ * - `with-first-chunk`: hned po načtení prvního bloku, dřív než se zapíše do odpovědi,
+ * - `after-first-chunk`: až poté, co první blok odešel klientovi (hlavičky odeslány).
+ */
+export function failingCertificate(
+  failure: 'before-data' | 'with-first-chunk' | 'after-first-chunk',
+) {
   let sent = false;
   return {
     stream: new Readable({
       read() {
-        if (failAfterData && !sent) {
+        if (failure !== 'before-data' && !sent) {
           sent = true;
           this.push(Buffer.from('%PDF-'));
+        } else if (failure === 'after-first-chunk') {
+          setImmediate(() => this.destroy(new Error('gridfs down')));
         } else {
           this.destroy(new Error('gridfs down'));
         }
       },
     }),
-    size: failAfterData ? 100 : 10,
+    size: failure === 'before-data' ? 10 : 100,
     contentType: 'application/pdf' as const,
   };
 }

@@ -5,10 +5,11 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { __MODULE_PASCAL__Router } from '../../src/modules/__MODULE_NAME__/http/router.js';
 import { mongoose__MODULE_PASCAL__Repository } from '../../src/modules/__MODULE_NAME__/infrastructure/mongoose-repository.js';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 describe('__MODULE_NAME__ HTTP + MongoDB', () => {
   let mongo: MongoMemoryServer;
   let connection: Connection;
-  beforeAll(async () => { mongo = await MongoMemoryServer.create(); connection = await mongoose.createConnection(mongo.getUri('module_test')).asPromise(); });
+  beforeAll(async () => { mongo = await startTestMongo(new MongoMemoryServer()); connection = await mongoose.createConnection(mongo.getUri('module_test')).asPromise(); });
   afterAll(async () => { await connection?.close(); await mongo?.stop(); });
   it('validates input, persists records and lists them through the HTTP adapter', async () => {
     const repository = mongoose__MODULE_PASCAL__Repository(connection);

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import mongoose, { Types, type Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -47,7 +48,7 @@ describe('UC-03 animal documents over HTTP with MongoDB and GridFS', () => {
   let verificationDown = false;
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri('anico_animal_documents_test'))
       .asPromise();

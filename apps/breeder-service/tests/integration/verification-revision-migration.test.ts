@@ -1,5 +1,6 @@
 import { VerificationRequestSchema } from '@anico/shared-schemas';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import mongoose, { Types, type Connection } from 'mongoose';
 import {
   afterAll,
@@ -94,7 +95,7 @@ describe(`migrace ${MIGRATION_ID}`, () => {
   const snapshot = () => breeders().find().sort({ breederId: 1 }).toArray();
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     const found = (await loadMigrations()).find(
       (item) => item.id === MIGRATION_ID,
     );

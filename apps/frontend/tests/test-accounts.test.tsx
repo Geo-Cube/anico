@@ -1,7 +1,7 @@
 import type { Session, TestAccount } from '@anico/shared-schemas';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -166,5 +166,140 @@ describe('testovací účty na vývojovém prostředí', () => {
     expect(
       await screen.findByText('Nedostatečné oprávnění'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('selhání testovacích účtů', () => {
+  const admin = sessionFor(['breeder', 'admin'], { canUseTestAccounts: true });
+
+  /** Formulář vyplněný do stavu před odesláním. */
+  async function fillForm(user: UserEvent) {
+    await user.type(await screen.findByLabelText(/^Jméno/), 'Testovací');
+    await user.type(screen.getByLabelText(/^Příjmení/), 'Chovatel');
+  }
+
+  it('administrátor nezaloží testovacího administrátora a údaje mu zůstanou', async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      http.get('/api/auth/session', () => HttpResponse.json(admin)),
+      http.get('/api/auth/test-accounts', () =>
+        HttpResponse.json({ accounts: [] }),
+      ),
+      http.post('/api/auth/test-accounts', async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ error: 'OWNER_REQUIRED' }, { status: 403 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp('/testovaci-ucty');
+    await fillForm(user);
+    await user.click(
+      screen.getByRole('checkbox', { name: /Také role administrátor/ }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Založit účet' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Testovací účet administrátora smí založit jen vlastník.',
+    );
+    expect(bodies).toEqual([
+      { givenName: 'Testovací', familyName: 'Chovatel', admin: true },
+    ]);
+    expect(screen.getByLabelText(/^Jméno/)).toHaveValue('Testovací');
+    expect(
+      screen.getByRole('checkbox', { name: /Také role administrátor/ }),
+    ).toBeChecked();
+  });
+
+  it('po odmítnutých údajích a výpadku projde opravený pokus a formulář se vyprázdní', async () => {
+    const responses = [
+      () =>
+        HttpResponse.json(
+          { error: 'VALIDATION_FAILED', issues: [{ path: ['email'] }] },
+          { status: 400 },
+        ),
+      () => HttpResponse.json({ error: 'INTERNAL' }, { status: 500 }),
+      () => HttpResponse.json(tester, { status: 201 }),
+    ];
+    server.use(
+      http.get('/api/auth/session', () => HttpResponse.json(admin)),
+      http.get('/api/auth/test-accounts', () =>
+        HttpResponse.json({ accounts: [] }),
+      ),
+      http.post('/api/auth/test-accounts', () => responses.shift()!()),
+    );
+    const user = userEvent.setup();
+    renderApp('/testovaci-ucty');
+    await fillForm(user);
+    await user.type(screen.getByLabelText(/^E-mail/), 'neplatny@');
+    const submit = screen.getByRole('button', { name: 'Založit účet' });
+    await user.click(submit);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Zkontrolujte jméno, příjmení a e-mail.',
+    );
+    expect(screen.getByLabelText(/^E-mail/)).toHaveValue('neplatny@');
+
+    await user.clear(screen.getByLabelText(/^E-mail/));
+    await user.click(submit);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Akci se nepodařilo provést. Zkuste to znovu.',
+    );
+
+    await user.click(submit);
+    expect(
+      await screen.findByText('Testovací účet Testovací Chovatel je založený.'),
+    ).toBeVisible();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Jméno/)).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: 'Zavřít zprávu' }));
+    expect(
+      screen.queryByText('Testovací účet Testovací Chovatel je založený.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('zakázané přepnutí ponechá administrátora v jeho účtu', async () => {
+    server.use(
+      http.get('/api/auth/session', () => HttpResponse.json(admin)),
+      http.get('/api/auth/test-accounts', () =>
+        HttpResponse.json({ accounts: [tester] }),
+      ),
+      http.post('/api/auth/test-accounts/:userId/session', () =>
+        HttpResponse.json({ error: 'FORBIDDEN' }, { status: 403 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { router } = renderApp('/testovaci-ucty');
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Přepnout na Testovací Chovatel',
+      }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Testovací účty může používat jen administrátor nebo vlastník.',
+    );
+    expect(router.state.location.pathname).toBe('/testovaci-ucty');
+    expect(screen.queryByRole('region', { name: 'Testovací účet' })).toBeNull();
+  });
+
+  it('nenačtený seznam nabídne opakování', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/auth/session', () => HttpResponse.json(admin)),
+      http.get('/api/auth/test-accounts', () =>
+        ++calls <= 2
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json({ accounts: [tester] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp('/testovaci-ucty');
+    expect(
+      await screen.findByText('Testovací účty se nepodařilo načíst.'),
+    ).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Zkusit znovu' }));
+    expect(
+      await screen.findByRole('button', {
+        name: 'Přepnout na Testovací Chovatel',
+      }),
+    ).toBeEnabled();
   });
 });

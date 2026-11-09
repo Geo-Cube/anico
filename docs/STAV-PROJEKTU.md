@@ -59,6 +59,19 @@ Ověřeno: frontendové testy (101) a průchod v Chromiu proti skutečné breede
    ([integrace identity](INTEGRACE-IDENTITY.md)). Hotovo pro auth, breeder a animal.
 3. **Zpracování registrací `user.registered`** – události jsou v brokeru, nikdo je nezpracovává; nejdřív dohodnout
    příjemce a význam „převzetí účtu“ ([provoz a předání](REGISTRACNI-UDALOSTI.md)).
+4. **Opravy nalezené při rozšiřování testů (9. 11. 2026, větev `feature/test-coverage`)** – zatím neopraveno:
+   - **Registrace s dlouhým e-mailem neodejde:** `IdentitySchema.email` (`packages/shared-schemas/src/identity.ts:7`)
+     ani e-mail z OIDC nemá maximální délku; účet vznikne, ale událost nad 16 KB skončí trvale v karanténě
+     (`auth-service/.../registration-dispatcher.ts:31`) a do breeder-service nedorazí.
+   - **Zkrácená fotografie jako úspěch:** chybí-li poslední chunky souboru v GridFS, driver ukončí stream bez chyby;
+     `animal-service/src/modules/animal/http/router.ts:171` pošle 200 s plným `Content-Length` a nic nezaloguje.
+   - **Neviditelná hláška:** „Doklad už byl mezitím doplněn…“ v `DocumentReplacePage.tsx:249` hned přepíše
+     panel „Tento doklad už nelze doplnit“ (`:74–93`), uživatel ji neuvidí.
+   - **Mrtvý kód ke smazání:** `VerificationRequestPage.tsx:396–399`; kontrola data `AnimalForm.tsx:69–70`;
+     `req.body ?? {}` / `req.files ?? []` v `animal-service/.../router.ts:105, 113`; `InvalidDecisionError`
+     v `breeder-service/.../http/domain-errors.ts:66–68`; zachytávání E11000 v `register`
+     (`auth-service/.../infrastructure/repository.ts:92–98`) – MongoDB souběžný upsert opakuje sám,
+     stejně jako u již odstraněné větve v `provision` breeder-service.
 
 ## 5. Probíhá – ověření
 

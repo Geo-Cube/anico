@@ -1,5 +1,6 @@
 import mongoose, { type Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { pino } from 'pino';
 import request from 'supertest';
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -45,12 +46,14 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     gatewayKey = 'test-gateway-secret';
   let provider: Provider = 'google',
     subject = 'first-user',
-    exchangeFails = false;
+    exchangeFails = false,
+    received: URL | globalThis.Request | undefined;
   const fake: ProviderClient = {
     async authorize(input) {
       return 'https://provider.example.test/login?state=' + input.state;
     },
-    async exchange() {
+    async exchange(input) {
+      received = input.response;
       if (exchangeFails) throw new Error('provider rejected the response');
       return {
         provider,
@@ -75,7 +78,7 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     ]);
   }
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri('auth_test'))
       .asPromise();
@@ -99,6 +102,7 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
     provider = 'google';
     subject = 'first-user';
     exchangeFails = false;
+    received = undefined;
     repo = mongoAuthRepository(connection);
     const service = createAuthService({
       repository: repo,
@@ -501,6 +505,89 @@ describe('auth HTTP, sessions, authorization and MongoDB', () => {
         code,
       );
     }
+  });
+  it('completes a form_post callback the way Apple returns it and forwards the posted fields to the provider', async () => {
+    provider = 'apple';
+    const start = await request(app).get('/login/apple').expect(302);
+    // Apple posílá odpověď z cizího původu; cookie pokusu proto musí jít cross-site.
+    expect(start.headers['set-cookie']?.[0]).toMatch(/SameSite=None/i);
+    const state = new URL(start.headers.location!).searchParams.get('state')!;
+    const finish = await request(app)
+      .post('/login/apple/callback')
+      .type('form')
+      .send({ state, code: 'apple-code', user: '{"name":{}}' })
+      .set('Cookie', firstCookie(start))
+      .expect(303);
+    expect(finish.headers.location).toBe(origin + '/');
+    expect(received).toBeInstanceOf(globalThis.Request);
+    const forwarded = received as globalThis.Request;
+    expect(forwarded.method).toBe('POST');
+    expect(forwarded.url).toBe(`${origin}/api/auth/login/apple/callback`);
+    expect(
+      Object.fromEntries(new URLSearchParams(await forwarded.text())),
+    ).toEqual({ state, code: 'apple-code', user: '{"name":{}}' });
+    const session = await request(app)
+      .get('/session')
+      .set('Cookie', firstCookie(finish))
+      .expect(200);
+    expect(session.body.linkedProviders).toEqual(['apple']);
+  });
+  it('turns malformed callbacks into fixed codes without consuming the pending login', async () => {
+    const start = await request(app).get('/login/google').expect(302);
+    const state = new URL(start.headers.location!).searchParams.get('state')!;
+    const browser = firstCookie(start);
+    failedLogin(
+      await request(app)
+        .get('/login/google/callback')
+        .query({ code: 'x' })
+        .set('Cookie', browser),
+      '/prihlaseni',
+      'LOGIN_EXPIRED',
+    );
+    failedLogin(
+      await request(app)
+        .post('/login/google/callback')
+        .send({ state: [state], code: 'x' })
+        .set('Cookie', browser),
+      '/prihlaseni',
+      'LOGIN_FAILED',
+    );
+    expect(received).toBeUndefined();
+    await request(app)
+      .get('/login/google/callback')
+      .query({ state, code: 'x' })
+      .set('Cookie', browser)
+      .expect(303);
+  });
+  it('sends the browser to the login page with a fixed code when storage fails during the callback', async () => {
+    const broken = createApp({
+      logger: pino({ level: 'silent' }),
+      isReady: () => true,
+      modules: authRouter({
+        service: createAuthService({
+          repository: {
+            ...repo,
+            consumeAttempt: () =>
+              Promise.reject(new Error('mongodb://user:secret@db')),
+          },
+          providers: { google: fake },
+          publicOrigin: origin,
+          sessionSeconds: 3600,
+        }),
+        signer,
+        publicOrigin: origin,
+        gatewayKey,
+        sessionSeconds: 3600,
+      }),
+    });
+    const start = await request(broken).get('/login/google').expect(302);
+    const state = new URL(start.headers.location!).searchParams.get('state');
+    const failed = await request(broken)
+      .get('/login/google/callback')
+      .query({ state, code: 'x' })
+      .set('Cookie', firstCookie(start));
+    failedLogin(failed, '/prihlaseni', 'LOGIN_FAILED');
+    expect(failed.headers.location).not.toContain('secret');
   });
   it('requires CSRF and immediately revokes logged-out sessions while keeping other sessions active', async () => {
     const one = await login(),
