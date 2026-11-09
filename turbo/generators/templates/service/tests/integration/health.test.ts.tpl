@@ -7,6 +7,7 @@ import { createApp } from '../../src/app.js';
 import { createModules } from '../../src/modules/index.js';
 import { createMigration, loadMigrations, loadSeed } from '../../src/database/registry.js';
 import { migrateDatabase, migrationStatus, resetDatabase, seedDatabase } from '../../src/database/engine.js';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,7 +17,7 @@ describe('HTTP and database integration', () => {
   let mongo: MongoMemoryServer;
   let connection: Connection;
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose.createConnection(mongo.getUri('__DATABASE___test')).asPromise();
   });
   afterAll(async () => { await connection?.close(); await mongo?.stop(); });

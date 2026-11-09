@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { createConnection, type Connection } from 'mongoose';
 import request from 'supertest';
 import {
@@ -59,7 +60,7 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
     connection.db!.collection('breederCertificates.chunks');
 
   beforeAll(async () => {
-    mongod = await MongoMemoryServer.create();
+    mongod = await startTestMongo(new MongoMemoryServer());
     connection = await createConnection(
       mongod.getUri('anico_uc01_qa'),
     ).asPromise();
@@ -463,7 +464,7 @@ describe('UC-01 QA na MongoDB + GridFS', () => {
 
 describe('UC01-NFR-00 produkční server', () => {
   it('server.ts se spustí pod Node ESM (tsx) a obslouží /health', async () => {
-    const mongod = await MongoMemoryServer.create();
+    const mongod = await startTestMongo(new MongoMemoryServer());
     const port = 39500 + Math.floor(Math.random() * 400);
     const child = spawn(
       process.execPath,
@@ -501,7 +502,7 @@ describe('UC01-NFR-00 produkční server', () => {
 
 describe('UC01-SEC-12 produkční server: logy neobsahují PII (spuštěný proces)', () => {
   it('redacts authenticated identity, gateway credentials and submission data', async () => {
-    const mongod = await MongoMemoryServer.create();
+    const mongod = await startTestMongo(new MongoMemoryServer());
     const port = 39000 + Math.floor(Math.random() * 500);
     const auth = await signedAuth();
     const user = testIdentity({

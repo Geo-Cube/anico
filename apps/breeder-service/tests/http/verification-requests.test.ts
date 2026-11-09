@@ -3,6 +3,9 @@ import {
   VerificationRequestListSchema,
   VerificationSummarySchema,
 } from '@anico/shared-schemas';
+import { get } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { Readable } from 'node:stream';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -14,7 +17,7 @@ import {
   takeOverAndSubmit,
 } from '../support/api.js';
 import { testApp } from '../support/app.js';
-import { failingCertificate } from '../support/qa.js';
+import { failingCertificate, faultyApp } from '../support/qa.js';
 
 const decision = (
   app: Parameters<typeof request>[0],
@@ -223,7 +226,9 @@ describe('admin verification requests API', () => {
   it('answers 500 through the central handler when the certificate stream fails before data', async () => {
     const { app, files } = testApp();
     const id = await takeOverAndSubmit(app, 'b1');
-    vi.spyOn(files, 'open').mockResolvedValueOnce(failingCertificate(false));
+    vi.spyOn(files, 'open').mockResolvedValueOnce(
+      failingCertificate('before-data'),
+    );
 
     const response = await request(app)
       .get(`/verification-requests/${id}/certificate`)
@@ -233,16 +238,87 @@ describe('admin verification requests API', () => {
     expect(response.headers['content-disposition']).toBeUndefined();
   });
 
-  it('aborts the connection when the certificate stream fails after data was sent', async () => {
+  it('aborts the connection when the stream fails before its first chunk was written, and keeps serving', async () => {
     const { app, files } = testApp();
     const id = await takeOverAndSubmit(app, 'b1');
-    vi.spyOn(files, 'open').mockResolvedValueOnce(failingCertificate(true));
+    vi.spyOn(files, 'open').mockResolvedValueOnce(
+      failingCertificate('with-first-chunk'),
+    );
+    const url = `/verification-requests/${id}/certificate`;
 
-    await expect(
-      request(app)
-        .get(`/verification-requests/${id}/certificate`)
-        .set(adminHeaders()),
-    ).rejects.toThrow();
+    await expect(request(app).get(url).set(adminHeaders())).rejects.toThrow();
+    await request(app).get(url).set(adminHeaders()).expect(200);
+  });
+
+  describe('after the first bytes reached the client', () => {
+    /** Stream, který odešle první blok a pak už žádná data nedodá. */
+    function certificateStallingAfterFirstChunk() {
+      let sent = false;
+      const stream = new Readable({
+        read() {
+          if (sent) return;
+          sent = true;
+          this.push(Buffer.from('%PDF-'));
+        },
+      });
+      return { stream, size: 100, contentType: 'application/pdf' as const };
+    }
+
+    it('cuts the truncated download, logs the failure without details and keeps serving', async () => {
+      const { app, files, log } = faultyApp();
+      const id = await takeOverAndSubmit(app, 'b1');
+      vi.spyOn(files, 'open').mockResolvedValueOnce(
+        failingCertificate('after-first-chunk'),
+      );
+      const url = `/verification-requests/${id}/certificate`;
+
+      await expect(request(app).get(url).set(adminHeaders())).rejects.toThrow();
+
+      expect(log.text()).toContain('Certificate stream failed');
+      // ne centrální handler (ten by zalogoval i zprávu chyby úložiště)
+      expect(log.text()).not.toContain('Request failed');
+      expect(log.text()).not.toContain('gridfs down');
+      await request(app).get(url).set(adminHeaders()).expect(200);
+    });
+
+    it('releases the file stream and logs info only when the client aborts the download', async () => {
+      const { app, files, log } = faultyApp();
+      const id = await takeOverAndSubmit(app, 'b1');
+      const certificate = certificateStallingAfterFirstChunk();
+      vi.spyOn(files, 'open').mockResolvedValueOnce(certificate);
+      const server = app.listen(0);
+      try {
+        const { port } = server.address() as AddressInfo;
+        const status = await new Promise<number | undefined>((resolve) => {
+          const req = get(
+            {
+              port,
+              path: `/verification-requests/${id}/certificate`,
+              headers: adminHeaders(),
+            },
+            (res) => {
+              // klient zavře spojení hned po prvním bloku dat
+              res.once('data', () => {
+                req.destroy();
+                resolve(res.statusCode);
+              });
+            },
+          );
+          req.on('error', () => undefined);
+        });
+        expect(status).toBe(200);
+
+        await vi.waitFor(() => {
+          expect(log.text()).toContain(
+            'Certificate download aborted by client',
+          );
+        });
+        expect(certificate.stream.destroyed).toBe(true);
+        expect(log.text()).not.toContain('Certificate stream failed');
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
   });
 
   describe('decision', () => {

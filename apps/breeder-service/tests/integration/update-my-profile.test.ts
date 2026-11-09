@@ -1,4 +1,5 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import mongoose, { type Connection } from 'mongoose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { mongooseBreederRepository } from '../../src/modules/breeders/infrastructure/mongoose-breeder-repository.js';
@@ -8,7 +9,7 @@ let mongo: MongoMemoryServer;
 let connection: Connection;
 let repository: BreederRepository;
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
+  mongo = await startTestMongo(new MongoMemoryServer());
   connection = await mongoose.createConnection(mongo.getUri()).asPromise();
   repository = mongooseBreederRepository(connection);
 });

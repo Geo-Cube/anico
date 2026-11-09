@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -8,6 +16,7 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import mongoose, { type Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { connect, type NatsConnection } from '@nats-io/transport-node';
 import { jetstream, jetstreamManager } from '@nats-io/jetstream';
 import { pino } from 'pino';
@@ -22,6 +31,7 @@ import {
 import { prepareTestBroker } from '../../../../scripts/prepare-test-broker.mjs';
 import { mongoVerifiedBreeders } from '../../src/modules/animal/infrastructure/verified-breeders.js';
 import {
+  configuredVerificationConsumer,
   natsVerificationConsumer,
   type VerificationConsumer,
 } from '../../src/modules/animal/infrastructure/nats-verification-consumer.js';
@@ -32,6 +42,25 @@ import { loadMigrations } from '../../src/database/registry.js';
 
 const logger = pino({ level: 'silent' });
 const password = 'a'.repeat(64);
+const unavailable = 'Verification broker unavailable; retrying with backoff';
+function recordingLogger() {
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  return {
+    warnings,
+    errors,
+    warn: (message: string) => void warnings.push(message),
+    error: (message: string) => void errors.push(message),
+  };
+}
+async function freePort() {
+  const socket = net.createServer();
+  socket.listen(0, '127.0.0.1');
+  await once(socket, 'listening');
+  const port = (socket.address() as net.AddressInfo).port;
+  await new Promise<void>((resolve) => socket.close(() => resolve()));
+  return port;
+}
 describe('verified breeder projection with real Mongo and NATS', () => {
   let mongo: MongoMemoryServer,
     connection: Connection,
@@ -73,11 +102,7 @@ describe('verified breeder projection with real Mongo and NATS', () => {
   beforeAll(async () => {
     binary = await prepareTestBroker();
     folder = await mkdtemp(join(tmpdir(), 'animal-verification-'));
-    const socket = net.createServer();
-    socket.listen(0, '127.0.0.1');
-    await once(socket, 'listening');
-    const port = (socket.address() as net.AddressInfo).port;
-    await new Promise<void>((resolve) => socket.close(() => resolve()));
+    const port = await freePort();
     server = `nats://127.0.0.1:${port}`;
     await writeFile(
       join(folder, 'server.json'),
@@ -119,24 +144,38 @@ describe('verified breeder projection with real Mongo and NATS', () => {
       ack_policy: 'explicit',
       deliver_policy: 'all',
     });
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri('verification_test'))
       .asPromise();
     await migrateDatabase(connection, await loadMigrations());
-    worker = natsVerificationConsumer({
-      credentials: { server, user: 'animal-consumer', password },
-      project: mongoVerifiedBreeders(connection).project,
-      logger,
-    });
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    await worker?.close();
   });
   afterAll(async () => {
-    await worker?.close();
     await stop();
     await connection?.close();
     await mongo?.stop();
     await rm(folder, { recursive: true, force: true });
   });
+  const credentials = () => ({
+    server,
+    user: 'animal-consumer' as const,
+    password,
+  });
+  const publish = async (payload: object) =>
+    jetstream(admin).publish(BREEDER_VERIFIED_SUBJECT, JSON.stringify(payload));
+  const undelivered = async () => {
+    const info = await (
+      await jetstreamManager(admin)
+    ).consumers.info(
+      BREEDER_VERIFIED_STREAM,
+      ANIMAL_VERIFIED_BREEDERS_CONSUMER,
+    );
+    return info.num_ack_pending + info.num_pending;
+  };
   const event = (breederId: string) => ({
     eventId: randomUUID(),
     type: 'breeder.verified',
@@ -148,6 +187,11 @@ describe('verified breeder projection with real Mongo and NATS', () => {
   it('projects approved breeders, authorizes API, deduplicates, terminates invalid messages and resumes after restart', async () => {
     const identity = testIdentity({ roles: ['breeder'] });
     const projection = mongoVerifiedBreeders(connection);
+    worker = natsVerificationConsumer({
+      credentials: credentials(),
+      project: projection.project,
+      logger,
+    });
     const app = createApp({
       logger,
       authenticate: (req, _res, next) => {
@@ -180,16 +224,7 @@ describe('verified breeder projection with real Mongo and NATS', () => {
       BREEDER_VERIFIED_SUBJECT,
       JSON.stringify({ ...event(randomUUID()), schemaVersion: 2 }),
     );
-    const manager = await jetstreamManager(admin);
-    await expect
-      .poll(async () => {
-        const info = await manager.consumers.info(
-          BREEDER_VERIFIED_STREAM,
-          ANIMAL_VERIFIED_BREEDERS_CONSUMER,
-        );
-        return info.num_ack_pending + info.num_pending;
-      })
-      .toBe(0);
+    await expect.poll(undelivered).toBe(0);
     expect(
       await connection.db!.collection('verifiedBreeders').countDocuments(),
     ).toBe(1);
@@ -207,5 +242,189 @@ describe('verified breeder projection with real Mongo and NATS', () => {
     expect(
       await connection.db!.collection('verifiedBreeders').countDocuments(),
     ).toBe(2);
+  });
+  it('redelivers an event whose projection failed instead of losing it', async () => {
+    const projection = mongoVerifiedBreeders(connection);
+    const log = recordingLogger();
+    let attempts = 0;
+    worker = natsVerificationConsumer({
+      credentials: credentials(),
+      project: async (verified) => {
+        attempts++;
+        if (attempts === 1) throw new Error('database offline');
+        await projection.project(verified);
+      },
+      logger: log,
+    });
+    const breederId = randomUUID();
+    await publish(event(breederId));
+
+    await expect
+      .poll(() => projection.isVerified(breederId), { timeout: 10_000 })
+      .toBe(true);
+    expect(attempts).toBe(2);
+    expect(log.errors).toEqual([
+      'Breeder verification projection failed; delivery delayed',
+    ]);
+    await expect.poll(undelivered).toBe(0);
+  });
+  it('closing while still connecting consumes nothing and leaves the event for the next consumer', async () => {
+    const projection = mongoVerifiedBreeders(connection);
+    const breederId = randomUUID();
+    await publish(event(breederId));
+    const projected: string[] = [];
+    const early = natsVerificationConsumer({
+      credentials: credentials(),
+      project: async (verified) => void projected.push(verified.eventId),
+      logger,
+    });
+
+    await early.close();
+
+    expect(projected).toEqual([]);
+    expect(await undelivered()).toBe(1);
+    worker = natsVerificationConsumer({
+      credentials: credentials(),
+      project: projection.project,
+      logger,
+    });
+    await expect
+      .poll(() => projection.isVerified(breederId), { timeout: 10_000 })
+      .toBe(true);
+  });
+  it('retries with backoff while the broker is down and consumes once it starts', async () => {
+    const projection = mongoVerifiedBreeders(connection);
+    const log = recordingLogger();
+    const file = join(folder, 'animal-consumer.json');
+    await writeFile(file, JSON.stringify(credentials()), { mode: 0o600 });
+    await stop();
+
+    worker = await configuredVerificationConsumer({
+      file,
+      project: projection.project,
+      logger: log,
+    });
+
+    await expect.poll(() => log.warnings.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(log.warnings)).toEqual(new Set([unavailable]));
+    await start();
+    const breederId = randomUUID();
+    await publish(event(breederId));
+    await expect
+      .poll(() => projection.isVerified(breederId), { timeout: 10_000 })
+      .toBe(true);
+  });
+  it('close ends the backoff pause immediately', async () => {
+    // falešné časovače: pauza by bez probuzení nikdy neskončila
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let warned!: () => void;
+    const firstFailure = new Promise<void>((resolve) => (warned = resolve));
+    const log = recordingLogger();
+    worker = natsVerificationConsumer({
+      credentials: {
+        ...credentials(),
+        server: `nats://127.0.0.1:${await freePort()}`,
+      },
+      project: mongoVerifiedBreeders(connection).project,
+      logger: {
+        ...log,
+        warn: (message) => {
+          log.warn(message);
+          warned();
+        },
+      },
+    });
+    await firstFailure;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    await worker.close();
+
+    expect(log.warnings).toEqual([unavailable]);
+  });
+});
+
+describe('configuredVerificationConsumer credentials file', () => {
+  const secret = '0123456789abcdef'.repeat(4);
+  let folder: string;
+  beforeAll(async () => {
+    folder = await mkdtemp(join(tmpdir(), 'animal-verification-file-'));
+  });
+  afterAll(async () => {
+    await rm(folder, { recursive: true, force: true });
+  });
+  const project = async () => {
+    throw new Error('no event may be projected');
+  };
+
+  it('without a configured file serves the stored projection and only warns', async () => {
+    const log = recordingLogger();
+
+    const consumer = await configuredVerificationConsumer({
+      file: undefined,
+      project,
+      logger: log,
+    });
+    await consumer.close();
+
+    expect(log.warnings).toEqual([
+      'ANIMAL_VERIFICATION_BROKER_FILE is not set; serving stored breeder projection without consumer',
+    ]);
+    expect(log.errors).toEqual([]);
+  });
+
+  it.each([
+    ['malformed JSON', `{"password":"${secret}"`],
+    [
+      'remote server',
+      { server: 'nats://broker.example.com:4222', password: secret },
+    ],
+    [
+      'unparsable server URL',
+      { server: `nats://[${secret}`, password: secret },
+    ],
+    [
+      'server URL with embedded credentials',
+      {
+        server: `nats://animal-consumer:${secret}@127.0.0.1:4222`,
+        password: secret,
+      },
+    ],
+  ])(
+    'rejects %s without revealing the file content',
+    async (_case, content) => {
+      const file = join(folder, `${randomUUID()}.json`);
+      await writeFile(
+        file,
+        typeof content === 'string'
+          ? content
+          : JSON.stringify({ user: 'animal-consumer', ...content }),
+      );
+      const log = recordingLogger();
+
+      const failure = await configuredVerificationConsumer({
+        file,
+        project,
+        logger: log,
+      }).catch((error: unknown) => error as Error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toBe(
+        'Invalid animal verification broker credentials file',
+      );
+      expect((failure as Error).cause).toBeUndefined();
+      expect((failure as Error).stack).not.toContain(secret);
+      expect(log.warnings).toEqual([]);
+    },
+  );
+
+  it('rejects a missing file with the same generic error', async () => {
+    await expect(
+      configuredVerificationConsumer({
+        file: join(folder, 'missing.json'),
+        project,
+        logger: recordingLogger(),
+      }),
+    ).rejects.toThrow(/^Invalid animal verification broker credentials file$/);
   });
 });

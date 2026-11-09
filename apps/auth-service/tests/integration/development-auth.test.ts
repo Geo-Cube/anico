@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import mongoose, { type Connection } from 'mongoose';
 import { pino } from 'pino';
 import request from 'supertest';
@@ -38,7 +39,7 @@ describe('local development authorization and PKCE', () => {
   let signer: Awaited<ReturnType<typeof identitySigner>>;
   let now = new Date();
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri('development_auth_test'))
       .asPromise();
@@ -374,6 +375,43 @@ describe('local development authorization and PKCE', () => {
     const again = (await exchange(await code(signed))).body.access_token;
     now = new Date(now.getTime() + 3600001);
     await developmentRequest('/session', again).expect(401);
+  });
+  it('lets a native token use the shared logout and owner actions without CSRF, but only from its loopback Origin', async () => {
+    const signed = await login();
+    await connection
+      .db!.collection('users')
+      .updateOne({ userId: signed.userId }, { $addToSet: { roles: 'owner' } });
+    const token = (await exchange(await code(signed))).body.access_token;
+    const target = await mongoAuthRepository(connection).register({
+      provider: 'google',
+      issuer: 'https://accounts.google.com',
+      subject: 'colleague',
+      givenName: null,
+      familyName: null,
+      email: null,
+    });
+    const appoint = (requestOrigin: string) =>
+      request(app)
+        .put(`/users/${target.userId}/admin`)
+        .set('X-Anico-Development-Token', token)
+        .set('Origin', requestOrigin)
+        .send({ admin: true });
+    await appoint('https://attacker.example.test').expect(403);
+    const appointed = await appoint(new URL(callback).origin).expect(200);
+    expect(appointed.body.identity.roles).toContain('admin');
+
+    const logout = (requestOrigin: string) =>
+      request(app)
+        .post('/logout')
+        .set('X-Anico-Development-Token', token)
+        .set('Origin', requestOrigin);
+    await logout('https://attacker.example.test').expect(403);
+    await developmentRequest('/session', token).expect(200);
+    const loggedOut = await logout(new URL(callback).origin).expect(204);
+    // Nativní odhlášení nesmí sahat na cookies prohlížeče.
+    expect(loggedOut.headers['set-cookie']).toBeUndefined();
+    await developmentRequest('/session', token).expect(401);
+    await request(app).get('/session').set('Cookie', signed.cookie).expect(200);
   });
   it('caps development sessions at eight hours even when the authorizing app session lasts longer', async () => {
     const signed = await login();

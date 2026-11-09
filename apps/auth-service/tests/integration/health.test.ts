@@ -1,5 +1,6 @@
 import mongoose, { type Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -24,7 +25,7 @@ describe('HTTP and database integration', () => {
   let mongo: MongoMemoryServer;
   let connection: Connection;
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri('anico_auth_test'))
       .asPromise();

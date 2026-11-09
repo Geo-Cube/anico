@@ -1,5 +1,6 @@
 import mongoose, { type Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -100,7 +101,7 @@ describe('dev test accounts: create, switch, return and logout', () => {
     });
   }
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri('auth_test_accounts'))
       .asPromise();
@@ -365,6 +366,35 @@ describe('dev test accounts: create, switch, return and logout', () => {
         .set('Origin', 'http://127.0.0.1:43210')
         .expect(401, { error: 'ACCOUNT_DISABLED' });
     }
+  });
+
+  it('account management refuses a request carrying a local development token even next to a valid browser session', async () => {
+    const admin = await login('admin', 'admin');
+    const existing = await createAccount(admin);
+    const token = 'c'.repeat(43);
+    await request(app)
+      .get('/test-accounts')
+      .set('Cookie', admin.cookie)
+      .set('X-Anico-Development-Token', token)
+      .expect(403, { error: 'ACCOUNT_MANAGEMENT_REQUIRES_BROWSER' });
+    for (const path of [
+      '/test-accounts',
+      `/test-accounts/${existing}/session`,
+      '/test-accounts/return',
+    ]) {
+      const response = await mutate(admin, path, {
+        givenName: 'Podvržený',
+        familyName: 'Účet',
+      })
+        .set('X-Anico-Development-Token', token)
+        .expect(403, { error: 'ACCOUNT_MANAGEMENT_REQUIRES_BROWSER' });
+      expect(response.headers['set-cookie']).toBeUndefined();
+    }
+    const listed = await request(app)
+      .get('/test-accounts')
+      .set('Cookie', admin.cookie)
+      .expect(200);
+    expect(listed.body.accounts).toHaveLength(1);
   });
 
   it('logout from a test account ends the own session too; a fresh login drops the way back', async () => {

@@ -1,0 +1,3 @@
+# PR #45: deterministic test fixture ('0123456789abcdef'.repeat(4)), not a credential.
+# Only this historical finding is ignored; other lines, rules and commits remain scanned.
+2e77df56a9f798748ea6de9af619e32a3ff4ac89:apps/animal-service/tests/integration/verification-consumer.test.ts:generic-api-key:348

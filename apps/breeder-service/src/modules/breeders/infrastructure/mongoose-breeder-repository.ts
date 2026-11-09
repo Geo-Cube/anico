@@ -183,46 +183,32 @@ export function mongooseBreederRepository(
 
   return {
     async provision(input: NewBreeder) {
-      try {
-        const record = await mongooseBreederModel.findOneAndUpdate(
-          {
-            breederId: input.breederId,
-          },
-          {
-            $setOnInsert: {
-              breederId: input.breederId,
-              firstName: input.firstName,
-              lastName: input.lastName,
-              emailAddress: input.emailAddress,
-              breedingStationName: null,
-              breedingStationNumber: null,
-              isVerified: false,
-              verificationRequest: null,
-            },
-          },
-          {
-            upsert: true,
-            returnDocument: 'after',
-          },
-        );
-        if (!record) {
-          throw new Error('Failed to provision breeder');
-        }
-        return toDomain(record);
-      } catch (error) {
-        if (!isDuplicateKeyError(error)) {
-          throw error;
-        }
-
-        const existing = await mongooseBreederModel.findOne({
+      // Souběžné upserty na unikátní breederId MongoDB sám opakuje (od 4.2), E11000 nenastane.
+      const record = await mongooseBreederModel.findOneAndUpdate(
+        {
           breederId: input.breederId,
-        });
-        if (!existing) {
-          throw error;
-        } else {
-          return toDomain(existing);
-        }
+        },
+        {
+          $setOnInsert: {
+            breederId: input.breederId,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            emailAddress: input.emailAddress,
+            breedingStationName: null,
+            breedingStationNumber: null,
+            isVerified: false,
+            verificationRequest: null,
+          },
+        },
+        {
+          upsert: true,
+          returnDocument: 'after',
+        },
+      );
+      if (!record) {
+        throw new Error('Failed to provision breeder');
       }
+      return toDomain(record);
     },
 
     async findByBreederId(breederId: string): Promise<Breeder | null> {
@@ -466,13 +452,4 @@ export function mongooseBreederRepository(
       return counts;
     },
   };
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 11000
-  );
 }

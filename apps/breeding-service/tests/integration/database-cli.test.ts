@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 
 const cwd = fileURLToPath(new URL('../../', import.meta.url));
 function cli(args: string[], uri?: string) {
@@ -30,7 +31,7 @@ function cli(args: string[], uri?: string) {
 describe('database CLI process', () => {
   let mongo: MongoMemoryServer;
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
   });
   afterAll(async () => {
     await mongo.stop();

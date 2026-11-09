@@ -1,6 +1,12 @@
 import type { AccountState, MyAccount } from '@anico/shared-schemas';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -57,8 +63,7 @@ function storeAccount(initial: MyAccount) {
   };
 }
 
-function renderApp(initial = path) {
-  const client = createQueryClient();
+function renderApp(initial = path, client = createQueryClient()) {
   client.setDefaultOptions({ queries: { retry: false } });
   const router = createMemoryRouter(routes, { initialEntries: [initial] });
   render(
@@ -220,6 +225,19 @@ describe('žádost o ověření chovatele (WF 02/03)', () => {
       message:
         'Soubor podle obsahu není PDF, JPEG ani PNG. Nahrajte jiný soubor.',
     },
+    {
+      name: '400 bez osvědčení',
+      response: () =>
+        HttpResponse.json(
+          {
+            error: 'Validation failed',
+            issues: [{ path: ['breedingStationCertificate'] }],
+          },
+          { status: 400 },
+        ),
+      label: 'Osvědčení chovatelské stanice',
+      message: 'Vyberte soubor osvědčení chovatelské stanice.',
+    },
   ])(
     'odmítnutí serverem ($name) označí pole a nic netvrdí jako odeslané',
     async ({ response, label, message }) => {
@@ -305,6 +323,211 @@ describe('žádost o ověření chovatele (WF 02/03)', () => {
       screen.queryByRole('heading', { name: 'Žádost byla odeslána' }),
     ).not.toBeInTheDocument();
   });
+
+  it('odmítnutí bez označeného pole žádné pole neoznačí a vyplněné údaje ponechá', async () => {
+    storeAccount({ ...unsubmittedAccount, ...profile });
+    const responses = [
+      () => HttpResponse.json({ error: 'Unprocessable' }, { status: 422 }),
+      () =>
+        HttpResponse.json({ error: 'Breeder role required' }, { status: 403 }),
+    ];
+    server.use(http.post(submitPath, () => responses.shift()!()));
+    const user = userEvent.setup({ applyAccept: false });
+    renderApp();
+    await user.upload(
+      await screen.findByLabelText(/^Osvědčení chovatelské stanice/),
+      pdf(),
+    );
+    const send = screen.getByRole('button', { name: 'Odeslat žádost' });
+
+    await user.click(send);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Žádost nebyla odeslána, server ji nepřijal.',
+    );
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
+    expect(control('Číslo chovatelské stanice')).toHaveValue('CZ-12345');
+
+    await user.click(send);
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Žádost nebyla odeslána. K podání žádosti nemáte oprávnění.',
+      ),
+    );
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Zavřít zprávu' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Žádost byla odeslána' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('při 409 bez aktuálního stavu ho načte znovu a upozornění jde zavřít', async () => {
+    const save = storeAccount({ ...unsubmittedAccount, ...profile });
+    server.use(
+      http.post(submitPath, () => {
+        // mezitím žádost podal jiný požadavek, odpověď ale stav nenese
+        save(accountIn('PENDING'));
+        return HttpResponse.json(
+          { error: 'Verification already submitted', current: { bad: true } },
+          { status: 409 },
+        );
+      }),
+    );
+    const user = userEvent.setup({ applyAccept: false });
+    renderApp();
+    await user.upload(
+      await screen.findByLabelText(/^Osvědčení chovatelské stanice/),
+      pdf(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Odeslat žádost' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Žádost čeká na posouzení' }),
+    ).toBeVisible();
+    const warning = screen.getByText(
+      /Žádost už byla mezitím odeslána nebo posouzena/,
+    );
+    await user.click(screen.getByRole('button', { name: 'Zavřít zprávu' }));
+    expect(warning).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Žádost čeká na posouzení' }),
+    ).toBeVisible();
+  });
+
+  it('přetažené osvědčení kontroluje a odešle stejně jako vybrané', async () => {
+    storeAccount({ ...unsubmittedAccount, ...profile });
+    let body: FormData | undefined;
+    server.use(
+      http.post(submitPath, async ({ request }) => {
+        body = await request.formData();
+        return HttpResponse.json(accountIn('PENDING'), { status: 201 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+    await screen.findByRole('button', { name: 'Odeslat žádost' });
+    const dropZone = screen.getByText('Vybrat soubor').closest('label')!;
+    fireEvent.dragOver(dropZone);
+    fireEvent.drop(dropZone, {
+      dataTransfer: {
+        files: [
+          new File(['x'], 'osvedceni.docx', { type: 'application/msword' }),
+        ],
+      },
+    });
+    expect(certificateInput()).toHaveAccessibleDescription(
+      expect.stringContaining(
+        'Nepodporovaný formát. Nahrajte PDF, JPEG nebo PNG.',
+      ),
+    );
+    fireEvent.drop(dropZone, { dataTransfer: { files: [pdf('sken.pdf')] } });
+    expect(screen.getByText('sken.pdf')).toBeVisible();
+    expect(certificateInput()).not.toHaveAttribute('aria-invalid');
+
+    await user.click(screen.getByRole('button', { name: 'Odeslat žádost' }));
+    await screen.findByRole('heading', { name: 'Žádost byla odeslána' });
+    expect(body?.has('breedingStationCertificate')).toBe(true);
+  });
+
+  it('odpověď na žádost odeslanou pod předchozím účtem nový účet nezmění', async () => {
+    const other = sessionFor(['breeder'], {
+      identity: {
+        ...sessionFor().identity,
+        userId: '6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b',
+        email: 'petr@example.test',
+      },
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let sent!: () => void;
+    const done = new Promise<void>((resolve) => (sent = resolve));
+    storeAccount({ ...unsubmittedAccount, ...profile });
+    server.use(
+      http.post(submitPath, async () => {
+        await gate;
+        sent();
+        return HttpResponse.json(accountIn('PENDING'), { status: 201 });
+      }),
+    );
+    const client = createQueryClient();
+    const user = userEvent.setup({ applyAccept: false });
+    renderApp(path, client);
+    await user.upload(
+      await screen.findByLabelText(/^Osvědčení chovatelské stanice/),
+      pdf(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Odeslat žádost' }));
+
+    // mezitím se v jiné záložce přihlásí jiný chovatel
+    server.use(
+      http.get('/api/auth/session', () => HttpResponse.json(other)),
+      http.get(mePath, () =>
+        HttpResponse.json({
+          ...unsubmittedAccount,
+          breederId: '123456789012345678909999',
+        }),
+      ),
+    );
+    await client.invalidateQueries({ queryKey: ['session'] });
+    await waitFor(() =>
+      expect(control('E-mail')).toHaveValue('petr@example.test'),
+    );
+    release();
+    await done;
+    // doběhnutí odpovědi včetně jejích callbacků
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(
+      screen.getByRole('button', { name: 'Odeslat žádost' }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole('heading', { name: 'Žádost čeká na posouzení' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Žádost byla odeslána' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('přístup a načtení stavu', () => {
+  it('administrátor žádost nepodává a účet chovatele se nenačítá', async () => {
+    const me = vi.fn(() => HttpResponse.json(unsubmittedAccount));
+    server.use(
+      http.get('/api/auth/session', () =>
+        HttpResponse.json(sessionFor(['breeder', 'admin'])),
+      ),
+      http.get(mePath, me),
+    );
+    renderApp();
+    expect(
+      await screen.findByRole('heading', { name: 'Nedostatečné oprávnění' }),
+    ).toBeVisible();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(me).not.toHaveBeenCalled();
+  });
+
+  it('nenačtený stav účtu formulář nenabídne a opakování ho načte', async () => {
+    let calls = 0;
+    server.use(
+      http.get(mePath, () =>
+        ++calls === 1
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json(unsubmittedAccount),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp();
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Služba je dočasně nedostupná',
+      }),
+    ).toBeVisible();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Zkusit znovu' }));
+    expect(
+      await screen.findByRole('button', { name: 'Odeslat žádost' }),
+    ).toBeVisible();
+  });
 });
 
 describe('oprava vrácené žádosti (ADR-0004)', () => {
@@ -378,6 +601,89 @@ describe('oprava vrácené žádosti (ADR-0004)', () => {
       name: 'Doplněná žádost byla odeslána',
     });
     expect(body?.has('breedingStationCertificate')).toBe(true);
+  });
+
+  it('výběr nového souboru lze vrátit a odešle se jen uložené osvědčení', async () => {
+    storeAccount(returned);
+    let body: FormData | undefined;
+    server.use(
+      http.post(submitPath, async ({ request }) => {
+        body = await request.formData();
+        return HttpResponse.json(accountIn('PENDING', { revision: 2 }), {
+          status: 201,
+        });
+      }),
+    );
+    const user = userEvent.setup({ applyAccept: false });
+    renderApp();
+    await user.upload(
+      await screen.findByLabelText(/^Osvědčení chovatelské stanice/),
+      pdf('omylem.pdf'),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Ponechat uložené osvědčení' }),
+    );
+    expect(
+      screen.getByText(
+        'Pokud nevyberete nový soubor, zůstane uložené osvědčení beze změny.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText('omylem.pdf')).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', { name: 'Odeslat doplněnou žádost' }),
+    );
+    await screen.findByRole('heading', {
+      name: 'Doplněná žádost byla odeslána',
+    });
+    expect(body?.has('breedingStationCertificate')).toBe(false);
+  });
+
+  it('nedostupné uložené osvědčení vysvětlí a otevřenou záložku zavře', async () => {
+    storeAccount(returned);
+    const statuses = [404, 500, 403];
+    server.use(
+      http.get(`${submitPath}/certificate`, () =>
+        HttpResponse.json(
+          { error: 'Certificate unavailable' },
+          { status: statuses.shift()! },
+        ),
+      ),
+    );
+    const tab = { opener: {}, close: vi.fn(), location: { href: '' } };
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => tab),
+    );
+    try {
+      const user = userEvent.setup();
+      renderApp();
+      const download = await screen.findByRole('button', {
+        name: 'Stáhnout osvedceni.pdf',
+      });
+      await user.click(download);
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Soubor nebyl nalezen.',
+      );
+      await user.click(download);
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'Soubor se nepodařilo načíst. Zkuste to znovu.',
+        ),
+      );
+      await user.click(
+        screen.getByRole('button', { name: 'Otevřít osvedceni.pdf' }),
+      );
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'K souboru nemáte oprávnění.',
+        ),
+      );
+      // prázdná záložka otevřená při kliknutí nezůstane viset
+      expect(tab.close).toHaveBeenCalledOnce();
+      expect(tab.opener).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

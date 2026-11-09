@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { Types, createConnection, type Connection } from 'mongoose';
 import request from 'supertest';
 import {
@@ -40,7 +41,7 @@ describe('RETURNED na MongoDB + GridFS: souběh a soubory', () => {
     connection.db!.collection('breederCertificates.chunks');
 
   beforeAll(async () => {
-    mongod = await MongoMemoryServer.create();
+    mongod = await startTestMongo(new MongoMemoryServer());
     connection = await createConnection(
       mongod.getUri('anico_breeder_returned'),
     ).asPromise();

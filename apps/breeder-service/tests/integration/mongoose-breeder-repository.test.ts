@@ -9,6 +9,7 @@ import {
   vi,
 } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { createConnection, type Connection } from 'mongoose';
 import type { Submission } from '../../src/modules/breeders/domain/breeder.js';
 import type { BreederRepository } from '../../src/modules/breeders/domain/ports.js';
@@ -16,7 +17,7 @@ import { mongooseBreederRepository } from '../../src/modules/breeders/infrastruc
 
 describe('mongooseBreederRepository', () => {
   it('creates a new breeder in MongoDB', async () => {
-    const mongod = await MongoMemoryServer.create();
+    const mongod = await startTestMongo(new MongoMemoryServer());
 
     try {
       const connection = await createConnection(mongod.getUri()).asPromise();
@@ -48,7 +49,7 @@ describe('mongooseBreederRepository', () => {
   });
 
   it('does not overwrite an existing breeder', async () => {
-    const mongod = await MongoMemoryServer.create();
+    const mongod = await startTestMongo(new MongoMemoryServer());
 
     try {
       const connection = await createConnection(mongod.getUri()).asPromise();
@@ -89,7 +90,7 @@ describe('mongooseBreederRepository', () => {
   });
 
   it('handles concurrent breeder provisioning', async () => {
-    const mongod = await MongoMemoryServer.create();
+    const mongod = await startTestMongo(new MongoMemoryServer());
 
     try {
       const connection = await createConnection(mongod.getUri()).asPromise();
@@ -226,7 +227,7 @@ describe('mongooseBreederRepository', () => {
     }
 
     beforeAll(async () => {
-      mongod = await MongoMemoryServer.create();
+      mongod = await startTestMongo(new MongoMemoryServer());
       connection = await createConnection(mongod.getUri()).asPromise();
       repository = mongooseBreederRepository(connection);
       await Promise.all(

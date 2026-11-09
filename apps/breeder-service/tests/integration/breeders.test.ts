@@ -1,4 +1,5 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 import { createConnection, type Connection } from 'mongoose';
 import request from 'supertest';
 import {
@@ -38,7 +39,7 @@ describe('UC-01 breeders API on MongoDB and GridFS', () => {
     connection.db!.collection('breederCertificates.files');
 
   beforeAll(async () => {
-    mongod = await MongoMemoryServer.create();
+    mongod = await startTestMongo(new MongoMemoryServer());
     connection = await createConnection(
       mongod.getUri('anico_breeder_e2e'),
     ).asPromise();

@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createQueryClient } from '@/app/query-client';
 import { routes } from '@/app/routes';
 import { anonymous, server, sessionFor } from './server';
@@ -18,6 +18,15 @@ function renderApp(path: string) {
   );
   return { client, router };
 }
+
+/** Navigace prohlížeče mimo aplikaci (jsdom ji neumí); ostatní vlastnosti zůstanou. */
+function stubLocation(overrides: Partial<Location>) {
+  vi.stubGlobal('location', { ...window.location, ...overrides });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const signedIn = (session = sessionFor()) =>
   server.use(http.get('/api/auth/session', () => HttpResponse.json(session)));
@@ -78,6 +87,63 @@ describe('login', () => {
     const { router } = renderApp('/prihlaseni?returnTo=%2Fucet');
     await screen.findByRole('heading', { name: 'Můj účet' });
     expect(router.state.location.pathname).toBe('/ucet');
+  });
+
+  it('does not send the visitor back to the login page after login', async () => {
+    renderApp('/prihlaseni?returnTo=%2Fprihlaseni%3FreturnTo%3D%252Fucet');
+    expect(await providerLinks()).toEqual([
+      '/api/auth/login/google',
+      '/api/auth/login/microsoft',
+    ]);
+  });
+
+  it('offers Apple only over HTTPS', async () => {
+    stubLocation({ protocol: 'https:' });
+    renderApp('/prihlaseni');
+    expect(await providerLinks()).toEqual([
+      '/api/auth/login/google',
+      '/api/auth/login/microsoft',
+      '/api/auth/login/apple',
+    ]);
+  });
+
+  it('shows a failed callback to a signed-in visitor with a way back into the app', async () => {
+    signedIn();
+    const { router } = renderApp(
+      '/prihlaseni?error=LOGIN_CANCELLED&returnTo=%2Fzvirata',
+    );
+    expect(
+      await screen.findByRole('link', { name: 'Pokračovat do aplikace' }),
+    ).toHaveAttribute('href', '/zvirata');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Přihlášení bylo zrušeno',
+    );
+    expect(router.state.location.pathname).toBe('/prihlaseni');
+    expect(
+      screen.queryByRole('link', { name: /Přihlásit přes/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers a retry when the login providers cannot be loaded', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/auth/providers', () =>
+        ++calls <= 2
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json({ providers: ['google'] }),
+      ),
+    );
+    renderApp('/prihlaseni');
+    expect(
+      await screen.findByText(
+        'Přihlášení je teď nedostupné. Zkuste to prosím za chvíli.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Přihlášení zatím není nakonfigurované.'),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Zkusit znovu' }));
+    expect(await providerLinks()).toEqual(['/api/auth/login/google']);
   });
 });
 
@@ -263,6 +329,48 @@ describe('account linking', () => {
     );
     const linked = screen.getByRole('list');
     expect(within(linked).getByText('Google')).toBeInTheDocument();
+  });
+
+  it('continues linking at the provider returned by the server', async () => {
+    signedIn();
+    const target =
+      'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=abc';
+    server.use(
+      http.post('/api/auth/connections/microsoft', ({ request }) =>
+        request.headers.get('X-CSRF-Token') === 'csrf-token'
+          ? HttpResponse.json({ url: target })
+          : HttpResponse.json({ error: 'CSRF' }, { status: 403 }),
+      ),
+    );
+    const assign = vi.fn();
+    stubLocation({ assign });
+    renderApp('/ucet');
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Propojit Microsoft' }),
+    );
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(target));
+  });
+
+  it('refuses to follow a linking redirect to a foreign host', async () => {
+    signedIn();
+    server.use(
+      http.post('/api/auth/connections/microsoft', () =>
+        HttpResponse.json({
+          url: 'https://login.microsoftonline.com.attacker.example.test/authorize',
+        }),
+      ),
+    );
+    const assign = vi.fn();
+    stubLocation({ assign });
+    const { router } = renderApp('/ucet');
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Propojit Microsoft' }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Propojení se nepodařilo spustit.',
+    );
+    expect(assign).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe('/ucet');
   });
 });
 

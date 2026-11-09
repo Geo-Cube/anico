@@ -225,6 +225,14 @@ test(
         join(repository, 'tsconfig.base.json'),
         join(root, 'tsconfig.base.json'),
       );
+      // Šablony testů importují sdílený helper z kořenového `scripts/`.
+      await mkdir(join(root, 'scripts'));
+      for (const file of ['start-test-mongo.mjs', 'start-test-mongo.d.mts']) {
+        await copyFile(
+          join(repository, 'scripts', file),
+          join(root, 'scripts', file),
+        );
+      }
       await writeFile(
         join(root, 'package.json'),
         JSON.stringify({ private: true }),

@@ -7,6 +7,7 @@ import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { HISTORY } from '../../src/database/engine.js';
 import { loadMigrations } from '../../src/database/registry.js';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 
 const cwd = fileURLToPath(new URL('../../', import.meta.url));
 async function freePort() {
@@ -61,7 +62,7 @@ describe('migration gate before actual HTTP startup', () => {
   let mongo: MongoMemoryServer;
   let connection: Connection;
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri(), {
         dbName: 'anico_breeding_startup_test',

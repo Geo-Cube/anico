@@ -119,9 +119,12 @@ Cloudflare GitHub přístup chrání týmové prostředí; nenahrazuje budoucí 
 ## Co testovat
 
 - Unit: use case s náhradním repository, bez databáze.
-- Integrace: Supertest + skutečná dočasná MongoDB přes `mongodb-memory-server`.
+- Integrace: Supertest + skutečná dočasná MongoDB přes `mongodb-memory-server`;
+  spouštěj ji `startTestMongo(new MongoMemoryServer())` ze `scripts/start-test-mongo.mjs`
+  (opakuje start, když souběžný proces obsadí zvolený port).
 - Frontend: Vitest + Testing Library + MSW v `apps/frontend/tests/` pro chování
   uživatele (přihlášení, relace, role, odhlášení, seznam a CRUD zvířat včetně fotografií); typecheck, build a kontrola v prohlížeči.
 
-Vitest používá V8 coverage. Limity jsou v `apps/tvoje-service/vitest.config.ts`;
-React aplikace coverage jen reportuje, limity nemá. Příkazy: [tahák](PRIKAZY.md).
+Vitest používá V8 coverage s limity 80/80/80/75 v `apps/*/vitest.config.ts` (backendy
+i React aplikace). Vstupní body spouštěné jen jako proces (`server.ts`, `database/cli.ts`,
+`owner.ts`) se neměří. Příkazy: [tahák](PRIKAZY.md).

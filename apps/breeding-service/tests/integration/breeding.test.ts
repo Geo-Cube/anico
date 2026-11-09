@@ -21,6 +21,7 @@ import { requireAuth } from '@anico/auth';
 import { testIdentity } from '@anico/auth/testing';
 import { createModules } from '../../src/modules/index.js';
 import { mongooseBreedingPlanRepository } from '../../src/modules/breeding/infrastructure/mongoose-breeding-plan-repository.js';
+import { startTestMongo } from '../../../../scripts/start-test-mongo.mjs';
 
 describe('breeding API + MongoDB', () => {
   let mongo: MongoMemoryServer | undefined;
@@ -30,7 +31,7 @@ describe('breeding API + MongoDB', () => {
   const isReady = vi.fn(() => true);
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await startTestMongo(new MongoMemoryServer());
     connection = await mongoose
       .createConnection(mongo.getUri(), { dbName: 'breeding-test' })
       .asPromise();

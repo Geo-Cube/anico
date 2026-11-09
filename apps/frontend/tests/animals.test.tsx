@@ -45,6 +45,21 @@ const animal: Animal = {
   updatedAt: '2026-01-01T00:00:00.000Z',
   documentsState: 'PENDING',
 };
+/** Zvíře se dvěma fotografiemi; hlavní je první. */
+const withTwoPhotos: Animal = {
+  ...animal,
+  weightKg: 12.5,
+  photos: [
+    animal.photos[0]!,
+    {
+      id: '123456789012345678901236',
+      fileName: 'luna.jpg',
+      contentType: 'image/jpeg',
+      size: 60,
+      isPrimary: false,
+    },
+  ],
+};
 function renderApp(path: string, client = createQueryClient()) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   render(
@@ -272,10 +287,68 @@ describe('ověřený chovatel', () => {
       ),
     );
     const router = renderApp('/zvirata');
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
       'Nejdřív musí být ověřen váš chovatelský účet',
     );
     expect(router.state.location.pathname).toBe('/zvirata');
+    // cesta dál: stav ověření na účtu
+    await userEvent.click(
+      within(alert).getByRole('link', { name: 'Přejít na účet' }),
+    );
+    await waitFor(() => expect(router.state.location.pathname).toBe('/ucet'));
+  });
+
+  it('výpadek ověření chovatele vysvětlí a opakování seznam načte', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/animal/animals', () =>
+        ++calls <= 2
+          ? HttpResponse.json(
+              { error: 'Breeder verification unavailable' },
+              { status: 503 },
+            )
+          : HttpResponse.json({ items: [animal], nextCursor: null }),
+      ),
+    );
+    renderApp('/zvirata');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'Ověření chovatelského účtu je dočasně nedostupné.',
+    );
+    // výpadek nevyžaduje nové ověření účtu
+    expect(
+      within(alert).queryByRole('link', { name: 'Přejít na účet' }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(alert).getByRole('button', { name: 'Zkusit znovu' }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Argo' })).toBeVisible();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('nedostupná plemena ve filtru lze načíst znovu', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/animal/breeds/:species', () =>
+        ++calls <= 2
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json({
+              species: 'horse',
+              breeds: animalBreeds('horse'),
+            }),
+      ),
+    );
+    renderApp('/zvirata?species=horse');
+    await screen.findByRole('heading', { name: 'Argo' });
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Služba je dočasně nedostupná');
+    expect(select('Plemeno')).toBeDisabled();
+    await userEvent.click(
+      within(alert).getByRole('button', { name: 'Zkusit znovu' }),
+    );
+    await screen.findByRole('option', { name: horseBreed.name });
+    expect(select('Plemeno')).toBeEnabled();
   });
 });
 
@@ -469,6 +542,222 @@ describe('Přidání zvířete (WF 02, 03)', () => {
     expect(client.getQueryData(['animals', animal.id])).toBeUndefined();
     expect(router.state.location.pathname).toBe('/zvirata/nove');
   });
+
+  it('odmítne nečíselnou a příliš velkou hmotnost a hranici 2000 kg přijme', async () => {
+    renderApp('/zvirata/nove');
+    await fillProfile();
+    const weight = field('Hmotnost (kg)');
+    await userEvent.type(weight, 'dvanáct');
+    await userEvent.click(button('Pokračovat na fotografie'));
+    expect(weight).toHaveAccessibleDescription(
+      'Zadejte hmotnost číslem, například 12,5.',
+    );
+    await userEvent.clear(weight);
+    await userEvent.type(weight, '2000,5');
+    await userEvent.click(button('Pokračovat na fotografie'));
+    expect(weight).toHaveAccessibleDescription(
+      'Hmotnost může být nejvýše 2000 kg.',
+    );
+    await userEvent.clear(weight);
+    await userEvent.type(weight, '2000');
+    await userEvent.click(button('Pokračovat na fotografie'));
+    expect(
+      await screen.findByRole('heading', { name: 'Fotografie' }),
+    ).toBeVisible();
+  });
+
+  it('krok Fotografie nepustí bez povinných údajů a návrat zachová vyplněné', async () => {
+    renderApp('/zvirata/nove');
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.click(button('Fotografie'));
+    expect(field('Jméno')).toHaveAccessibleDescription(
+      'Vyplňte jméno zvířete.',
+    );
+    expect(
+      screen.queryByRole('heading', { name: 'Fotografie' }),
+    ).not.toBeInTheDocument();
+
+    await fillProfile();
+    await userEvent.click(button('Fotografie'));
+    await screen.findByRole('heading', { name: 'Fotografie' });
+    await userEvent.click(button('Zpět na údaje'));
+    await screen.findByRole('heading', { name: 'Údaje zvířete' });
+    expect(field('Jméno')).toHaveValue('Argo');
+    expect(select('Plemeno')).toHaveValue(breed.id);
+  });
+
+  it('odmítne fotografii nad 10 MiB a fotografie nad limit 10 na zvíře', async () => {
+    renderApp('/zvirata/nove');
+    await fillProfile();
+    await userEvent.click(button('Pokračovat na fotografie'));
+    const big = new File(['big'], 'velka.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(big, 'size', { value: 10 * 1024 * 1024 + 1 });
+    const photos = Array.from(
+      { length: 11 },
+      (_, index) =>
+        new File([String(index)], `foto-${index}.png`, { type: 'image/png' }),
+    );
+    await userEvent.upload(screen.getByLabelText(/Přidat fotografie/), [
+      big,
+      ...photos,
+    ]);
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('velka.jpg: soubor je větší než 10 MiB.');
+    expect(alert).toHaveTextContent(
+      'foto-10.png: zvíře může mít nejvýše 10 fotografií.',
+    );
+    expect(
+      screen.getAllByRole('radio', { name: /^Hlavní fotografie:/ }),
+    ).toHaveLength(10);
+    expect(screen.getByText(/přetáhněte \(10\/10\)/)).toBeVisible();
+    expect(
+      screen.queryByRole('radio', { name: 'Hlavní fotografie: velka.jpg' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('přetažené soubory kontroluje stejně jako vybrané', async () => {
+    renderApp('/zvirata/nove');
+    await fillProfile();
+    await userEvent.click(button('Pokračovat na fotografie'));
+    const dropZone = screen.getByText('Přidat fotografie').closest('label')!;
+    fireEvent.dragOver(dropZone);
+    fireEvent.drop(dropZone, {
+      dataTransfer: {
+        files: [
+          new File(['gif'], 'anim.gif', { type: 'image/gif' }),
+          new File(['ok'], 'pretazena.png', { type: 'image/png' }),
+        ],
+      },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'anim.gif: fotografie musí být JPEG nebo PNG.',
+    );
+    expect(
+      screen.getByRole('radio', { name: 'Hlavní fotografie: pretazena.png' }),
+    ).toBeChecked();
+  });
+
+  it('odebrání nahrané fotografie zachová zvolenou hlavní, po odebrání hlavní je hlavní první', async () => {
+    let payload: unknown;
+    let uploads: FormDataEntryValue[] = [];
+    server.use(
+      http.post('/api/animal/animals', async ({ request }) => {
+        const data = await request.formData();
+        payload = JSON.parse(String(data.get('animal')));
+        uploads = data.getAll('photos');
+        return HttpResponse.json(animal, { status: 201 });
+      }),
+    );
+    renderApp('/zvirata/nove');
+    await fillProfile();
+    await userEvent.click(button('Pokračovat na fotografie'));
+    await userEvent.upload(
+      screen.getByLabelText(/Přidat fotografie/),
+      ['a.jpg', 'b.jpg', 'c.jpg'].map(
+        (name) => new File([name], name, { type: 'image/jpeg' }),
+      ),
+    );
+    const primary = (name: string) =>
+      screen.getByRole('radio', { name: `Hlavní fotografie: ${name}` });
+    await userEvent.click(primary('c.jpg'));
+    await userEvent.click(button('Odebrat a.jpg'));
+    expect(primary('c.jpg')).toBeChecked();
+    await userEvent.click(button('Odebrat c.jpg'));
+    expect(primary('b.jpg')).toBeChecked();
+    expect(
+      screen.getAllByRole('radio', { name: /^Hlavní fotografie:/ }),
+    ).toHaveLength(1);
+
+    await userEvent.click(button('Uložit zvíře'));
+    await screen.findByText('Zvíře Argo bylo přidáno.');
+    expect(uploads).toHaveLength(1);
+    expect(payload).toMatchObject({ primaryUploadIndex: 0 });
+  });
+
+  it('plemeno, které sdílený katalog nezná, neodešle a vysvětlí to', async () => {
+    const submit = vi.fn(() => HttpResponse.json(animal, { status: 201 }));
+    server.use(
+      http.get('/api/animal/breeds/:species', () =>
+        HttpResponse.json({
+          species: 'dog',
+          breeds: [
+            ...animalBreeds('dog'),
+            { id: 'nove-plemeno', name: 'Nové' },
+          ],
+        }),
+      ),
+      http.post('/api/animal/animals', submit),
+    );
+    renderApp('/zvirata/nove');
+    await screen.findByRole('option', { name: 'Nové' });
+    await userEvent.type(field('Jméno'), 'Argo');
+    await userEvent.selectOptions(select('Plemeno'), 'nove-plemeno');
+    await userEvent.click(button('Pokračovat na fotografie'));
+    await userEvent.click(button('Uložit zvíře'));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Údaje nejsou platné. Zkontrolujte formulář.',
+    );
+    expect(submit).not.toHaveBeenCalled();
+    await userEvent.click(button('Zavřít zprávu'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('serverem odmítnutá pole vyjmenuje česky a bez duplicit', async () => {
+    server.use(
+      http.post('/api/animal/animals', () =>
+        HttpResponse.json(
+          {
+            error: 'Validation failed',
+            issues: [
+              { path: ['name'], message: 'Too long' },
+              { path: ['name'], message: 'Invalid' },
+              { path: ['photos', 1], message: 'Too big' },
+              { path: ['primaryUploadIndex'], message: 'Out of range' },
+              // neznámé nebo poškozené položky se nevypisují
+              { path: ['ownerUserId'], message: 'Unrecognized' },
+              { path: [0], message: 'Index' },
+              { path: 'name', message: 'Not an array' },
+              { message: 'No path' },
+              null,
+            ],
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const router = renderApp('/zvirata/nove');
+    await fillProfile();
+    await userEvent.click(button('Pokračovat na fotografie'));
+    await userEvent.click(button('Uložit zvíře'));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'Údaje nejsou platné. Zkontrolujte formulář.',
+    );
+    expect(within(alert).getByText(/^Zkontrolujte:/)).toHaveTextContent(
+      /^Zkontrolujte: Jméno, Fotografie\.$/,
+    );
+    expect(router.state.location.pathname).toBe('/zvirata/nove');
+  });
+
+  it('nedostupná plemena ve formuláři nepustí dál, dokud se nenačtou', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/animal/breeds/:species', () =>
+        ++calls <= 2
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json({ species: 'dog', breeds: animalBreeds('dog') }),
+      ),
+    );
+    renderApp('/zvirata/nove');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Služba je dočasně nedostupná');
+    expect(button('Pokračovat na fotografie')).toBeDisabled();
+    await userEvent.click(
+      within(alert).getByRole('button', { name: 'Zkusit znovu' }),
+    );
+    await screen.findByRole('option', { name: breed.name });
+    expect(button('Pokračovat na fotografie')).toBeEnabled();
+  });
 });
 
 describe('Úprava zvířete (WF 05, 06)', () => {
@@ -555,6 +844,137 @@ describe('Úprava zvířete (WF 05, 06)', () => {
     expect(router.state.location.pathname).toBe(`/zvirata/${animal.id}`);
     expect(patch).not.toHaveBeenCalled();
   });
+
+  it('nenačtené zvíře formulář nenabídne a opakování ho načte', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/animal/animals/:id', () =>
+        ++calls === 1
+          ? HttpResponse.json({ error: 'Animal not found' }, { status: 404 })
+          : HttpResponse.json(animal),
+      ),
+    );
+    renderApp(`/zvirata/${animal.id}/upravit`);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Zvíře nebo fotografie nebyly nalezeny');
+    expect(
+      screen.queryByRole('button', { name: 'Uložit změny' }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(alert).getByRole('button', { name: 'Zkusit znovu' }),
+    );
+    expect(await screen.findByRole('textbox', { name: 'Jméno' })).toHaveValue(
+      'Argo',
+    );
+  });
+
+  it('nepustí uložení s vymazaným jménem', async () => {
+    const patch = vi.fn(() => HttpResponse.json(animal));
+    server.use(http.patch('/api/animal/animals/:id', patch));
+    renderApp(`/zvirata/${animal.id}/upravit`);
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.clear(field('Jméno'));
+    await userEvent.click(button('Uložit změny'));
+    expect(field('Jméno')).toHaveAccessibleDescription(
+      'Vyplňte jméno zvířete.',
+    );
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('hmotnost s desetinnou čárkou nepovažuje za změnu a uloží jen popis', async () => {
+    let payload: unknown;
+    server.use(
+      http.get('/api/animal/animals/:id', () =>
+        HttpResponse.json(withTwoPhotos),
+      ),
+      http.patch('/api/animal/animals/:id', async ({ request }) => {
+        payload = await request.json();
+        return HttpResponse.json({ ...withTwoPhotos, description: 'Klidný' });
+      }),
+    );
+    renderApp(`/zvirata/${animal.id}/upravit`);
+    await screen.findByRole('option', { name: breed.name });
+    expect(field('Hmotnost (kg)')).toHaveValue('12,5');
+    await userEvent.type(field('Popis'), 'Klidný');
+    await userEvent.click(button('Uložit změny'));
+    await screen.findByText('Změny zvířete Argo byly uloženy.');
+    expect(payload).toEqual({ description: 'Klidný' });
+  });
+
+  it('změní hlavní fotografii na jinou uloženou', async () => {
+    let payload: unknown;
+    server.use(
+      http.get('/api/animal/animals/:id', () =>
+        HttpResponse.json(withTwoPhotos),
+      ),
+      http.patch('/api/animal/animals/:id', async ({ request }) => {
+        payload = await request.json();
+        return HttpResponse.json(withTwoPhotos);
+      }),
+    );
+    renderApp(`/zvirata/${animal.id}/upravit`);
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.click(button('Fotografie'));
+    await userEvent.click(
+      screen.getByRole('radio', { name: 'Hlavní fotografie: luna.jpg' }),
+    );
+    await userEvent.click(button('Uložit změny'));
+    await screen.findByText('Změny zvířete Argo byly uloženy.');
+    expect(payload).toEqual({ primaryPhotoId: withTwoPhotos.photos[1]!.id });
+  });
+
+  it('při souběžné změně (409) ponechá rozpracované údaje', async () => {
+    server.use(
+      http.patch('/api/animal/animals/:id', () =>
+        HttpResponse.json({ error: 'Animal changed' }, { status: 409 }),
+      ),
+    );
+    const router = renderApp(`/zvirata/${animal.id}/upravit`);
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.clear(field('Obec'));
+    await userEvent.type(field('Obec'), 'Brno');
+    await userEvent.click(button('Uložit změny'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Zvíře mezitím změnil jiný požadavek.',
+    );
+    expect(router.state.location.pathname).toBe(
+      `/zvirata/${animal.id}/upravit`,
+    );
+    expect(field('Obec')).toHaveValue('Brno');
+    await userEvent.click(button('Zavřít zprávu'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('uložení potvrzené až po přepnutí účtu nepřesměruje nový účet', async () => {
+    let reads = 0;
+    const reload = heldResponse(() => HttpResponse.json(animal));
+    server.use(
+      http.get('/api/animal/animals/:id', () =>
+        ++reads === 1 ? HttpResponse.json(animal) : reload.handler(),
+      ),
+      http.patch('/api/animal/animals/:id', () =>
+        HttpResponse.json({ ...animal, city: 'Brno' }),
+      ),
+    );
+    const client = createQueryClient();
+    const router = renderApp(`/zvirata/${animal.id}/upravit`, client);
+    await screen.findByRole('option', { name: breed.name });
+    await userEvent.clear(field('Obec'));
+    await userEvent.type(field('Obec'), 'Brno');
+    await userEvent.click(button('Uložit změny'));
+    // PATCH prošel, aplikace právě obnovuje uložené zvíře
+    await waitFor(() => expect(reads).toBe(2));
+    await switchAccount(client);
+    reload.release();
+    await reload.done;
+    await settle();
+    expect(router.state.location.pathname).toBe(
+      `/zvirata/${animal.id}/upravit`,
+    );
+    expect(client.getQueryData<Animal>(['animals', animal.id])?.city).not.toBe(
+      'Brno',
+    );
+  });
 });
 
 describe('Odstranění zvířete (WF 07, 08)', () => {
@@ -625,6 +1045,99 @@ describe('Odstranění zvířete (WF 07, 08)', () => {
     );
     await waitFor(() => expect(trigger).toHaveFocus());
     expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('neúspěšné smazání vysvětlí v dialogu a zvíře ponechá', async () => {
+    server.use(
+      http.delete('/api/animal/animals/:id', () =>
+        HttpResponse.json({ error: 'Internal error' }, { status: 500 }),
+      ),
+    );
+    const router = renderApp(`/zvirata/${animal.id}`);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Smazat zvíře' }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Nenávratně smazat',
+      }),
+    );
+    expect(
+      await within(screen.getByRole('dialog')).findByText(
+        'Služba je dočasně nedostupná. Zkuste to prosím znovu.',
+      ),
+    ).toBeVisible();
+    expect(router.state.location.pathname).toBe(`/zvirata/${animal.id}`);
+
+    // po zavření a novém otevření se stará chyba neukazuje
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Zrušit',
+      }),
+    );
+    await userEvent.click(button('Smazat zvíře'));
+    expect(
+      within(screen.getByRole('dialog')).queryByText(
+        /Služba je dočasně nedostupná/,
+      ),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('Detail zvířete (WF 04)', () => {
+  it('nenalezené zvíře nabídne cestu zpět i opakování', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/animal/animals/:id', () =>
+        ++calls === 1
+          ? HttpResponse.json({ error: 'Animal not found' }, { status: 404 })
+          : HttpResponse.json(animal),
+      ),
+    );
+    renderApp(`/zvirata/${animal.id}`);
+    expect(
+      await screen.findByText(
+        'Zvíře nebo fotografie nebyly nalezeny, nebo k nim nemáte přístup.',
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole('main')).getByRole('link', {
+        name: 'Moje zvířata',
+      }),
+    ).toHaveAttribute('href', '/zvirata');
+    await userEvent.click(button('Zkusit znovu'));
+    expect(await screen.findByRole('heading', { name: 'Argo' })).toBeVisible();
+  });
+
+  it('přepíná mezi fotografiemi a ukáže vyplněnou hmotnost', async () => {
+    server.use(
+      http.get('/api/animal/animals/:id', () =>
+        HttpResponse.json(withTwoPhotos),
+      ),
+    );
+    renderApp(`/zvirata/${animal.id}`);
+    const main = await screen.findByRole('img', { name: 'Argo – argo.jpg' });
+    expect(main).toHaveAttribute(
+      'src',
+      `/api/animal/animals/${animal.id}/photos/${withTwoPhotos.photos[0]!.id}/file?size=preview`,
+    );
+    expect(screen.getByText('Hlavní fotografie')).toBeVisible();
+    expect(screen.getByText('12,5 kg')).toBeVisible();
+
+    const luna = button('Zobrazit luna.jpg');
+    await userEvent.click(luna);
+    expect(luna).toHaveAttribute('aria-pressed', 'true');
+    expect(button('Zobrazit argo.jpg (hlavní)')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(
+      screen.getByRole('img', { name: 'Argo – luna.jpg' }),
+    ).toHaveAttribute(
+      'src',
+      `/api/animal/animals/${animal.id}/photos/${withTwoPhotos.photos[1]!.id}/file?size=preview`,
+    );
+    expect(screen.queryByText('Hlavní fotografie')).not.toBeInTheDocument();
   });
 });
 
