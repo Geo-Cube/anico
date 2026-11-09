@@ -1,0 +1,2298 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AniCo auth-service API",
+    "version": "0.1.0",
+    "description": "Serverové přihlášení Google/Microsoft/Apple, cookie relace, explicitní propojení účtů a delegované místní přihlášení. Bez heslového loginu a bez přijímání klientských x-user-* hlaviček. /internal/verify je pouze pro privátní gateway, nikoli veřejné API. Dokumentace je veřejná pouze mimo produkci. Všechny zde uvedené cesty jsou relativní ke službě."
+  },
+  "servers": [
+    {
+      "url": ".",
+      "description": "Stejný origin a prefix jako openapi.json (přímo nebo /api/auth přes gateway)."
+    }
+  ],
+  "tags": [
+    { "name": "Přihlášení" },
+    {
+      "name": "Místní vývoj",
+      "description": "Pouze při AUTH_DEVELOPMENT_ENABLED=true v APP_ENV=dev; jinak všechny /development cesty vracejí 404. Nejde o bypass loginu: vyžadují skutečný účet a souhlas v browseru."
+    },
+    { "name": "Provoz" }
+  ],
+  "security": [],
+  "components": {
+    "schemas": {
+      "AuthProvider": {
+        "$id": "#/components/schemas/AuthProvider",
+        "type": "string",
+        "enum": ["google", "microsoft", "apple"]
+      },
+      "ProvidersResponse": {
+        "$id": "#/components/schemas/ProvidersResponse",
+        "type": "object",
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AuthProvider" }
+          }
+        },
+        "required": ["providers"],
+        "additionalProperties": false
+      },
+      "Session": {
+        "$id": "#/components/schemas/Session",
+        "type": "object",
+        "properties": {
+          "identity": { "$ref": "#/components/schemas/Identity" },
+          "csrfToken": { "type": "string", "minLength": 1 },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "linkedProviders": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AuthProvider" }
+          },
+          "canManageAccounts": { "type": "boolean" }
+        },
+        "required": [
+          "identity",
+          "csrfToken",
+          "expiresAt",
+          "linkedProviders",
+          "canManageAccounts"
+        ],
+        "additionalProperties": false
+      },
+      "Identity": {
+        "$id": "#/components/schemas/Identity",
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "givenName": {
+            "anyOf": [
+              { "type": "string", "maxLength": 200 },
+              { "type": "null" }
+            ]
+          },
+          "familyName": {
+            "anyOf": [
+              { "type": "string", "maxLength": 200 },
+              { "type": "null" }
+            ]
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "roles": {
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": { "type": "string", "enum": ["breeder", "admin", "owner"] }
+          }
+        },
+        "required": ["userId", "givenName", "familyName", "email", "roles"],
+        "additionalProperties": false
+      },
+      "ConnectionStartResponse": {
+        "$id": "#/components/schemas/ConnectionStartResponse",
+        "type": "object",
+        "properties": { "url": { "type": "string", "format": "uri" } },
+        "required": ["url"],
+        "additionalProperties": false
+      },
+      "LoginErrorCode": {
+        "$id": "#/components/schemas/LoginErrorCode",
+        "type": "string",
+        "enum": [
+          "LOGIN_CANCELLED",
+          "LOGIN_EXPIRED",
+          "LOGIN_FAILED",
+          "ACCOUNT_DISABLED",
+          "IDENTITY_ALREADY_LINKED",
+          "RECENT_LOGIN_REQUIRED",
+          "PROVIDER_UNAVAILABLE"
+        ]
+      },
+      "ServiceHealthResponse": {
+        "$id": "#/components/schemas/ServiceHealthResponse",
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "const": "ok" },
+          "service": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-service$"
+          }
+        },
+        "required": ["status", "service"],
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "string" } },
+        "required": ["error"],
+        "additionalProperties": false
+      },
+      "Jwks": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kty": { "const": "EC", "type": "string" },
+                "crv": { "const": "P-256", "type": "string" },
+                "x": { "type": "string" },
+                "y": { "type": "string" },
+                "kid": { "type": "string" },
+                "alg": { "const": "ES256", "type": "string" },
+                "use": { "const": "sig", "type": "string" }
+              },
+              "required": ["kty", "crv", "x", "y", "kid", "alg", "use"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["keys"],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "BrowserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-anico-session",
+        "description": "HTTPS HttpOnly relace. Swagger nemůže cookie nastavit přes autorizační dialog; přihlaste se nejdřív browserem."
+      },
+      "LocalBrowserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "anico-local-session",
+        "description": "Pouze HTTP varianta stejné browser relace."
+      },
+      "DevelopmentToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-anico-development-token",
+        "description": "Ne Authorization: Bearer. Pouze delegovaný grant, povinný odpovídající Origin, vyžaduje AUTH_DEVELOPMENT_ENABLED=true. Přítomnost hlavičky má přednost před cookie i při neplatném tokenu."
+      },
+      "GatewayKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-anico-gateway-key",
+        "description": "Privátní sdílený klíč gateway. Nedávat do veřejného browseru."
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Liveness",
+        "tags": ["Provoz"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Služba běží.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Readiness databáze a shutdownu",
+        "tags": ["Provoz"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Služba je připravena.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceHealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/providers": {
+      "get": {
+        "summary": "Nakonfigurovaní poskytovatelé",
+        "tags": ["Přihlášení"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Pouze aktivní nakonfigurované OIDC providery.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProvidersResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/jwks.json": {
+      "get": {
+        "summary": "Veřejný podpisový klíč identity",
+        "tags": ["Přihlášení"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "JWKS s veřejným EC P-256 klíčem; žádné privátní d. JWT identity používá ES256, typ anico-identity+jwt, kid, sub=userId, iss, aud, iat, exp=30s, jti a identity.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Jwks" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login/{provider}": {
+      "get": {
+        "summary": "Zahájit OIDC přihlášení",
+        "tags": ["Přihlášení"],
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Redirect na poskytovatele a login cookie vázaná na browser.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              },
+              "Location": {
+                "schema": { "type": "string" },
+                "description": "Cílová URL přesměrování."
+              },
+              "Set-Cookie": {
+                "description": "HTTPS: __Host-anico-session / __Host-anico-login; HTTP: anico-local-session / anico-local-login. HttpOnly; Path=/; bez Domain; Secure pouze HTTPS. Relace SameSite=Lax, Max-Age=AUTH_SESSION_SECONDS (výchozí 28800, rozsah 300–86400). Login cookie Max-Age=600, SameSite=None pouze pro Apple login (vyžaduje HTTPS), jinak Lax. Smazání používá Max-Age=0.",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "text/plain": { "schema": { "type": "string" } },
+              "text/html": { "schema": { "type": "string" } }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "503": {
+            "description": "PROVIDER_NOT_CONFIGURED nebo APPLE_REQUIRES_HTTPS.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/AuthProvider" }
+          },
+          {
+            "name": "returnTo",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "maxLength": 160 },
+            "description": "Pouze bezpečná ASCII cesta stejného originu bez //, dot segmentů, fragmentu, backslash nebo /api. Výjimka: přesný /api/auth/development/consent?request=<43znakové ID>. Jinak INVALID_LOGIN_RETURN."
+          }
+        ]
+      }
+    },
+    "/login/{provider}/callback": {
+      "get": {
+        "summary": "OIDC callback přes query",
+        "tags": ["Přihlášení"],
+        "security": [],
+        "responses": {
+          "303": {
+            "description": "Úspěch: AUTH_PUBLIC_ORIGIN + ověřená návratová cesta (výchozí /), nová relace a smazání login cookie; předchozí relace se zneplatní. Selhání: /prihlaseni?error=<LoginErrorCode>, u známého link flow /ucet?error=<LoginErrorCode>; smaže se jen login cookie. Chyby callbacku včetně chybné state se vracejí redirectem, nikoli JSON.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              },
+              "Location": {
+                "schema": { "type": "string" },
+                "description": "Cílová URL přesměrování."
+              },
+              "Set-Cookie": {
+                "description": "HTTPS: __Host-anico-session / __Host-anico-login; HTTP: anico-local-session / anico-local-login. HttpOnly; Path=/; bez Domain; Secure pouze HTTPS. Relace SameSite=Lax, Max-Age=AUTH_SESSION_SECONDS (výchozí 28800, rozsah 300–86400). Login cookie Max-Age=600, SameSite=None pouze pro Apple login (vyžaduje HTTPS), jinak Lax. Smazání používá Max-Age=0.",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "text/plain": { "schema": { "type": "string" } },
+              "text/html": { "schema": { "type": "string" } }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/AuthProvider" }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "minLength": 20, "maxLength": 256 }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "error_description",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Volitelný Apple form_post údaj; nikdy není důvěryhodnou identitou sám o sobě."
+            }
+          }
+        ],
+        "description": "Prohlížeč musí vrátit login cookie ze zahájení. State je jednorázová a vázaná na browser, provider a 10minutovou expiraci; OIDC ověřuje nonce a podpis/issuer/audience ID tokenu, Google/Microsoft navíc PKCE S256 (Apple používá form_post bez PKCE). Link navíc vyžaduje tutéž aktuální browser relaci a přihlášení nejvýše 5 minut staré. Před vstupem do callback handleru může parser nebo limiter vrátit obecnou HTTP chybu."
+      },
+      "post": {
+        "summary": "OIDC callback (zejména Apple form_post)",
+        "tags": ["Přihlášení"],
+        "security": [],
+        "responses": {
+          "303": {
+            "description": "Úspěch: AUTH_PUBLIC_ORIGIN + ověřená návratová cesta (výchozí /), nová relace a smazání login cookie; předchozí relace se zneplatní. Selhání: /prihlaseni?error=<LoginErrorCode>, u známého link flow /ucet?error=<LoginErrorCode>; smaže se jen login cookie. Chyby callbacku včetně chybné state se vracejí redirectem, nikoli JSON.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              },
+              "Location": {
+                "schema": { "type": "string" },
+                "description": "Cílová URL přesměrování."
+              },
+              "Set-Cookie": {
+                "description": "HTTPS: __Host-anico-session / __Host-anico-login; HTTP: anico-local-session / anico-local-login. HttpOnly; Path=/; bez Domain; Secure pouze HTTPS. Relace SameSite=Lax, Max-Age=AUTH_SESSION_SECONDS (výchozí 28800, rozsah 300–86400). Login cookie Max-Age=600, SameSite=None pouze pro Apple login (vyžaduje HTTPS), jinak Lax. Smazání používá Max-Age=0.",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "text/plain": { "schema": { "type": "string" } },
+              "text/html": { "schema": { "type": "string" } }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/AuthProvider" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 256
+                  },
+                  "code": { "type": "string" },
+                  "error": { "type": "string" },
+                  "error_description": { "type": "string" },
+                  "user": {
+                    "type": "string",
+                    "description": "Volitelný Apple form_post údaj; nikdy není důvěryhodnou identitou sám o sobě."
+                  }
+                },
+                "required": ["state"],
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          }
+        },
+        "description": "Prohlížeč musí vrátit login cookie ze zahájení. State je jednorázová a vázaná na browser, provider a 10minutovou expiraci; OIDC ověřuje nonce a podpis/issuer/audience ID tokenu, Google/Microsoft navíc PKCE S256 (Apple používá form_post bez PKCE). Link navíc vyžaduje tutéž aktuální browser relaci a přihlášení nejvýše 5 minut staré. Před vstupem do callback handleru může parser nebo limiter vrátit obecnou HTTP chybu."
+      }
+    },
+    "/connections/{provider}": {
+      "post": {
+        "summary": "Propojit další provider s aktuálním účtem",
+        "tags": ["Přihlášení"],
+        "security": [{ "BrowserSession": [] }, { "LocalBrowserSession": [] }],
+        "responses": {
+          "200": {
+            "description": "Autorizační HTTPS URL; po dokončení callback rotuje relaci. Účty se neslučují podle e-mailu.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              },
+              "Set-Cookie": {
+                "description": "HTTPS: __Host-anico-session / __Host-anico-login; HTTP: anico-local-session / anico-local-login. HttpOnly; Path=/; bez Domain; Secure pouze HTTPS. Relace SameSite=Lax, Max-Age=AUTH_SESSION_SECONDS (výchozí 28800, rozsah 300–86400). Login cookie Max-Age=600, SameSite=None pouze pro Apple login (vyžaduje HTTPS), jinak Lax. Smazání používá Max-Age=0.",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStartResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED, SESSION_EXPIRED, ACCOUNT_DISABLED; propojení: RECENT_LOGIN_REQUIRED; schválení delegace: DEVELOPMENT_REQUEST_EXPIRED; development token: DEVELOPMENT_LOGIN_REQUIRED, DEVELOPMENT_SESSION_EXPIRED, DEVELOPMENT_LOGIN_UNAVAILABLE.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF_REJECTED nebo DEVELOPMENT_ORIGIN_REJECTED; změna admin role: OWNER_REQUIRED; propojení s development hlavičkou: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "409": {
+            "description": "PROVIDER_ALREADY_CONNECTED",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "503": {
+            "description": "LINK_PROVIDER_UNSUPPORTED (Apple) nebo PROVIDER_NOT_CONFIGURED.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/AuthProvider" }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Přesně AUTH_PUBLIC_ORIGIN pro browser; pro development grant přesný loopback origin, na který byl vydán."
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "csrfToken z GET /session. Browser mutace vyžadují současně správný Origin."
+          }
+        ],
+        "description": "Jen browser; development hlavička je odmítnuta ACCOUNT_MANAGEMENT_REQUIRES_BROWSER. Poslední přihlášení musí být nejvýše 5 minut staré, jinak RECENT_LOGIN_REQUIRED."
+      }
+    },
+    "/session": {
+      "get": {
+        "summary": "Aktuální identita a CSRF token",
+        "tags": ["Přihlášení"],
+        "security": [
+          { "BrowserSession": [] },
+          { "LocalBrowserSession": [] },
+          { "DevelopmentToken": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session včetně linkedProviders. canManageAccounts=false pro development grant.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Session" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED, SESSION_EXPIRED, ACCOUNT_DISABLED; propojení: RECENT_LOGIN_REQUIRED; schválení delegace: DEVELOPMENT_REQUEST_EXPIRED; development token: DEVELOPMENT_LOGIN_REQUIRED, DEVELOPMENT_SESSION_EXPIRED, DEVELOPMENT_LOGIN_UNAVAILABLE.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF_REJECTED nebo DEVELOPMENT_ORIGIN_REJECTED; změna admin role: OWNER_REQUIRED; propojení s development hlavičkou: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Povinný pouze pro development token; musí odpovídat originu grantu."
+          }
+        ]
+      }
+    },
+    "/logout": {
+      "post": {
+        "summary": "Zneplatnit aktuální relaci",
+        "tags": ["Přihlášení"],
+        "security": [
+          { "BrowserSession": [] },
+          { "LocalBrowserSession": [] },
+          { "DevelopmentToken": [] }
+        ],
+        "responses": {
+          "204": {
+            "description": "Browser: relace zneplatněna a session cookie smazána. Development: zneplatněn grant bez mazání cookie.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              },
+              "Set-Cookie": {
+                "description": "HTTPS: __Host-anico-session / __Host-anico-login; HTTP: anico-local-session / anico-local-login. HttpOnly; Path=/; bez Domain; Secure pouze HTTPS. Relace SameSite=Lax, Max-Age=AUTH_SESSION_SECONDS (výchozí 28800, rozsah 300–86400). Login cookie Max-Age=600, SameSite=None pouze pro Apple login (vyžaduje HTTPS), jinak Lax. Smazání používá Max-Age=0.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED, SESSION_EXPIRED, ACCOUNT_DISABLED; propojení: RECENT_LOGIN_REQUIRED; schválení delegace: DEVELOPMENT_REQUEST_EXPIRED; development token: DEVELOPMENT_LOGIN_REQUIRED, DEVELOPMENT_SESSION_EXPIRED, DEVELOPMENT_LOGIN_UNAVAILABLE.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF_REJECTED nebo DEVELOPMENT_ORIGIN_REJECTED; změna admin role: OWNER_REQUIRED; propojení s development hlavičkou: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Přesně AUTH_PUBLIC_ORIGIN pro browser; pro development grant přesný loopback origin, na který byl vydán."
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Povinný pouze pro browser relaci; development token používá jen kontrolu Origin."
+          }
+        ]
+      }
+    },
+    "/users/{userId}/admin": {
+      "put": {
+        "summary": "Owner přidělí nebo odebere roli admin",
+        "tags": ["Přihlášení"],
+        "security": [
+          { "BrowserSession": [] },
+          { "LocalBrowserSession": [] },
+          { "DevelopmentToken": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aktualizovaná veřejná identita.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "identity": { "$ref": "#/components/schemas/Identity" }
+                  },
+                  "required": ["identity"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED, SESSION_EXPIRED, ACCOUNT_DISABLED; propojení: RECENT_LOGIN_REQUIRED; schválení delegace: DEVELOPMENT_REQUEST_EXPIRED; development token: DEVELOPMENT_LOGIN_REQUIRED, DEVELOPMENT_SESSION_EXPIRED, DEVELOPMENT_LOGIN_UNAVAILABLE.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF_REJECTED nebo DEVELOPMENT_ORIGIN_REJECTED; změna admin role: OWNER_REQUIRED; propojení s development hlavičkou: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "ELIGIBLE_USER_NOT_FOUND: neexistující nebo nezpůsobilý cílový účet.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Přesně AUTH_PUBLIC_ORIGIN pro browser; pro development grant přesný loopback origin, na který byl vydán."
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Povinný pouze pro browser relaci."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "admin": { "type": "boolean" } },
+                "required": ["admin"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "description": "Vyžaduje roli owner, jinak OWNER_REQUIRED. Mění pouze admin roli způsobilého aktivního ne-fixture účtu, nikoli owner roli."
+      }
+    },
+    "/internal/verify": {
+      "get": {
+        "summary": "Privátní ověření relace pro gateway",
+        "tags": ["Přihlášení"],
+        "security": [
+          { "BrowserSession": [], "GatewayKey": [] },
+          { "LocalBrowserSession": [], "GatewayKey": [] },
+          { "DevelopmentToken": [], "GatewayKey": [] }
+        ],
+        "responses": {
+          "204": {
+            "description": "Ověřeno; gateway získá krátkodobý podepsaný JWT identity.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              },
+              "X-Anico-Identity": {
+                "schema": { "type": "string" },
+                "description": "ES256 JWT s životností 30 sekund, viz JWKS."
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "GATEWAY_REQUIRED nebo chyba relace/grantu.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF_REJECTED nebo DEVELOPMENT_ORIGIN_REJECTED; změna admin role: OWNER_REQUIRED; propojení s development hlavičkou: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-forwarded-method",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Původní HTTP metoda. U browser relace vynechání nebo metoda mimo GET/HEAD/OPTIONS vyžaduje CSRF a Origin."
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Povinný pro mutaci browseru a každý development grant."
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Povinný při mutaci browseru."
+          }
+        ],
+        "description": "Gateway musí tuto cestu držet privátní. Sdílený klíč je pouze defense in depth. Route je vyňata z rate limitu."
+      }
+    },
+    "/development/authorize": {
+      "get": {
+        "summary": "Zahájit delegaci pro místní aplikaci s PKCE",
+        "tags": ["Místní vývoj"],
+        "security": [],
+        "responses": {
+          "303": {
+            "description": "Na consent nebo přes zvolený Google/Microsoft login.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              },
+              "Location": {
+                "schema": { "type": "string" },
+                "description": "Cílová URL přesměrování."
+              }
+            },
+            "content": {
+              "text/plain": { "schema": { "type": "string" } },
+              "text/html": { "schema": { "type": "string" } }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "503": {
+            "description": "PROVIDER_NOT_CONFIGURED",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "const": "anico-local-development" }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "const": "code" }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Přesná kanonická URL http://127.0.0.1:<port>/callback, port 1024–65535, bez query, fragmentu a credentials."
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "const": "S256" }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["google", "microsoft"] }
+          }
+        ],
+        "description": "Query je strict: další parametry jsou odmítnuty. Request expiruje za 5 minut. Neplatný redirect: INVALID_DEVELOPMENT_REDIRECT."
+      }
+    },
+    "/development/consent": {
+      "get": {
+        "summary": "Browser stránka přihlášení nebo výslovného souhlasu",
+        "tags": ["Místní vývoj"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "HTML: přihlášení nebo formulář souhlasu s CSRF tokenem. Přihlášená stránka omezuje form-action na self a schválený loopback origin.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "DEVELOPMENT_REQUEST_EXPIRED",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "request",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+          }
+        ],
+        "description": "Browser cookie je volitelná; bez platné relace zobrazí přihlašovací odkazy. Nikdy nepřebírá development token jako browser relaci."
+      }
+    },
+    "/development/approve": {
+      "post": {
+        "summary": "Potvrdit nebo odmítnout delegaci",
+        "tags": ["Místní vývoj"],
+        "security": [{ "BrowserSession": [] }, { "LocalBrowserSession": [] }],
+        "responses": {
+          "303": {
+            "description": "Na ověřenou loopback callback URL s původním state a jednorázovým code (60 sekund) nebo error=access_denied.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              },
+              "Location": {
+                "schema": { "type": "string" },
+                "description": "Cílová URL přesměrování."
+              }
+            },
+            "content": {
+              "text/plain": { "schema": { "type": "string" } },
+              "text/html": { "schema": { "type": "string" } }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED, SESSION_EXPIRED, ACCOUNT_DISABLED; propojení: RECENT_LOGIN_REQUIRED; schválení delegace: DEVELOPMENT_REQUEST_EXPIRED; development token: DEVELOPMENT_LOGIN_REQUIRED, DEVELOPMENT_SESSION_EXPIRED, DEVELOPMENT_LOGIN_UNAVAILABLE.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF_REJECTED nebo DEVELOPMENT_ORIGIN_REJECTED; změna admin role: OWNER_REQUIRED; propojení s development hlavičkou: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Přesně AUTH_PUBLIC_ORIGIN pro browser; pro development grant přesný loopback origin, na který byl vydán."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "request": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "csrfToken": { "type": "string", "maxLength": 128 },
+                  "decision": { "type": "string", "enum": ["allow", "deny"] }
+                },
+                "required": ["request", "csrfToken", "decision"],
+                "additionalProperties": false
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "request": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "csrfToken": { "type": "string", "maxLength": 128 },
+                  "decision": { "type": "string", "enum": ["allow", "deny"] }
+                },
+                "required": ["request", "csrfToken", "decision"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "description": "CSRF je ve formulářovém těle, nikoli v hlavičce. Request lze spotřebovat jen jednou."
+      }
+    },
+    "/development/token": {
+      "post": {
+        "summary": "Vyměnit jednorázový kód a PKCE verifier za grant",
+        "tags": ["Místní vývoj"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Opaque token; posílat jako x-anico-development-token společně s Origin, nikoli Authorization: Bearer. Expirace nejvýše 8 hodin a nikdy za expirací rodičovské browser relace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{43}$"
+                    },
+                    "token_type": { "type": "string", "const": "Bearer" },
+                    "expires_at": { "type": "string", "format": "date-time" }
+                  },
+                  "required": ["access_token", "token_type", "expires_at"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "INVALID_DEVELOPMENT_CODE nebo ACCOUNT_DISABLED",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "client_id": {
+                    "type": "string",
+                    "const": "anico-local-development"
+                  },
+                  "grant_type": {
+                    "type": "string",
+                    "const": "authorization_code"
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "code_verifier": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "43–128 znaků [A-Za-z0-9._~-], SHA-256 musí odpovídat code_challenge."
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Přesná kanonická URL http://127.0.0.1:<port>/callback, port 1024–65535, bez query, fragmentu a credentials."
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "grant_type",
+                  "code",
+                  "code_verifier",
+                  "redirect_uri"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "client_id": {
+                    "type": "string",
+                    "const": "anico-local-development"
+                  },
+                  "grant_type": {
+                    "type": "string",
+                    "const": "authorization_code"
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "code_verifier": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "43–128 znaků [A-Za-z0-9._~-], SHA-256 musí odpovídat code_challenge."
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Přesná kanonická URL http://127.0.0.1:<port>/callback, port 1024–65535, bez query, fragmentu a credentials."
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "grant_type",
+                  "code",
+                  "code_verifier",
+                  "redirect_uri"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/development/identity": {
+      "post": {
+        "summary": "Krátkodobá podepsaná identita pro místní proxy",
+        "tags": ["Místní vývoj"],
+        "security": [{ "DevelopmentToken": [] }],
+        "responses": {
+          "200": {
+            "description": "Podepsaný JWT identity s životností 30 sekund.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "identityToken": { "type": "string" },
+                    "expiresAt": { "type": "string", "format": "date-time" }
+                  },
+                  "required": ["identityToken", "expiresAt"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED, SESSION_EXPIRED, ACCOUNT_DISABLED; propojení: RECENT_LOGIN_REQUIRED; schválení delegace: DEVELOPMENT_REQUEST_EXPIRED; development token: DEVELOPMENT_LOGIN_REQUIRED, DEVELOPMENT_SESSION_EXPIRED, DEVELOPMENT_LOGIN_UNAVAILABLE.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF_REJECTED nebo DEVELOPMENT_ORIGIN_REJECTED; změna admin role: OWNER_REQUIRED; propojení s development hlavičkou: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Přesně AUTH_PUBLIC_ORIGIN pro browser; pro development grant přesný loopback origin, na který byl vydán."
+          }
+        ]
+      }
+    },
+    "/development/logout": {
+      "post": {
+        "summary": "Zneplatnit development grant",
+        "tags": ["Místní vývoj"],
+        "security": [{ "DevelopmentToken": [] }],
+        "responses": {
+          "204": {
+            "description": "Grant zneplatněn, browser relace zůstává.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (Zod validace), Invalid JSON nebo chybný vstup dle operace.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED, SESSION_EXPIRED, ACCOUNT_DISABLED; propojení: RECENT_LOGIN_REQUIRED; schválení delegace: DEVELOPMENT_REQUEST_EXPIRED; development token: DEVELOPMENT_LOGIN_REQUIRED, DEVELOPMENT_SESSION_EXPIRED, DEVELOPMENT_LOGIN_UNAVAILABLE.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF_REJECTED nebo DEVELOPMENT_ORIGIN_REJECTED; změna admin role: OWNER_REQUIRED; propojení s development hlavičkou: ACCOUNT_MANAGEMENT_REQUIRES_BROWSER.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large: JSON nad 32 KiB nebo formulář nad 16 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": {
+            "description": "Limit 120 požadavků za 60 sekund na IP. Textová odpověď express-rate-limit; health, ready a internal/verify jsou vyňaty.",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Počet sekund do opakování."
+              },
+              "RateLimit": {
+                "schema": { "type": "string" },
+                "description": "Standardní hlavička draft-8."
+              },
+              "RateLimit-Policy": { "schema": { "type": "string" } }
+            },
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          },
+          "500": {
+            "description": "Internal server error; soukromé detaily se nevracejí.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Auth routy se nesmí cachovat.",
+                "schema": { "type": "string", "const": "no-store" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Přesně AUTH_PUBLIC_ORIGIN pro browser; pro development grant přesný loopback origin, na který byl vydán."
+          }
+        ]
+      }
+    }
+  }
+}

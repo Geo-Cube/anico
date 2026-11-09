@@ -15,6 +15,7 @@ import { databaseTarget } from './database/policy.js';
 import { configuredRegistrationPublisher } from './modules/auth/infrastructure/nats-registration-publisher.js';
 import { mongoRegistrationOutbox } from './modules/auth/infrastructure/registration-outbox.js';
 import { registrationDispatcher } from './modules/auth/application/registration-dispatcher.js';
+import { apiDocsEnabled } from './openapi/docs-router.js';
 
 const env = z
   .object({
@@ -73,6 +74,7 @@ try {
   const app = createApp({
     logger,
     modules: await createModules(connection),
+    apiDocs: apiDocsEnabled(process.env),
     isReady: () => !stopping && connection.readyState === 1,
   });
   const server = app.listen(env.PORT, env.HOST, () =>

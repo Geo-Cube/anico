@@ -101,8 +101,8 @@ Stav k 6. 11. 2026 po zrušení R7. Nic z toho neblokuje DoD UC-03; pořadí nen
     z událostí `breeder.verified`, durable pull consumer a idempotentní zápis dle ADR-0007.
 14. **Duplikovaný kód s breeder-service:** detekce formátu, `sanitizeFileName`, GridFS adaptér a hlavičky stažení
     jsou kopie; kandidát na sdílený serverový balíček.
-15. **OpenAPI animal-service** už popisuje zvířata, fotografie i doklady; chybí servírování `/openapi.json`
-    a Swagger UI (`/docs`) mimo produkci jako u breeder-service.
+15. ~~**Swagger UI animal-service**~~ – hotovo: `/openapi.json` a `/docs` mimo produkci stejně jako
+    u breeder-service, včetně relativních adres pro gateway prefix `/api/animal`.
 16. ~~**Frontend dokladů**~~ – hotovo, viz §6. Chybí ověření celého průchodu v prohlížeči proti devu.
 
 ## 6. Frontend (WF 01–09)
