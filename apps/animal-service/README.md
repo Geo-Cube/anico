@@ -102,6 +102,20 @@ hlavní se hlavní stane první zbývající. Odebraná fotografie se smaže i z
 Kontrakt je [`openapi.json`](openapi.json) (`npm run openapi -w @anico/animal-service`);
 test hlídá shodu s generátorem i s registrovanými routami.
 
+Mimo produkci je veřejné Swagger UI na `GET /docs` a tentýž kontrakt na
+`GET /openapi.json`; lokálně např. `http://localhost:3002/docs`, za gateway
+`/api/animal/docs` a `/api/animal/openapi.json`. UI používá pouze lokální
+whitelistované assets a relativní URL, takže zachová prefix gateway i při
+„Try it out“. `/docs/` přesměruje na `/docs`.
+
+Server dokumentaci zapíná přes `apiDocsEnabled`: `APP_ENV=prod` ji vypne,
+stejně jako `NODE_ENV=production` bez neprázdného `APP_ENV`. Explicitní
+`APP_ENV=local` nebo `APP_ENV=dev` ji ponechá zapnutou i při
+`NODE_ENV=production`. Při přímém vytváření aplikace je výchozí stav vypnutý
+(`apiDocs` je nutné zapnout). Vypnuté nebo nepovolené docs cesty propadají
+standardní autentizaci a následně 404. Obchodní API dál vyžaduje přihlášení;
+identitu pro požadavky z UI doplňuje gateway, ne autorizační dialog Swaggeru.
+
 | Metoda a cesta ve službě                      | Co dělá                                                                  |
 | --------------------------------------------- | ------------------------------------------------------------------------ |
 | `GET /health`, `GET /ready`                   | Veřejný liveness a DB readiness                                          |

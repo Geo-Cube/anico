@@ -10,17 +10,21 @@ import { ZodError } from 'zod';
 import { AnimalError } from './modules/animal/domain/entity.js';
 import { UploadError } from './http/files.js';
 import { healthRouter } from './health/health-router.js';
+import { apiDocsRouter } from './openapi/docs-router.js';
 
 export function createApp(dependencies: {
   logger: Logger;
   modules?: Router;
   isReady: () => boolean;
   authenticate?: RequestHandler;
+  /** Veřejné /docs a /openapi.json; zapínat jen mimo produkci. */
+  apiDocs?: boolean;
 }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(pinoHttp({ logger: dependencies.logger }));
   app.use(healthRouter(dependencies));
+  if (dependencies.apiDocs) app.use(apiDocsRouter());
   app.use(
     dependencies.authenticate ??
       ((_req, res) => {

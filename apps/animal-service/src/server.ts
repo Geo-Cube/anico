@@ -9,6 +9,7 @@ import { loadMigrations } from './database/registry.js';
 import { databaseTarget } from './database/policy.js';
 import { mongoVerifiedBreeders } from './modules/animal/infrastructure/verified-breeders.js';
 import { configuredVerificationConsumer } from './modules/animal/infrastructure/nats-verification-consumer.js';
+import { apiDocsEnabled } from './openapi/docs-router.js';
 
 const env = z
   .object({
@@ -68,6 +69,7 @@ try {
   const app = createApp({
     ...(authenticate ? { authenticate } : {}),
     logger,
+    apiDocs: apiDocsEnabled(process.env),
     modules: createModules(connection, {
       logger,
       verification,

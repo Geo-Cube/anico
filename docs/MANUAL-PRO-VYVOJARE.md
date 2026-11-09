@@ -113,6 +113,19 @@ Jinak vyber název služby, na které skutečně pracuješ.
 Nová lokální služba ještě automaticky neběží na týmovém devu. Její cloudové nasazení
 vyžaduje samostatnou konfiguraci. Chybějící API se nenahrazuje osobní databází.
 
+### Swagger dokumentace API
+
+Auth, breeder a animal mají mimo produkci Swagger UI na `/docs` a OpenAPI JSON na
+`/openapi.json`. Za gateway použij `/api/auth/docs`, `/api/breeder/docs` nebo
+`/api/animal/docs`; dostupnost na týmovém devu závisí na nasazení příslušné verze služby.
+Gateway dál vyžaduje přihlášení a přístup do týmu. Swagger nenahrazuje oprávnění
+obchodních operací; interní auth endpointy vyžadují navíc privátní gateway klíč.
+
+Dokumentace se vypíná pro `APP_ENV=prod` a také pro `NODE_ENV=production`, pokud
+není nastavené `APP_ENV`. Verzionované kontrakty aktualizuje
+`npm run openapi -w @anico/auth-service`, `npm run openapi -w @anico/breeder-service`
+nebo `npm run openapi -w @anico/animal-service`.
+
 ## 2. Každý pracovní den
 
 1. V GitHub Desktop stáhni `dev`. Pro nový úkol z něj založ `feature/kratky-popis`; pokud už vlastní větev máš, přepni na ni, stáhni její vzdálené změny a začleň aktuální `dev` pomocí merge nebo rebase podle [Git workflow](GIT-WORKFLOW.md#pokračování-na-existující-větvi).
