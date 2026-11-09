@@ -119,7 +119,7 @@ teprve pak vystaví gateway runtime 4. CI na starším runtime odmítne deploy p
 změnou běžící aplikace. Potom merge spustí standardní GHCR/Coolify deployment.
 
 Publishery a consumer se zapojují v dev službách. Kolegové dál používají své původní
-příkazy, broker lokálně nepotřebují. `site.yml` obnovuje také broker, konfiguraci
+příkazy; lokální animal launcher spustí dočasný broker automaticky. `site.yml` obnovuje také broker, konfiguraci
 streamů, consumeru a secrets. Data volume se nepřepisují. Prázdný broker neobnoví
 ztracené zprávy bez zálohy nebo výslovného replay postupu z uložených outbox payloadů.
 Před konfigurací služeb se ověřuje skutečný stream/consumer; po deployi kontrola
@@ -127,15 +127,21 @@ ověřuje events síť, read-only mounty a nepřítomnost NATS credentials v env
 
 ## Testy
 
-Na skutečném devu je potvrzené trvalé file storage, discard-new, vypnutá časová
-expirace, nulové veřejné porty, zamítnutá správa streamu publisherem a nula consumerů.
-Opakované spuštění broker IaC zachovalo stejný kontejner bez restartu.
-Všechny tři aplikační image jsou zdravé a odpovídají ověřenému release
-`22939abb9cee7d8fe3752dd106a5b735a07cad43`, uloženému také pro obnovu.
+Dne 6. 11. 2026 byl přes IaC a CI nasazen release
+`175815060b94a026a0d07854e1d81b98def3d05b` (PR #37). Všech pět aplikací je
+zdravých, migrace animal/breeder jsou aplikované a obě služby se přihlásí
+vlastními omezenými NATS účty. API bez ověřené identity vracejí 401.
 
-Skutečný dočasný NATS a MongoDB ověřují ACK před změnou stavu, restart, výpadek,
-retry, plný stream, deduplikaci, lease, neplatný payload, oprávnění a shutdown.
-Nejde o test animal consumeru. První běh automaticky stáhne kontrolním součtem
+Broker zachoval tři registrační události auth a má nový stream
+`ANICO_BREEDER_VERIFICATIONS` s consumerem `animal-verified-breeders`;
+pending i ack-pending jsou nula. Při nasazení nebyl žádný schválený chovatel,
+proto první skutečné schválení a přenos do animal API ještě čeká na ověření.
+Consumer registračních událostí auth tímto nevznikl.
+
+Integrační testy se skutečným dočasným NATS a MongoDB ověřují publisher,
+projekci animal-service, restart, výpadek, retry, deduplikaci, lease,
+neplatný payload, oprávnění a shutdown.
+První běh automaticky stáhne kontrolním součtem
 ověřenou NATS binárku, stejně jako testy stahují MongoDB:
 
 ```bash

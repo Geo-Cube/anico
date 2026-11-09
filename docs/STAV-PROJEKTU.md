@@ -1,61 +1,104 @@
 # Co máme a co zbývá
 
-**Stav k 6. 11. 2026; dev infrastruktura je ověřená, celý uživatelský tok UC-01 ještě zbývá ověřit.**
+**Stav k 9. 11. 2026.** Na devu běží release `a26bbf9` (merge PR #43): všech pět aplikací
+(frontend, auth, breeder, animal, ukázkový backend) je zdravých a na stejném commitu,
+testovací účty jsou zapnuté (`AUTH_TEST_ACCOUNTS_ENABLED=true`, `APP_ENV=dev`).
+Kód UC-01–UC-03 je nasazený včetně frontendu; **kolo testování v prohlížeči proti devu právě probíhá**.
+Formulář žádosti a vrácení k doplnění (§ 3) jsou zatím jen ve větvi, na dev přijdou po PR.
 Připravený kód nebo uložené credentials nejsou totéž jako ověřené nasazení.
 
-## Funguje a je ověřené
+## 1. Funguje a je ověřené
 
-| Oblast              | Co máme                                                                                                                                                                          |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vývojový základ     | npm workspaces + Turborepo, React/Vite, Express/TypeScript, MongoDB/Mongoose, sdílené Zod kontrakty, generátory služeb/modulů/FE funkcí                                          |
-| Kontroly změn       | Prettier, Husky, Vitest/Supertest, dočasná testovací MongoDB, coverage, Gitleaks, chráněné `dev`/`main` a code-owner review                                                      |
-| Týmový dev          | Automatické CI → GHCR → Coolify; frontend, ukázkový backend a auth-service ze stejného commitu                                                                                   |
-| Přístup týmu        | Cloudflare GitHub Access pro dev a administraci, databázový tunel a osobní DB oprávnění podle služby                                                                             |
-| Google a Microsoft  | Skutečné přihlášení a odhlášení obou poskytovatelů na `dev.anico.online` potvrzené v prohlížeči                                                                                  |
-| Ochrana API         | Gateway ověřuje relaci, backend ověřuje podepsaný JWT; anonymní a podvržené požadavky odmítnuté, aplikační a DB porty nejsou veřejné                                             |
-| Lokální přihlášení  | Google/Microsoft login, osobní DB, podepsaná identita do lokálního i sdíleného API a logout jsou ověřené. Gateway 3 i migrace jsou nasazené; po logoutu chráněná API vracejí 401 |
-| Konfigurace serveru | Pulumi + Ansible, firewall, Docker log rotation, oddělené sítě a secrets; ověřený release zaregistrovaný pro obnovu                                                              |
+| Oblast              | Co máme                                                                                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vývojový základ     | npm workspaces + Turborepo, React/Vite, Express/TypeScript, MongoDB/Mongoose, sdílené Zod kontrakty, generátory služeb/modulů/FE funkcí                                           |
+| Kontroly změn       | Prettier, Husky, Vitest/Supertest, dočasná testovací MongoDB a NATS, coverage, Gitleaks, chráněné `dev`/`main` a code-owner review                                                |
+| Týmový dev          | Automatické CI → GHCR → Coolify; frontend, auth, breeder, animal a ukázkový backend ze stejného commitu                                                                           |
+| Přístup týmu        | Cloudflare GitHub Access pro dev a administraci, databázový tunel a osobní DB oprávnění podle služby; osobní DB konfigurace týmu fungují (potvrzeno 9. 11.)                       |
+| Google a Microsoft  | Skutečné přihlášení a odhlášení obou poskytovatelů na `dev.anico.online` potvrzené v prohlížeči                                                                                   |
+| Ochrana API         | Gateway ověřuje relaci, backendy ověřují podepsaný JWT přes `@anico/auth`; anonymní a podvržené požadavky odmítnuté (401), aplikační a DB porty nejsou veřejné                    |
+| Lokální přihlášení  | Google/Microsoft login, osobní DB, podepsaná identita do lokálního i sdíleného API a logout jsou ověřené. Gateway 3 i migrace jsou nasazené; po logoutu chráněná API vracejí 401  |
+| Role                | Nový účet dostává `breeder`. První Google vlastník je jmenovaný a audit ověřený; API pro jmenování admina existuje a je testované. Vlastník nechal Google/Microsoft účty oddělené |
+| Události (NATS)     | Privátní JetStream, outbox a publisher registrací (PR #25/#26); stream `ANICO_BREEDER_VERIFICATIONS` a consumer `animal-verified-breeders` nasazené 6. 11. (PR #37), pending 0    |
+| Konfigurace serveru | Pulumi + Ansible, firewall, Docker log rotation, oddělené sítě a secrets; ověřený release zaregistrovaný pro obnovu                                                               |
 
-## Připravené, ale ještě nedokončené
+## 2. Nasazené na devu, ale neověřené průchodem v prohlížeči
 
-| Oblast            | Stav a co chybí                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Role              | Nový účet dostává `breeder`. První Google vlastník je jmenovaný a audit ověřený. Volitelné propojení je nasazené; vlastník si zvolil účty ponechat oddělené; API pro jmenování admina existuje a je testované                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Další backendy    | Kontrakt identity a `@anico/auth` jsou dostupné. Každá služba musí zapojit ověření JWT, kontrolu rolí/vlastnictví a vlastní cloudovou routu, image a DB účet                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Ověření chovatele | `breeder-service` přidává backend UC-01 (převzetí profilu, úprava jména/e-mailu `PATCH /breeders/me` jen před prvním podáním, žádost, certifikát, rozhodnutí admina včetně vrácení k doplnění `RETURNED` s historií rozhodnutí, [ADR-0004](adr/0004-vraceni-zadosti-k-doplneni.md)) s JWT identitou přes `@anico/auth`, OpenAPI a Swagger UI mimo produkci. Příznak `hasBreedingStation` je odstraněný (migrace). Schválení zapisuje do outboxu událost `breeder.verified`, publisher ji posílá do NATS ([ADR-0007](adr/0007-projekce-overenych-chovatelu-pres-nats.md)); nasazeno na devu 6. 11. 2026 v PR #37. Nenahrazuje `breeding-service` ani `auth-service`. Na devu běží od PR #35 (`/api/breeder`, vlastní DB `anico_breeder`); administrace ve frontendu (`/administrace/chovatele`, WF 04–09) volá skutečné API; průchod proti devu zbývá ověřit. **TODO: skutečné odesílání e-mailů** – notifikátor zatím jen loguje. IČO/adresa čekají na upřesnění |
+Testy (unit, integrační, frontend na MSW) jsou zelené; chybí skutečný průchod proti devu.
+Scénáře a protokol: [testování na devu](qa/dev-testovani.md).
 
-## Ještě zbývá
+| Oblast                       | Co je hotové                                                                                                                                                                                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UC-01 Ověření chovatele      | `breeder-service` (`/api/breeder`, DB `anico_breeder`): převzetí profilu, `PATCH /breeders/me` před prvním podáním, žádost s certifikátem, rozhodnutí admina včetně `RETURNED` ([ADR-0004](adr/0004-vraceni-zadosti-k-doplneni.md)), historie, OpenAPI     |
+| UC-01 frontend               | Administrace `/administrace/chovatele` (WF 04–09, PR #38): K posouzení / Vrácené / Schváleno / Zamítnuto. Stav ověření (WF 10, 11) na přehledu a v Mém účtu                                                                                                |
+| UC-02 Profily zvířat         | `animal-service` (`/api/animal`): profil a fotografie jedním zápisem ([ADR-0006](adr/0006-profil-a-fotografie-zvirete-jednim-zapisem.md)), jen pro ověřeného vlastníka (jinak 403, cizí 404). Frontend WF 01–08 (PR #39)                                   |
+| UC-03 Doklady zvířat         | Podání, verze nad zamítnutou, stažení, historie, fronta a posouzení adminem ([ADR-0005](adr/0005-doklady-zvirat-vnorene-ve-zvireti.md)). Frontend chovatele i administrace WF 01–09 (PR #40)                                                               |
+| Projekce ověřených chovatelů | Schválení → outbox `breeder.verified` → NATS → `verifiedBreeders` v animal-service ([ADR-0007](adr/0007-projekce-overenych-chovatelu-pres-nats.md)). Přihlášení obou služeb k NATS ověřené; **první skutečné schválení až do animal API zatím neproběhlo** |
+| Testovací účty               | Admin/owner založí účet bez Google/Microsoft a přepne se do něj (`/testovaci-ucty`, PR #43); jen na devu, pojistka v kódu i IaC. `npm run qa:fixtures` generuje soubory k nahrání                                                                          |
+| API dokumentace              | OpenAPI + Swagger UI mimo produkci pro breeder, auth a animal (PR #42)                                                                                                                                                                                     |
 
-- Profily zvířat UC-02 jsou v `animal-service` ([návrh](design/uc-02-zvirata.md), [ADR-0006](adr/0006-profil-a-fotografie-zvirete-jednim-zapisem.md)): údaje podle Products (prázdné → `null`) s výjimkou povinného jména (rozhodnutí 6. 11.), fotografie JPEG/PNG s právě jednou hlavní, profil a fotografie jedním zápisem, odstranění včetně fotografií a všech verzí dokladů, odvozený `documentsState` v odpovědi zvířete, OpenAPI. Správa zvířat je jen pro ověřeného vlastníka (projekce `verifiedBreeders`, jinak 403), cizí zvíře 404. Migrace `20261105220513-animal-profiles` se zastaví na pohlaví `unknown`, `20261106120000-required-animal-name` na zvířeti bez jména. Frontend (WF 01–08, [návrh §6](design/uc-02-zvirata.md#6-frontend-wf-0108)) je napojený přes `/api/animal`, testovaný na MSW; celý tok v prohlížeči proti API zatím ověřený není.
-- Doklady zvířat UC-03 jsou modul `animal-service` ([návrh](design/uc-03-doklady.md), [ADR-0005](adr/0005-doklady-zvirat-vnorene-ve-zvireti.md)): každá příloha podání je samostatný doklad ve verzi 1, nová verze jen nad aktuální zamítnutou verzí (odchylka R7 zrušena 6. 11.), stažení, historie, fronta a posouzení adminem, OpenAPI. Frontend (WF 01–09, [návrh §6](design/uc-03-doklady.md#6-frontend-wf-0109)) je napojený přes `/api/animal`, testovaný na MSW; celý tok v prohlížeči proti API zatím ověřený není. Chybějící části (úklid osiřelých souborů, filtr podle stavu dokladů a další) jsou v [návrhu §5](design/uc-03-doklady.md#5-co-chybí-možná-budoucí-rozšíření).
-- Ověřený chovatel v animal-service: místo volání breeder-service vlastní projekce plněná z NATS ([ADR-0007](adr/0007-projekce-overenych-chovatelu-pres-nats.md)); lokální launcher spouští vlastní broker. **Na devu nasazeno 6. 11. 2026** přes IaC a CI (release `1758150`). Ověřené migrace, přihlášení publisheru/consumeru k NATS a ochrana API (401 bez identity); první skutečné schválení a celý průchod aplikací ještě zbývá ověřit. Postup: [REGISTRACNI-UDALOSTI.md](REGISTRACNI-UDALOSTI.md).
-- [Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md): `PATCH /breeders/me` už ukládá jméno a e-mail před prvním podáním; označení dokončení a frontend `ProfileGate` chybí, povinná pole včetně IČO je potřeba upřesnit.
+## 3. Hotové ve větvi, čeká na PR a nasazení na dev
 
-- Apple je odložený dle domluvy; není součástí aktuálního dokončení auth.
-- Testování na devu (9. 11. 2026, zatím nenasazeno): admin/owner zakládá [testovací účty](AUTENTIZACE.md#testovací-účty-na-devu) a přepíná se do nich bez dalších e-mailů; `npm run qa:fixtures` generuje soubory pro nahrávání. Scénáře UC-01–UC-03 a protokol jsou v [testování na devu](qa/dev-testovani.md); kolo na devu ještě neproběhlo.
-- Business obrazovky: přihlašovací stránka, chráněné routy, stránka účtu, správa zvířat UC-02, doklady zvířat UC-03 (chovatel i administrace) a administrace ověření chovatelů UC-01 používají skutečné API.
-- Administrace UC-01 (rozhodnutí 6. 11. 2026): stavy pro admina jsou K posouzení / Schváleno / Zamítnuto. Vrácení k doplnění (`RETURNED`, [ADR-0004](adr/0004-vraceni-zadosti-k-doplneni.md)) zůstává jen v backendu, UI pro něj nemá filtr ani akci. `reviewedBy` a historii rozhodnutí vrací jen administrátorské API (admin, vlastník); `GET /breeders/me` je chovateli nevrací. E-mail po rozhodnutí je v UI jen simulovaná zpráva.
-- Stav ověření chovatele (WF 10, 11, `GET /breeders/me`) je na přehledu a v Mém účtu: neověřený účet červeně, ověřený s tlačítkem Pokračovat. Formulář pro podání žádosti ve frontendu zatím chybí.
-- Předání registrace: kontrakt v1, outbox, migrace, privátní NATS JetStream a publisher jsou nasazené a ověřené po PR #25/#26. Obě existující registrace jsou uložené v brokeru, payloady odpovídají outboxu, pending/failed je nula. Animal consumer a celý business tok zůstávají na později; published zatím neznamená business zpracování. [Provoz a předání](REGISTRACNI-UDALOSTI.md).
-- Ověřit první spuštění a potřebná DB oprávnění u každého člena týmu; předání všem není potvrzené.
-- Produkce je nyní odložená. Veřejná `anico.online`, samostatné DB/secrets a schvalované nasazení zatím nejsou hotové.
-- Provoz: limity prostředků, monitoring/upozornění a domluvené aktualizace.
-- **Zálohy a test úplné obnovy** DB, souborů a Coolify, včetně šifrované kopie IaC state a secrets mimo Mac/VPS. Před prvními skutečnými produkčními daty.
+- **Formulář žádosti o ověření (UC-01, WF 02–03)** na `/overeni-chovatele`: odkaz z karty stavu na přehledu
+  i ze Správy zvířat u neověřeného účtu. Klientská validace podle `SubmitVerificationRequestSchema`, certifikát
+  PDF/JPEG/PNG do 5 MiB; chyby serveru 400/409/413/415 u konkrétního pole; potvrzení odeslání (WF 03).
+- **Vrácení k doplnění (`RETURNED`, [ADR-0004](adr/0004-vraceni-zadosti-k-doplneni.md)) v UI** – mění rozhodnutí
+  z 6. 11. (původně jen backend). Admin: akce **Vrátit k doplnění** s povinným důvodem, filtr a počet
+  **Vrácené**, historie posouzení a označení opraveného podání (verze N). Chovatel: důvod na přehledu,
+  **Doplnit žádost** s předvyplněnými údaji; certifikát je nepovinný (bez nového zůstane uložený).
 
-Bez výslovného propojení Google a Microsoft vytvoří dva oddělené AniCo účty.
-Volitelné propojení do stejného `userId` je nasazené, vlastník ho nechce využít.
-Existující samostatné účty se automaticky neslučují. GitHub Access je vstup do týmového prostředí;
-Google/Microsoft jsou samostatné přihlášení uživatele aplikace.
+Ověřeno: frontendové testy (101) a průchod v Chromiu proti skutečné breeder-service s MongoDB/GridFS
+(podání → vrácení → oprava bez souboru → verze 2 s historií u admina). Na devu zatím ne.
+
+## 4. Zbývá – implementace
+
+1. **UC-03 rozšíření** ([návrh §5](design/uc-03-doklady.md#5-co-chybí-možná-budoucí-rozšíření)): filtr podle stavu
+   dokladů a další. Neblokují DoD UC-03. Úklid osiřelých souborů v GridFS se podle rozhodnutí 9. 11. 2026
+   zatím nedělá: soubory zůstávají, nic se automaticky nemaže a historie dokladů zůstává celá.
+2. **Další doménové služby** musí samy zapojit `@anico/auth`, kontrolu rolí/vlastnictví, image, routu a DB účet
+   ([integrace identity](INTEGRACE-IDENTITY.md)). Hotovo pro auth, breeder a animal.
+3. **Zpracování registrací `user.registered`** – události jsou v brokeru, nikdo je nezpracovává; nejdřív dohodnout
+   příjemce a význam „převzetí účtu“ ([provoz a předání](REGISTRACNI-UDALOSTI.md)).
+
+## 5. Probíhá – ověření
+
+1. **Kolo testování UC-01–UC-03 na devu** podle [dev-testovani.md](qa/dev-testovani.md).
+2. **První skutečné schválení chovatele** a jeho propsání do animal API (projekce přes NATS) – součást kola.
+
+## 6. Zatím neřešíme (rozhodnutí 9. 11. 2026)
+
+- **Skutečné odesílání e-mailů po rozhodnutí** ([ADR-0003](adr/0003-e-mail-po-ulozeni-rozhodnuti.md)).
+  `breeder-service` používá `loggingDecisionNotifier`, který jen loguje; v UI je zpráva simulovaná.
+- **[Dokončení profilu po přihlášení](ONBOARDING-PROFILU.md)** (`onboardingCompletedAt`, `ProfileGate`) – závisí
+  na rozhodnutí o IČO a dalších údajích níže.
+
+Čeká na rozhodnutí vlastníka produktu:
+
+- **IČO a adresa chovatele** a přesný seznam onboardingových údajů (O17 v [návrhu UC-01](design/uc-01-overeni-chovatele.md)).
+- Otevřené otázky v [doménovém kontextu §6](anico-domain.md#6-otevřené-otázky-nerozhodnuto-v-analýze--neuhaď-ohlas):
+  APPROVED doklad po změně čipu/druhu/plemene (2), pole pro chovatele koní (3), limity souborů (7 –
+  implementace zvolila vlastní hodnoty, potvrdit). Body 6 (403/404) a 8 (zakládání adminů, `reviewedBy`)
+  jsou vyřešené implementací; dokument je zatím neoznačuje.
+- Doba uchování certifikátů a osobních údajů (GDPR) a jejich mazání (O6) – nutné před produkcí.
+- Chybí původní analytické podklady v repozitáři (`docs/business/`, O15).
+
+Odloženo dle domluvy:
+
+- **Apple** přihlášení.
+- **Produkce:** veřejná `anico.online`, samostatné DB/secrets a schvalované nasazení.
+- **Provoz:** limity prostředků, monitoring/upozornění a domluvené aktualizace.
+- **Zálohy a test úplné obnovy** DB, souborů a Coolify, včetně šifrované kopie IaC state a secrets mimo Mac/VPS.
+  Před prvními skutečnými produkčními daty.
+
+Bez výslovného propojení Google a Microsoft vytvoří dva oddělené AniCo účty; existující účty
+se automaticky neslučují. GitHub Access je vstup do týmového prostředí, Google/Microsoft
+jsou přihlášení uživatele aplikace.
 
 ## Nejbližší pořadí
 
-Zapojit identitu a doménovou autorizaci do dalších služeb → napojit business UI na skutečné API →
-dohodnout příjemce a doručování registrace. Lokální auth tok je dokončený; nové služby
-stále potřebují vlastní zapojení `@anico/auth`, nasazení a DB oprávnění.
-[Návod pro vývojáře](LOKALNI-PRIHLASENI.md). Další integrace přijdou na řadu následně.
-Apple ani produkci nyní nepřipravujeme.
-Lokální OAuth konfiguraci pro vývoj samotné auth-service podle domluvy nenastavujeme;
-vývojáři ostatních služeb používají společnou dev autentizaci.
+PR s formulářem žádosti a vrácením k doplnění do `dev` → dokončit kolo testování na devu včetně prvního
+schválení a průchodu UC-02/UC-03 → opravy nalezených chyb. E-maily, onboarding, Apple ani produkci nyní neřešíme.
 
 [Auth kontrakt a příkazy](AUTENTIZACE.md) · [vývojářský návod](MANUAL-PRO-VYVOJARE.md) ·
-[nasazování](NASAZOVANI.md) · [provozní checklist](../infrastructure/NEXT-STEPS.md)
+[lokální přihlášení](LOKALNI-PRIHLASENI.md) · [nasazování](NASAZOVANI.md) ·
+[provozní checklist](../infrastructure/NEXT-STEPS.md)

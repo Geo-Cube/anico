@@ -75,7 +75,8 @@ Stav k 6. 11. 2026 po zrušení R7. Nic z toho neblokuje DoD UC-03; pořadí nen
 
 **Konzistence souborů**
 
-4. **Automatický odložený úklid osiřelých souborů v GridFS.** Vznikají při nejistém výsledku zápisu (ADR-0005
+4. **Automatický odložený úklid osiřelých souborů v GridFS** – podle rozhodnutí 9. 11. 2026 se zatím nedělá,
+   soubory zůstávají. Vznikají při nejistém výsledku zápisu (ADR-0005
    bod 2, služba je jen zaloguje: `Document write outcome unknown; files kept for deferred cleanup`) a při pádu mezi
    smazáním zvířete a úklidem souborů. Návrh: periodický job/CLI příkaz, který smaže soubory z bucketu
    `animalDocuments` starší než např. 24 h, na které neodkazuje žádné `animals.documents.file.fileReference`.
