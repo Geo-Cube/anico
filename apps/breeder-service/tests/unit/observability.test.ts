@@ -1,7 +1,12 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { gunzipSync } from 'node:zlib';
 import * as Sentry from '@sentry/node';
 import type { ErrorEvent, Log } from '@sentry/node';
+import { pino } from 'pino';
 import { describe, expect, it } from 'vitest';
 import {
+  closeObservability,
   initObservability,
   scrubEvent,
   scrubLog,
@@ -132,5 +137,53 @@ describe('monitoring neodesílá osobní údaje ani tajemství', () => {
       expect(log?.message).toBe('MongoServerError');
       expect(log?.attributes?.msg).toBe('MongoServerError');
     }
+  });
+
+  // Poslední test: inicializuje globálního klienta SDK.
+  it('skutečné Pino přes SDK neodešle zprávu chyby ani s cause', async () => {
+    const received: string[] = [];
+    const ingest = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        const body = Buffer.concat(chunks);
+        received.push(
+          (req.headers['content-encoding'] === 'gzip'
+            ? gunzipSync(body)
+            : body
+          ).toString('utf8'),
+        );
+        res.end('{}');
+      });
+    });
+    await new Promise<void>((resolve) =>
+      ingest.listen(0, '127.0.0.1', resolve),
+    );
+    const { port } = ingest.address() as AddressInfo;
+    try {
+      expect(
+        initObservability({
+          dsn: `http://public@127.0.0.1:${port}/1`,
+          service: 'test',
+          suppressErrorMessages: true,
+        }),
+      ).toBe(true);
+      const logger = pino({ level: 'info' }, { write: () => undefined });
+      logger.error(new Error('token=TAJNE', { cause: new Error('DB failed') }));
+      logger.error(
+        { err: new Error('token=TAJNE2', { cause: new Error('DB failed') }) },
+        'Request failed',
+      );
+      logger.error(new Error('token=TAJNE3'));
+      await closeObservability(2000);
+    } finally {
+      await new Promise((resolve) => ingest.close(resolve));
+    }
+
+    const sent = received.join('\n');
+    // Logy skutečně odešly; jinak by test prošel i naprázdno.
+    expect(sent.match(/"auto\.log\.pino"/g)).toHaveLength(3);
+    expect(sent).toContain('Request failed');
+    expect(sent).not.toMatch(/TAJNE|DB failed/);
   });
 });

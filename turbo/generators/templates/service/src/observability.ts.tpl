@@ -109,15 +109,17 @@ export function scrubLog(log: Log, suppressErrorMessages: boolean): Log | null {
       if (!error) continue;
       // Stejné pravidlo jako u událostí: typ a rámce zásobníku, nikdy text zprávy.
       attributes[name] = { type: error.type, stack: stackFrames(error.stack) };
-      if (error.message) {
-        // `logger.error(err)` bez vlastní zprávy kopíruje text chyby do těla logu.
-        if (String(log.message).includes(error.message))
-          log.message = error.type;
-        if (
-          typeof attributes.msg === 'string' &&
-          attributes.msg.includes(error.message)
-        )
-          attributes.msg = error.type;
+      const message = error.message;
+      if (message) {
+        // `logger.error(err)` bez vlastní zprávy kopíruje text chyby do těla logu
+        // a `msg`. U chyby s `cause` Pino v `err.message` připojí zprávy příčin
+        // („a: b“), tělo ale nese jen „a“ – proto porovnání oběma směry.
+        const leaks = (text: unknown) =>
+          typeof text === 'string' &&
+          text !== '' &&
+          (text.includes(message) || message.includes(text));
+        if (leaks(String(log.message))) log.message = error.type;
+        if (leaks(attributes.msg)) attributes.msg = error.type;
       }
     }
   }
