@@ -22,7 +22,7 @@ const settings = monitoringSettingsSchema.parse(
 const tunnelImage = JSON.parse(
   readFileSync(new URL('../cloudflared.json', import.meta.url), 'utf8'),
 ).image;
-const key = '0123456789abcdef0123456789abcdef';
+const key = '0123456789abcdef'.repeat(2);
 const base = { secretKey: 'a'.repeat(64), postgresPassword: 'b'.repeat(64) };
 const frontendDsn = `https://${key}@monitoring.anico.online/2`;
 
