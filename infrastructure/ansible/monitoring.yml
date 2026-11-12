@@ -1,0 +1,274 @@
+- name: Deploy shared monitoring (GlitchTip) and the host watchdog
+  hosts: anico
+  become: true
+  gather_facts: false
+  vars:
+    anico_monitoring: '{{ lookup("ansible.builtin.file", playbook_dir + "/../monitoring.json") | from_json }}'
+    anico_monitoring_compose:
+      [
+        docker,
+        compose,
+        --project-name,
+        '{{ anico_monitoring.project }}',
+        --file,
+        '{{ anico_monitoring.rootDirectory }}/compose.json',
+      ]
+  pre_tasks:
+    - name: Prepare private monitoring inputs from encrypted Pulumi configuration
+      ansible.builtin.command:
+        argv:
+          [
+            node,
+            --import,
+            tsx,
+            '{{ playbook_dir }}/../scripts/prepare-monitoring.mjs',
+          ]
+        chdir: '{{ playbook_dir }}/..'
+      delegate_to: localhost
+      become: false
+      register: anico_monitoring_prepared
+      changed_when: false
+      check_mode: false
+      no_log: true
+    - name: Skip monitoring until explicitly initialized
+      ansible.builtin.meta: end_play
+      when: not (anico_monitoring_prepared.stdout | from_json).enabled
+    - name: Read non-secret feature switches
+      ansible.builtin.set_fact:
+        anico_monitoring_watchdog: '{{ (anico_monitoring_prepared.stdout | from_json).watchdog }}'
+        anico_monitoring_ingest: '{{ (anico_monitoring_prepared.stdout | from_json).ingest }}'
+  tasks:
+    - name: Require the existing development application network
+      ansible.builtin.include_tasks: tasks/ensure-network.yml
+      vars:
+        anico_network:
+          name: '{{ anico_monitoring.appNetwork }}'
+          environment: dev
+          role: app
+          internal: false
+    - name: Ensure isolated internal monitoring network
+      ansible.builtin.include_tasks: tasks/ensure-network.yml
+      vars:
+        anico_network:
+          name: '{{ anico_monitoring.network }}'
+          environment: shared
+          role: monitoring
+          internal: true
+    - name: Inspect existing monitoring containers without reading their environment
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            inspect,
+            --format,
+            '{{ "{{json .Config.Labels}}" }}',
+            '{{ item }}',
+          ]
+      loop:
+        - '{{ anico_monitoring.containerName }}'
+        - '{{ anico_monitoring.databaseContainerName }}'
+        - '{{ anico_monitoring.tunnelContainerName }}'
+      register: anico_monitoring_existing
+      changed_when: false
+      failed_when: anico_monitoring_existing.rc not in [0, 1]
+      check_mode: false
+    - name: Refuse to replace unrelated containers
+      ansible.builtin.assert:
+        that:
+          - (item.stdout | from_json).get('com.anico.managed-by') == 'ansible'
+          - (item.stdout | from_json).get('com.anico.role') == 'monitoring'
+          - (item.stdout | from_json).get('com.docker.compose.project') == anico_monitoring.project
+      loop: '{{ anico_monitoring_existing.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+      when: item.rc == 0
+    - name: Inspect existing monitoring volumes
+      ansible.builtin.command:
+        argv: [docker, volume, inspect, '{{ item }}']
+      loop:
+        - '{{ anico_monitoring.databaseVolume }}'
+        - '{{ anico_monitoring.uploadsVolume }}'
+      register: anico_monitoring_volumes
+      changed_when: false
+      failed_when: anico_monitoring_volumes.rc not in [0, 1]
+      check_mode: false
+    - name: Refuse unmanaged monitoring storage
+      ansible.builtin.assert:
+        that:
+          - (item.stdout | from_json)[0].Labels['com.anico.environment'] == 'shared'
+          - (item.stdout | from_json)[0].Labels['com.anico.managed-by'] == 'ansible'
+          - (item.stdout | from_json)[0].Labels['com.anico.role'] == 'monitoring'
+      loop: '{{ anico_monitoring_volumes.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+      when: item.rc == 0
+    - name: Create labeled monitoring volumes
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            volume,
+            create,
+            --label,
+            com.anico.environment=shared,
+            --label,
+            com.anico.managed-by=ansible,
+            --label,
+            com.anico.role=monitoring,
+            '{{ item.item }}',
+          ]
+      loop: '{{ anico_monitoring_volumes.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+      when: item.rc == 1
+      changed_when: true
+    - name: Prepare volume ownership for the non-root containers
+      ansible.builtin.file:
+        path: '/var/lib/docker/volumes/{{ item.name }}/_data'
+        state: directory
+        owner: '{{ item.uid }}'
+        group: '{{ item.uid }}'
+        mode: '{{ item.mode }}'
+      loop:
+        - {
+            name: '{{ anico_monitoring.databaseVolume }}',
+            uid: '70',
+            mode: '0700',
+          }
+        - {
+            name: '{{ anico_monitoring.uploadsVolume }}',
+            uid: '5000',
+            mode: '0750',
+          }
+      when: not ansible_check_mode
+    - name: Prepare the monitoring directory
+      ansible.builtin.file:
+        path: '{{ anico_monitoring.rootDirectory }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+    - name: Prepare separate runtime secret directories
+      ansible.builtin.file:
+        path: '{{ anico_monitoring.rootDirectory }}/{{ item.name }}'
+        state: directory
+        owner: root
+        group: '{{ item.group }}'
+        mode: '0750'
+      loop:
+        - { name: glitchtip-secrets, group: '5000' }
+        - { name: postgres-secrets, group: '70' }
+        - { name: tunnel-secrets, group: '65532' }
+    - name: Install GlitchTip secrets without exposing their values
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/monitoring/glitchtip/{{ item }}'
+        dest: '{{ anico_monitoring.rootDirectory }}/glitchtip-secrets/{{ item }}'
+        owner: root
+        group: '5000'
+        mode: '0440'
+      loop: [secret-key, database-url]
+      register: anico_monitoring_glitchtip_secrets
+      no_log: true
+      diff: false
+    - name: Install GitHub OAuth credentials for the login bootstrap
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/monitoring/glitchtip/github-oauth.json'
+        dest: '{{ anico_monitoring.rootDirectory }}/glitchtip-secrets/github-oauth.json'
+        owner: root
+        group: '5000'
+        mode: '0440'
+      no_log: true
+      diff: false
+    - name: Install the PostgreSQL initialization password
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/monitoring/postgres/password'
+        dest: '{{ anico_monitoring.rootDirectory }}/postgres-secrets/postgres-password'
+        owner: root
+        group: '70'
+        mode: '0440'
+      no_log: true
+      diff: false
+    - name: Install the dedicated tunnel token
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/monitoring/tunnel/tunnel-token'
+        dest: '{{ anico_monitoring.rootDirectory }}/tunnel-secrets/tunnel-token'
+        owner: root
+        group: '65532'
+        mode: '0440'
+      register: anico_monitoring_token
+      no_log: true
+      diff: false
+    - name: Install the monitoring Compose definition
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/monitoring/compose.json'
+        dest: '{{ anico_monitoring.rootDirectory }}/compose.json'
+        owner: root
+        group: root
+        mode: '0600'
+    - name: Install the AniCo GlitchTip settings override
+      ansible.builtin.copy:
+        src: ../scripts/glitchtip-settings.py
+        dest: '{{ anico_monitoring.rootDirectory }}/anico_settings.py'
+        owner: root
+        group: root
+        mode: '0444'
+      register: anico_monitoring_settings_override
+    - name: Store public monitoring settings for verification
+      ansible.builtin.copy:
+        src: ../monitoring.json
+        dest: '{{ anico_monitoring.rootDirectory }}/settings.json'
+        owner: root
+        group: root
+        mode: '0640'
+    - name: Validate Compose without revealing resolved values
+      ansible.builtin.command:
+        argv: '{{ anico_monitoring_compose + ["config", "--quiet"] }}'
+      changed_when: false
+      when: not ansible_check_mode
+    - name: Start the private PostgreSQL
+      ansible.builtin.command:
+        argv: '{{ anico_monitoring_compose + ["up", "--detach", "--wait", "--wait-timeout", "180", "glitchtip-db"] }}'
+      register: anico_monitoring_database_up
+      changed_when: anico_monitoring_database_up.stderr is search('(?i)(created|started|recreated|pulled)')
+      when: not ansible_check_mode
+    - name: Start GlitchTip and reload rotated secrets
+      ansible.builtin.command:
+        argv: '{{ anico_monitoring_compose + ["up", "--detach", "--wait", "--wait-timeout", "600", "--no-deps"] + (["--force-recreate"] if anico_monitoring_glitchtip_secrets.changed or anico_monitoring_settings_override.changed else []) + ["glitchtip"] }}'
+      register: anico_monitoring_glitchtip_up
+      changed_when: anico_monitoring_glitchtip_up.stderr is search('(?i)(created|started|recreated|pulled)')
+      when: not ansible_check_mode
+    - name: Bootstrap the AniCo organization and GitHub login
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            exec,
+            --interactive,
+            '{{ anico_monitoring.containerName }}',
+            python,
+            '-',
+          ]
+        stdin: "{{ lookup('ansible.builtin.file', playbook_dir + '/../scripts/glitchtip-bootstrap.py') }}"
+      register: anico_monitoring_bootstrap
+      changed_when: >-
+        (anico_monitoring_bootstrap.stdout_lines[-1] | from_json).created | length > 0
+        or (anico_monitoring_bootstrap.stdout_lines[-1] | from_json).updated | length > 0
+        or (anico_monitoring_bootstrap.stdout_lines[-1] | from_json).promoted > 0
+      when: not ansible_check_mode
+    - name: Start the dedicated connector and reload a rotated token
+      ansible.builtin.command:
+        argv: '{{ anico_monitoring_compose + ["up", "--detach", "--wait", "--wait-timeout", "120", "--no-deps"] + (["--force-recreate"] if anico_monitoring_token.changed else []) + ["tunnel"] }}'
+      register: anico_monitoring_tunnel_up
+      changed_when: anico_monitoring_tunnel_up.stderr is search('(?i)(created|started|recreated|pulled)')
+      when: not ansible_check_mode
+    - name: Verify private ports, limits, networks and secret handling
+      ansible.builtin.script:
+        cmd: >-
+          ../scripts/verify-monitoring.py
+          {{ anico_monitoring.rootDirectory }}/settings.json
+          {{ 'ingest' if anico_monitoring_ingest | bool else 'no-ingest' }}
+        executable: python3
+      changed_when: false
+      when: not ansible_check_mode
+    - name: Configure the Healthchecks.io watchdog
+      ansible.builtin.include_tasks: tasks/monitoring-watchdog.yml

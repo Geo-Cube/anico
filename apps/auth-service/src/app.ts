@@ -6,6 +6,7 @@ import { rateLimit } from 'express-rate-limit';
 import { ZodError } from 'zod';
 import { AuthError } from './modules/auth/domain/auth.js';
 import { healthRouter } from './health/health-router.js';
+import { captureServerError } from './observability.js';
 import { apiDocsRouter } from './openapi/docs-router.js';
 
 export function createApp(dependencies: {
@@ -26,6 +27,9 @@ export function createApp(dependencies: {
           url: typeof req.url === 'string' ? req.url.split('?')[0] : undefined,
         }),
         res: (res) => ({ statusCode: res.statusCode }),
+      },
+      autoLogging: {
+        ignore: (req) => req.url === '/health' || req.url === '/ready',
       },
     }),
   );
@@ -80,6 +84,7 @@ export function createApp(dependencies: {
     }
     // Driver/provider errors may carry credentials or authorization codes.
     req.log.error('Auth request failed; private details suppressed');
+    captureServerError(error);
     res.status(500).json({ error: 'Internal server error' });
   };
   app.use(handleError);

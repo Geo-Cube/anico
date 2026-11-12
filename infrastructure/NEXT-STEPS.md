@@ -58,7 +58,8 @@ kroky zůstávají evidované pro pozdější rozhodnutí.
 - [ ] Samostatná produkční DB a aplikační účet, secrets, služby a veřejné routování.
 - [ ] Schvalované produkční nasazení ověřených images a postup rollbacku.
 - [ ] Změřit RAM/CPU/disk; nastavit limity, souběžnost a čištění starých images.
-- [ ] Monitoring dostupnosti, volného místa a chyb, včetně upozornění.
+- [ ] Monitoring dostupnosti, volného místa a chyb, včetně upozornění. Dev řešení je připravené
+      v IaC ([GlitchTip + Healthchecks.io](MONITORING.md)); zbývá nasazení a pro produkci samostatná instance.
 - [ ] Dohodnout aktualizace OS/Dockeru/Coolify a ověřit původní instalační secrets.
 - [ ] **Dokončit zálohy DB, uploadů, Coolify DB a APP_KEY, serverových souborů a SSH klíčů.**
 - [ ] **Šifrovaná kopie Pulumi state, passphrase a lokálních secrets mimo Mac/VPS.**

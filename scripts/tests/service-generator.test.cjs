@@ -76,6 +76,7 @@ test('renders independent workspaces, allocates ports and never copies credentia
       'pino-http',
       'zod',
       '@anico/shared-schemas',
+      '@sentry/node',
     ])
       assert.ok(manifest.dependencies[dep]);
     for (const dep of [

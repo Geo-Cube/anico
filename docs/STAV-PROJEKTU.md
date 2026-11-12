@@ -46,6 +46,10 @@ Scénáře a protokol: [testování na devu](qa/dev-testovani.md).
   z 6. 11. (původně jen backend). Admin: akce **Vrátit k doplnění** s povinným důvodem, filtr a počet
   **Vrácené**, historie posouzení a označení opraveného podání (verze N). Chovatel: důvod na přehledu,
   **Doplnit žádost** s předvyplněnými údaji; certifikát je nepovinný (bez nového zůstane uložený).
+- **Monitoring dev serveru (zdarma)** – [návod](../infrastructure/MONITORING.md): GlitchTip na VPS (chyby a logy
+  backendů, chyby frontendu, upozornění do Teams) a Healthchecks.io watchdog (zdraví kontejnerů, disk, RAM,
+  výpadek VPS). Sentry SDK v backendech i frontendu je bez DSN vypnuté. Ověřeno lokálně: testy a smoke proti
+  falešnému příjmu (chyba se stackem, logy, žádné cookies/hlavičky/těla/query). IaC zatím neaplikované.
 
 Ověřeno: frontendové testy (101) a průchod v Chromiu proti skutečné breeder-service s MongoDB/GridFS
 (podání → vrácení → oprava bez souboru → verze 2 s historií u admina). Na devu zatím ne.

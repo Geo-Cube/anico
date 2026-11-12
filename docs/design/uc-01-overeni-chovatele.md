@@ -309,7 +309,7 @@ Každá „společná“ změna je jeden atomický zápis do jednoho dokumentu (
 - Autentizace předchází parsování chráněného těla. Logy nesmějí obsahovat tokeny, cookies, osobní údaje
   ani obsah certifikátu. Aplikační porty se nezveřejňují; JWT se ověřuje přímo ve službě.
 - Aktuální kontrakt nahrazuje původní hlavičkový prototyp: [ADR-0002](../adr/0002-identita-z-gateway-hlavicek.md).
-  Backend existuje lokálně; cloudový routing ani frontendová integrace nejsou dokončené.
+  Backend je nasazený na devu za gateway routou `/api/breeder`; administrace ověření ve frontendu jej volá.
 
 ## 7. Rozpory a jejich vyhodnocení
 

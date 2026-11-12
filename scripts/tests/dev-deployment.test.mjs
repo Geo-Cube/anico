@@ -65,6 +65,14 @@ test('dev compose keeps secrets out of images/frontend and publishes no ports or
   assert.deepEqual(compose.services.backend.secrets, [
     { source: 'mongodb-uri', target: 'dev-mongodb-uri' },
   ]);
+  // DSN dosazuje Coolify ze sdílené proměnné prostředí; prázdná hodnota SDK vypne.
+  for (const name of ['backend', 'auth']) {
+    assert.equal(
+      compose.services[name].environment.SENTRY_DSN,
+      '${SENTRY_DSN:-}',
+    );
+    assert.equal(compose.services[name].environment.SENTRY_RELEASE, revision);
+  }
 });
 
 test('deployment updates only the designated service and verifies healthy matching images', async () => {
@@ -251,6 +259,8 @@ test('domain release routes animal and breeder behind the session gateway with o
     assert.equal(service.environment.MONGODB_URI, undefined);
     assert.equal(service.environment.AUTH_AUDIENCE, 'anico-api-dev');
     assert.equal(service.environment.APP_ENV, 'dev');
+    assert.equal(service.environment.SENTRY_DSN, '${SENTRY_DSN:-}');
+    assert.equal(service.environment.SENTRY_RELEASE, revision);
     assert.equal(service.environment.MIGRATE_ON_START, 'true');
     assert.equal(
       service.environment.MONGODB_URI_FILE,

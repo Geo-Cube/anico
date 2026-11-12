@@ -87,6 +87,8 @@ export function composeForRelease(references, revision, options = {}) {
           HOST: '0.0.0.0',
           PORT: '3000',
           LOG_LEVEL: '${LOG_LEVEL:-debug}',
+          SENTRY_DSN: '${SENTRY_DSN:-}',
+          SENTRY_RELEASE: revision,
         },
         networks: ['app', 'data'],
         secrets: [{ source: 'mongodb-uri', target: 'dev-mongodb-uri' }],
@@ -152,6 +154,8 @@ export function composeForRelease(references, revision, options = {}) {
         HOST: '0.0.0.0',
         PORT: '3000',
         LOG_LEVEL: 'info',
+        SENTRY_DSN: '${SENTRY_DSN:-}',
+        SENTRY_RELEASE: revision,
         MIGRATE_ON_START: 'true',
         MONGODB_URI_FILE: '/run/secrets/auth-mongodb-uri',
         AUTH_PUBLIC_ORIGIN: 'https://dev.anico.online',
@@ -172,7 +176,7 @@ export function composeForRelease(references, revision, options = {}) {
       labels: {
         ...labels('auth', 3000),
         'traefik.http.routers.anico-dev-auth.rule':
-          'Host(`dev.anico.online`) && (Path(`/api/auth/providers`) || Path(`/api/auth/session`) || Path(`/api/auth/logout`) || Path(`/api/auth/.well-known/jwks.json`) || PathRegexp(`^/api/auth/login/(google|microsoft|apple)(/callback)?$`) || PathRegexp(`^/api/auth/development/(authorize|consent|approve|token|identity|logout)$`) || PathRegexp(`^/api/auth/connections/(google|microsoft)$`) || PathRegexp(`^/api/auth/users/[a-f0-9-]{36}/admin$`) || PathRegexp(`^/api/auth/test-accounts(/return|/[a-f0-9-]{36}/session)?$`))',
+          'Host(`dev.anico.online`) && (Path(`/api/auth/docs`) || Path(`/api/auth/docs/`) || Path(`/api/auth/openapi.json`) || PathRegexp(`^/api/auth/docs/(initializer[.]js|swagger-ui[.]css|swagger-ui-bundle[.]js|favicon-(16x16|32x32)[.]png)$`) || Path(`/api/auth/providers`) || Path(`/api/auth/session`) || Path(`/api/auth/logout`) || Path(`/api/auth/.well-known/jwks.json`) || PathRegexp(`^/api/auth/login/(google|microsoft|apple)(/callback)?$`) || PathRegexp(`^/api/auth/development/(authorize|consent|approve|token|identity|logout)$`) || PathRegexp(`^/api/auth/connections/(google|microsoft)$`) || PathRegexp(`^/api/auth/users/[a-f0-9-]{36}/admin$`) || PathRegexp(`^/api/auth/test-accounts(/return|/[a-f0-9-]{36}/session)?$`))',
         'traefik.http.routers.anico-dev-auth.priority': '200',
         'traefik.http.routers.anico-dev-auth.middlewares': 'anico-auth-prefix',
         'traefik.http.middlewares.anico-auth-prefix.stripprefix.prefixes':
@@ -238,6 +242,8 @@ function addDomainServices(compose, images, common) {
         HOST: '0.0.0.0',
         PORT: '3000',
         LOG_LEVEL: '${LOG_LEVEL:-debug}',
+        SENTRY_DSN: '${SENTRY_DSN:-}',
+        SENTRY_RELEASE: revision,
         AUTH_JWKS_URL: 'http://auth:3000/.well-known/jwks.json',
         AUTH_ISSUER: 'https://dev.anico.online/api/auth',
         AUTH_AUDIENCE: 'anico-api-dev',
