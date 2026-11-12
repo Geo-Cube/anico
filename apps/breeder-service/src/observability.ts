@@ -47,7 +47,7 @@ export function initObservability(options: ObservabilityOptions): boolean {
       }),
     ],
     beforeSend: (event) => scrubEvent(event, suppressErrorMessages),
-    beforeSendLog: scrubLog,
+    beforeSendLog: (log) => scrubLog(log, suppressErrorMessages),
   });
   return true;
 }
@@ -82,7 +82,7 @@ export function scrubEvent(
   return event;
 }
 
-export function scrubLog(log: Log): Log | null {
+export function scrubLog(log: Log, suppressErrorMessages: boolean): Log | null {
   const attributes = log.attributes;
   if (!attributes) return log;
   const { req, res } = attributes;
@@ -103,5 +103,60 @@ export function scrubLog(log: Log): Log | null {
     attributes.res = {
       statusCode: 'statusCode' in res ? res.statusCode : undefined,
     };
+  if (suppressErrorMessages) {
+    for (const [name, value] of Object.entries(attributes)) {
+      const error = errorDetails(value);
+      if (!error) continue;
+      // Stejné pravidlo jako u událostí: typ a rámce zásobníku, nikdy text zprávy.
+      attributes[name] = { type: error.type, stack: stackFrames(error.stack) };
+      if (error.message) {
+        // `logger.error(err)` bez vlastní zprávy kopíruje text chyby do těla logu.
+        if (String(log.message).includes(error.message))
+          log.message = error.type;
+        if (
+          typeof attributes.msg === 'string' &&
+          attributes.msg.includes(error.message)
+        )
+          attributes.msg = error.type;
+      }
+    }
+  }
   return log;
+}
+
+type ErrorDetails = { type: string; message?: string; stack?: string };
+
+/** Pino serializuje chybu jako `{type, message, stack}`; SDK ji může předat i jako JSON řetězec. */
+function errorDetails(value: unknown): ErrorDetails | undefined {
+  let candidate = value;
+  if (typeof candidate === 'string') {
+    if (!candidate.startsWith('{')) return undefined;
+    try {
+      candidate = JSON.parse(candidate) as unknown;
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof candidate !== 'object' || candidate === null) return undefined;
+  if (!('message' in candidate) && !('stack' in candidate)) return undefined;
+  const text = (key: string) => {
+    const field: unknown = Reflect.get(candidate, key);
+    return typeof field === 'string' ? field : undefined;
+  };
+  const message = text('message');
+  const stack = text('stack');
+  return {
+    type: text('type') ?? 'Error',
+    ...(message === undefined ? {} : { message }),
+    ...(stack === undefined ? {} : { stack }),
+  };
+}
+
+/** První řádek zásobníku opakuje zprávu chyby; ponecháme jen řádky `at …`. */
+function stackFrames(stack: string | undefined): string | undefined {
+  if (stack === undefined) return undefined;
+  return stack
+    .split('\n')
+    .filter((line) => /^\s+at /.test(line))
+    .join('\n');
 }

@@ -74,34 +74,63 @@ describe('monitoring neodesílá osobní údaje ani tajemství', () => {
       message: 'request completed',
       attributes: { req: { method: 'GET', url } },
     });
-    expect(scrubLog(probe('/health'))).toBeNull();
-    expect(scrubLog(probe('/ready?x=1'))).toBeNull();
+    expect(scrubLog(probe('/health'), false)).toBeNull();
+    expect(scrubLog(probe('/ready?x=1'), false)).toBeNull();
 
-    const log = scrubLog({
-      level: 'info',
-      message: 'request completed',
-      attributes: {
-        responseTime: 4,
-        req: {
-          id: 1,
-          method: 'GET',
-          url: '/breeders/me?token=query-secret',
-          query: { token: 'query-secret' },
-          headers: {
-            cookie: '[Redacted]',
-            'x-forwarded-for': '203.0.113.7',
-            'cf-access-authenticated-user-email': 'tajny@example.test',
+    const log = scrubLog(
+      {
+        level: 'info',
+        message: 'request completed',
+        attributes: {
+          responseTime: 4,
+          req: {
+            id: 1,
+            method: 'GET',
+            url: '/breeders/me?token=query-secret',
+            query: { token: 'query-secret' },
+            headers: {
+              cookie: '[Redacted]',
+              'x-forwarded-for': '203.0.113.7',
+              'cf-access-authenticated-user-email': 'tajny@example.test',
+            },
+            remoteAddress: '203.0.113.7',
           },
-          remoteAddress: '203.0.113.7',
+          res: { statusCode: 200, headers: { 'set-cookie': 'cookie-secret' } },
         },
-        res: { statusCode: 200, headers: { 'set-cookie': 'cookie-secret' } },
       },
-    });
+      false,
+    );
 
     expect(log?.attributes).toEqual({
       responseTime: 4,
       req: { method: 'GET', url: '/breeders/me' },
       res: { statusCode: 200 },
     });
+  });
+
+  it('při potlačení pošle z chybového logu jen typ a rámce zásobníku, ne zprávu', () => {
+    const message = 'db failed token=log-secret';
+    const frames = '    at handler (/app/dist/app.js:1:1)';
+    const serialized = {
+      type: 'MongoServerError',
+      message,
+      stack: `MongoServerError: ${message}\n${frames}`,
+    };
+    // SDK předává `err` z Pina jako objekt i jako JSON řetězec; `logger.error(err)`
+    // bez vlastní zprávy navíc kopíruje text chyby do těla logu a do `msg`.
+    for (const err of [serialized, JSON.stringify(serialized)]) {
+      const log = scrubLog(
+        { level: 'error', message, attributes: { err, msg: message } },
+        true,
+      );
+
+      expect(JSON.stringify(log)).not.toMatch(/log-secret/);
+      expect(log?.attributes?.err).toEqual({
+        type: 'MongoServerError',
+        stack: frames,
+      });
+      expect(log?.message).toBe('MongoServerError');
+      expect(log?.attributes?.msg).toBe('MongoServerError');
+    }
   });
 });
