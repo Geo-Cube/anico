@@ -86,6 +86,15 @@
         mode: '0400'
       loop: [animal, breeder]
       no_log: true
+    - name: Install the GlitchTip DSN only for the backends (empty disables monitoring)
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/dev-deployment/sentry-dsn'
+        dest: /srv/anico/dev/applications/secrets/sentry-dsn
+        owner: '1000'
+        group: '1000'
+        mode: '0400'
+      no_log: true
+      diff: false
     - name: Install the development service configurator
       ansible.builtin.copy:
         src: ../scripts/configure-dev-deployment.php

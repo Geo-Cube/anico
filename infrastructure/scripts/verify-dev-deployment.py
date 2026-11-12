@@ -56,6 +56,10 @@ for name, container in containers.items():
     networks = set(container['NetworkSettings']['Networks'])
     assert 'anico-dev-app' in networks
     assert not any(value.startswith(('NATS_PASSWORD=', 'NATS_URL=', 'NATS_USER=', 'BREEDER_VERIFICATION_BROKER_PASSWORD=', 'ANIMAL_VERIFICATION_BROKER_PASSWORD=')) for value in container['Config']['Env'])
+    # DSN jen jako read-only soubor backendů; v Config.Env ho nesmí mít žádná komponenta.
+    assert not any(value.startswith('SENTRY_DSN=') for value in container['Config']['Env'])
+    sentry_mounted = any(mount['Destination'] == '/run/secrets/sentry-dsn' and not mount['RW'] for mount in container['Mounts'])
+    assert sentry_mounted == (name != 'frontend'), 'Unexpected GlitchTip DSN mount'
     publisher_enabled = 'AUTH_REGISTRATION_PUBLISHER_ENABLED=true' in container['Config']['Env']
     allowed_networks = {'anico-dev-app', 'anico-dev-data', identity}
     if (name == 'auth' and publisher_enabled) or name in ('animal', 'breeder'):

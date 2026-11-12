@@ -1,9 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { z } from 'zod';
 import { prepareApplicationEnvironments } from '../src/application-environments.ts';
-import { secret } from './private-config.mjs';
 
 const cwd = fileURLToPath(new URL('../', import.meta.url));
 const file = fileURLToPath(
@@ -36,13 +34,7 @@ try {
         config(['config', 'get', 'applicationVariables', '--stack', 'shared']),
       )
     : {};
-  // Ostatní pole monitoringu (hesla, klíče) sem nepatří; čte se jen backendDsn.
-  const monitoring = z
-    .looseObject({ backendDsn: z.string().optional() })
-    .parse(secret('monitoringCredentials', true) ?? {});
-  const desired = prepareApplicationEnvironments(settings, privateVariables, {
-    backendDsn: monitoring.backendDsn,
-  });
+  const desired = prepareApplicationEnvironments(settings, privateVariables);
   writeFileSync(file, JSON.stringify(desired, null, 2) + '\n', { mode: 0o600 });
   chmodSync(file, 0o600);
   console.log('Private application environment input prepared; values hidden.');

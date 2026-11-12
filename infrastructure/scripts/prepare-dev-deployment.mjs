@@ -83,6 +83,15 @@ try {
       `mongodb://${account.username}:${account.password}@anico-dev-mongodb:27017/${account.database}?authSource=${account.database}\n`,
     );
   }
+  // DSN backendů jako soubor (ne proměnná služby, tu by Coolify dal i frontendu).
+  // Bez registrace prázdný soubor = SDK vypnuté.
+  const backendDsn = secret('monitoringCredentials', true)?.backendDsn ?? '';
+  if (typeof backendDsn !== 'string' || !/^(https?:\/\/\S+)?$/.test(backendDsn))
+    throw new Error('Invalid backend DSN');
+  privateFile(
+    new URL('../../.pulumi/dev-deployment/sentry-dsn', import.meta.url),
+    backendDsn,
+  );
   console.log(JSON.stringify({ enabled: true }));
 } catch {
   console.error(

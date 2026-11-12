@@ -64,15 +64,32 @@ test('dev compose keeps secrets out of images/frontend and publishes no ports or
   assert.equal(compose.services.frontend.secrets, undefined);
   assert.deepEqual(compose.services.backend.secrets, [
     { source: 'mongodb-uri', target: 'dev-mongodb-uri' },
+    { source: 'sentry-dsn', target: 'sentry-dsn' },
   ]);
-  // DSN dosazuje Coolify ze sdílené proměnné prostředí; prázdná hodnota SDK vypne.
+  // DSN jen jako soubor pro backendy; frontend ho nesmí dostat ani přes env.
+  assert.equal(
+    compose.secrets['sentry-dsn'].file,
+    '/srv/anico/dev/applications/secrets/sentry-dsn',
+  );
+  assert.equal(compose.services.frontend.environment?.SENTRY_DSN, undefined);
   for (const name of ['backend', 'auth']) {
-    assert.equal(
-      compose.services[name].environment.SENTRY_DSN,
-      '${SENTRY_DSN:-}',
+    const service = compose.services[name];
+    assert.equal(service.environment.SENTRY_DSN, undefined);
+    assert.equal(service.environment.SENTRY_RELEASE, revision);
+    assert.ok(
+      service.secrets.some(
+        (item) => item.source === 'sentry-dsn' && item.target === 'sentry-dsn',
+      ),
     );
-    assert.equal(compose.services[name].environment.SENTRY_RELEASE, revision);
+    assert.match(
+      service.command[2],
+      /^export .*SENTRY_DSN="\$\$\(cat \/run\/secrets\/sentry-dsn\)"; exec node apps\/[a-z-]+\/dist\/server\.js$/,
+    );
   }
+  assert.match(
+    compose.services.auth.command[2],
+    /exec node apps\/auth-service\/dist\/server\.js$/,
+  );
 });
 
 test('deployment updates only the designated service and verifies healthy matching images', async () => {
@@ -191,8 +208,9 @@ test('auth release guards API access and mounts provider secrets only into auth'
     compose.services.auth.labels['traefik.http.routers.anico-dev-auth.rule'];
   assert.doesNotMatch(authRule, /PathPrefix|internal/);
   assert.ok(
-    compose.services.auth.secrets.every((secret) =>
-      secret.source.startsWith('auth-'),
+    compose.services.auth.secrets.every(
+      (secret) =>
+        secret.source.startsWith('auth-') || secret.source === 'sentry-dsn',
     ),
   );
   assert.ok(
@@ -251,6 +269,7 @@ test('domain release routes animal and breeder behind the session gateway with o
         source: `${name}-verification-broker-json`,
         target: `${name}-verification-broker-json`,
       },
+      { source: 'sentry-dsn', target: 'sentry-dsn' },
     ]);
     assert.equal(
       compose.secrets[`${name}-mongodb-uri`].file,
@@ -259,7 +278,11 @@ test('domain release routes animal and breeder behind the session gateway with o
     assert.equal(service.environment.MONGODB_URI, undefined);
     assert.equal(service.environment.AUTH_AUDIENCE, 'anico-api-dev');
     assert.equal(service.environment.APP_ENV, 'dev');
-    assert.equal(service.environment.SENTRY_DSN, '${SENTRY_DSN:-}');
+    assert.equal(service.environment.SENTRY_DSN, undefined);
+    assert.match(
+      service.command[2],
+      /export SENTRY_DSN="\$\$\(cat \/run\/secrets\/sentry-dsn\)"; exec node/,
+    );
     assert.equal(service.environment.SENTRY_RELEASE, revision);
     assert.equal(service.environment.MIGRATE_ON_START, 'true');
     assert.equal(
@@ -304,6 +327,7 @@ test('domain release routes animal and breeder behind the session gateway with o
   }
   assert.deepEqual(compose.services.backend.secrets, [
     { source: 'mongodb-uri', target: 'dev-mongodb-uri' },
+    { source: 'sentry-dsn', target: 'sentry-dsn' },
   ]);
   assert.match(
     compose.services.frontend.volumes[0].content,
