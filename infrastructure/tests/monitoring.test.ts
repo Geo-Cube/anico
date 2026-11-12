@@ -22,9 +22,9 @@ const settings = monitoringSettingsSchema.parse(
 const tunnelImage = JSON.parse(
   readFileSync(new URL('../cloudflared.json', import.meta.url), 'utf8'),
 ).image;
-const key = '0123456789abcdef'.repeat(2);
+const projectPublicId = '0123456789abcdef'.repeat(2);
 const base = { secretKey: 'a'.repeat(64), postgresPassword: 'b'.repeat(64) };
-const frontendDsn = `https://${key}@monitoring.anico.online/2`;
+const frontendDsn = `https://${projectPublicId}@monitoring.anico.online/2`;
 
 test('GitHub OAuth file requires a client ID and secret and never leaks them in errors', () => {
   const clientId = 'Ov23liTestClient12345';
@@ -51,7 +51,7 @@ test('credentials accept only generated secrets, Healthchecks.io pings and Glitc
       ...base,
       healthchecksPingUrl:
         'https://hc-ping.com/5c9f1c4e-1a2b-4c3d-8e9f-0a1b2c3d4e5f',
-      backendDsn: `http://${key}@anico-glitchtip:8000/1`,
+      backendDsn: `http://${projectPublicId}@anico-glitchtip:8000/1`,
       frontendDsn,
     }).success,
   );
@@ -60,17 +60,23 @@ test('credentials accept only generated secrets, Healthchecks.io pings and Glitc
     { ...base, extra: true },
     { ...base, healthchecksPingUrl: 'http://hc-ping.com/abc' },
     { ...base, healthchecksPingUrl: 'https://evil.example/hc-ping.com/abc' },
-    { ...base, backendDsn: `https://${key}@monitoring.anico.online/1` },
-    { ...base, backendDsn: `http://${key}@anico-glitchtip:8000/0` },
-    { ...base, frontendDsn: `https://${key}@dev.anico.online/2` },
-    { ...base, frontendDsn: `https://${key}@monitoring.anico.online/2?x=1` },
     {
       ...base,
-      frontendDsn: `https://${key.toUpperCase()}@monitoring.anico.online/2`,
+      backendDsn: `https://${projectPublicId}@monitoring.anico.online/1`,
+    },
+    { ...base, backendDsn: `http://${projectPublicId}@anico-glitchtip:8000/0` },
+    { ...base, frontendDsn: `https://${projectPublicId}@dev.anico.online/2` },
+    {
+      ...base,
+      frontendDsn: `https://${projectPublicId}@monitoring.anico.online/2?x=1`,
     },
     {
       ...base,
-      frontendDsn: `https://${key}:secret@monitoring.anico.online/2`,
+      frontendDsn: `https://${projectPublicId.toUpperCase()}@monitoring.anico.online/2`,
+    },
+    {
+      ...base,
+      frontendDsn: `https://${projectPublicId}:secret@monitoring.anico.online/2`,
     },
   ])
     assert.equal(
@@ -82,19 +88,21 @@ test('credentials accept only generated secrets, Healthchecks.io pings and Glitc
 
 test('DSN parsing extracts the public key and project id', () => {
   assert.deepEqual(parseGlitchTipDsn(frontendDsn, 'frontend'), {
-    publicKey: key,
+    publicKey: projectPublicId,
     projectId: '2',
   });
   assert.throws(() => parseGlitchTipDsn(frontendDsn, 'backend'));
   assert.equal(
-    internalBackendDsn(`https://${key}@monitoring.anico.online/14`),
-    `http://${key}@anico-glitchtip:8000/14`,
+    internalBackendDsn(`https://${projectPublicId}@monitoring.anico.online/14`),
+    `http://${projectPublicId}@anico-glitchtip:8000/14`,
   );
   assert.equal(
-    internalBackendDsn(`http://${key}@anico-glitchtip:8000/3`),
-    `http://${key}@anico-glitchtip:8000/3`,
+    internalBackendDsn(`http://${projectPublicId}@anico-glitchtip:8000/3`),
+    `http://${projectPublicId}@anico-glitchtip:8000/3`,
   );
-  assert.throws(() => internalBackendDsn(`https://${key}@example.com/3`));
+  assert.throws(() =>
+    internalBackendDsn(`https://${projectPublicId}@example.com/3`),
+  );
 });
 
 test('ingest router exists only after the frontend DSN is registered', () => {
@@ -118,7 +126,7 @@ test('ingest router exists only after the frontend DSN is registered', () => {
   );
   assert.equal(
     labels[`${headers}.X-Sentry-Auth`],
-    `Sentry sentry_version=7, sentry_key=${key}`,
+    `Sentry sentry_version=7, sentry_key=${projectPublicId}`,
   );
   assert.equal(labels[`${headers}.Host`], 'anico-glitchtip');
   for (const removed of ['Cookie', 'Authorization', 'X-Forwarded-For'])

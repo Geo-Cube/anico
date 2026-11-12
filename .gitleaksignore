@@ -3,3 +3,4 @@
 2e77df56a9f798748ea6de9af619e32a3ff4ac89:apps/animal-service/tests/integration/verification-consumer.test.ts:generic-api-key:348
 # PR #47: deterministic monitoring test fixture ('0123456789abcdef'.repeat(2)), not a credential.
 fe8e151d5e080c987c52e2683fadba926272c538:infrastructure/tests/monitoring.test.ts:generic-api-key:25
+46c415ceb78f825e06456cd51b3d3a461039bf4d:infrastructure/tests/monitoring.test.ts:generic-api-key:25
