@@ -115,6 +115,15 @@ async function fillProfile() {
   await userEvent.selectOptions(select('Plemeno'), breed.id);
 }
 
+/**
+ * Prohlížeč nepřevoditelné datum (31. 2. 2024) neodešle: hodnota pole je prázdná
+ * a `validity.badInput` pravdivé. jsdom `badInput` nepodporuje, proto se doplní.
+ */
+function enterUnreadableDate(input: HTMLElement) {
+  fireEvent.change(input, { target: { value: '' } });
+  Object.defineProperty(input, 'validity', { value: { badInput: true } });
+}
+
 beforeEach(() => {
   vi.stubGlobal(
     'URL',
@@ -414,6 +423,21 @@ describe('Přidání zvířete (WF 02, 03)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('nepustí dál nepřevoditelné datum narození místo jeho tichého zahození', async () => {
+    renderApp('/zvirata/nove');
+    await fillProfile();
+    const date = screen.getByLabelText('Datum narození');
+    enterUnreadableDate(date);
+    await userEvent.click(button('Pokračovat na fotografie'));
+    expect(date).toHaveAccessibleDescription(
+      'Zadejte platné a úplné datum, nebo pole vymažte.',
+    );
+    await waitFor(() => expect(date).toHaveFocus());
+    expect(
+      screen.queryByRole('heading', { name: 'Fotografie' }),
+    ).not.toBeInTheDocument();
   });
 
   it('ukládá údaje i fotografie jedním multipart požadavkem a potvrdí výsledek', async () => {
@@ -877,6 +901,26 @@ describe('Úprava zvířete (WF 05, 06)', () => {
     await userEvent.click(button('Uložit změny'));
     expect(field('Jméno')).toHaveAccessibleDescription(
       'Vyplňte jméno zvířete.',
+    );
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('uložené datum narození nesmaže nepřevoditelným zadáním', async () => {
+    const patch = vi.fn(() => HttpResponse.json(animal));
+    server.use(
+      http.get('/api/animal/animals/:id', () =>
+        HttpResponse.json({ ...animal, birthDate: '2024-02-15' }),
+      ),
+      http.patch('/api/animal/animals/:id', patch),
+    );
+    renderApp(`/zvirata/${animal.id}/upravit`);
+    await screen.findByRole('option', { name: breed.name });
+    const date = screen.getByLabelText('Datum narození');
+    expect(date).toHaveValue('2024-02-15');
+    enterUnreadableDate(date);
+    await userEvent.click(button('Uložit změny'));
+    expect(date).toHaveAccessibleDescription(
+      'Zadejte platné a úplné datum, nebo pole vymažte.',
     );
     expect(patch).not.toHaveBeenCalled();
   });

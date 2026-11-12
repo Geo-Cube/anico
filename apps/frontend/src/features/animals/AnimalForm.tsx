@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ComponentProps,
   type FormEvent,
   type ReactNode,
 } from 'react';
@@ -60,15 +61,23 @@ function toPayload(key: OptionalField, value: string) {
   return key === 'weightKg' ? parseWeight(value) : value;
 }
 
-/** Pravidla UC-02/1 s českými zprávami u polí; server je kontroluje znovu. */
-function validateProfile(name: string, breedId: string, values: Values) {
+/**
+ * Pravidla UC-02/1 s českými zprávami u polí; server je kontroluje znovu.
+ * `birthDateUnreadable`: prohlížeč datum nedokázal převést (31. 2., neúplné datum).
+ * Hodnota pole je pak prázdná, takže bez této kontroly by se zadání tiše ztratilo.
+ */
+function validateProfile(
+  name: string,
+  breedId: string,
+  values: Values,
+  birthDateUnreadable: boolean,
+) {
   const errors: Errors = {};
   if (!name.trim()) errors.name = 'Vyplňte jméno zvířete.';
   if (!breedId) errors.breedId = 'Vyberte plemeno.';
-  const birthDate = values.birthDate.trim();
-  if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate))
-    errors.birthDate = 'Zadejte platné datum.';
-  else if (birthDate > today())
+  if (birthDateUnreadable)
+    errors.birthDate = 'Zadejte platné a úplné datum, nebo pole vymažte.';
+  else if (values.birthDate > today())
     errors.birthDate = 'Datum narození nesmí být v budoucnosti.';
   if (values.weightKg.trim()) {
     const weight = parseWeight(values.weightKg);
@@ -79,6 +88,21 @@ function validateProfile(name: string, breedId: string, values: Values) {
       errors.weightKg = 'Hmotnost může být nejvýše 2000 kg.';
   }
   return errors;
+}
+
+/**
+ * Pole data bez řízení z Reactu: hodnotu převezme jen při připojení. Controlled input
+ * při každé změně synchronizuje atribut `value` a Firefox na něj reaguje zahozením
+ * rozepsaného data (31. 2.); pole by pak bylo tiše prázdné a `badInput` nepravdivé.
+ */
+function DateInput({
+  initialValue,
+  ...props
+}: Omit<ComponentProps<'input'>, 'type' | 'value' | 'defaultValue'> & {
+  initialValue: string;
+}) {
+  const [defaultValue] = useState(initialValue);
+  return <input {...props} type="date" defaultValue={defaultValue} />;
 }
 
 function UploadPreview({ file }: { file: File }) {
@@ -224,6 +248,7 @@ function AnimalForm({ animal }: { animal?: Animal }) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const birthDateRef = useRef<HTMLInputElement>(null);
   const [initialAnimal] = useState(animal);
   const [step, setStep] = useState<Step>('profile');
   const [species, setSpecies] = useState<AnimalSpecies>(
@@ -289,7 +314,13 @@ function AnimalForm({ animal }: { animal?: Animal }) {
 
   /** Zkontroluje údaje; při chybě otevře krok údajů a zaměří první chybné pole. */
   function checkProfile() {
-    const found = validateProfile(name, breedId, values);
+    // Mimo krok údajů pole data připojené není; opustit ten krok jde ale jen přes tuto kontrolu.
+    const found = validateProfile(
+      name,
+      breedId,
+      values,
+      birthDateRef.current?.validity.badInput === true,
+    );
     setErrors(found);
     const first = Object.keys(found)[0];
     if (!first) return true;
@@ -557,12 +588,12 @@ function AnimalForm({ animal }: { animal?: Animal }) {
                   error={errors.birthDate}
                 >
                   {(props) => (
-                    <input
+                    <DateInput
                       {...props}
-                      type="date"
+                      ref={birthDateRef}
                       max={today()}
                       className={controlClassName}
-                      value={values.birthDate}
+                      initialValue={values.birthDate}
                       onChange={(event) =>
                         setValue('birthDate', event.target.value)
                       }
