@@ -9,6 +9,7 @@ import { pinoHttp } from 'pino-http';
 import { AuthorizationError } from '@anico/auth';
 import type { BreedingPlanRepository } from './modules/breeding/domain/breeding-plan.js';
 import { breedingRouter } from './modules/breeding/http/breeding-router.js';
+import { captureServerError } from './observability.js';
 
 export function createApp(dependencies: {
   repository: BreedingPlanRepository;
@@ -20,7 +21,14 @@ export function createApp(dependencies: {
 }) {
   const app = express();
   app.disable('x-powered-by');
-  app.use(pinoHttp({ logger: dependencies.logger }));
+  app.use(
+    pinoHttp({
+      logger: dependencies.logger,
+      autoLogging: {
+        ignore: (req) => req.url === '/health' || req.url === '/ready',
+      },
+    }),
+  );
   app.get('/health', (_req, res) => res.json(dependencies.health));
   app.get('/ready', (_req, res) => {
     if (!dependencies.isReady()) {
@@ -63,6 +71,7 @@ export function createApp(dependencies: {
       return;
     }
     req.log.error({ err: error }, 'Request failed');
+    captureServerError(error);
     res.status(500).json({ error: 'Internal server error' });
   };
   app.use(handleError);

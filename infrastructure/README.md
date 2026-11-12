@@ -24,6 +24,7 @@ Příkazy jsou z kořene repozitáře, není-li výslovně uvedeno jinak.
 | GitHub login a Coolify role        | [SSO](COOLIFY-SSO.md)                   |
 | Změna SSH IP                       | [Firewall](FIREWALL.md)                 |
 | Ztráta serveru nebo Macu           | [Obnova](RECOVERY.md)                   |
+| Chyby, logy a hlídání serveru      | [Monitoring](MONITORING.md)             |
 | Co zbývá                           | [Checklist](NEXT-STEPS.md)              |
 
 ## Než použiješ IaC

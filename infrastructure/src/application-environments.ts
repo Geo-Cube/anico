@@ -11,6 +11,8 @@ const logLevel = z.enum([
   'trace',
   'silent',
 ]);
+// Prázdná hodnota vypne Sentry SDK; jinou hodnotu než URL by služby při startu odmítly.
+const sentryDsn = z.union([z.literal(''), z.url()]);
 const environment = z.object({
   sourceBranch: z.string().min(1),
   logLevel,
@@ -33,9 +35,15 @@ export const applicationVariablesSchema = z
   .object({ dev: variables.default({}), prod: variables.default({}) })
   .strict();
 
+/**
+ * `monitoring.backendDsn` (zaregistrovaný GlitchTip projekt) nastaví dev
+ * `SENTRY_DSN`. Explicitní `applicationVariables` mají přednost, takže
+ * `SENTRY_DSN: ''` v nich monitoring dočasně vypne bez mazání registrace.
+ */
 export function prepareApplicationEnvironments(
   rawSettings: unknown,
   rawVariables: unknown = {},
+  monitoring: { backendDsn?: string | undefined } = {},
 ) {
   const settings = applicationSettingsSchema.parse(rawSettings);
   const overrides = applicationVariablesSchema.parse(rawVariables);
@@ -46,12 +54,14 @@ export function prepareApplicationEnvironments(
         NODE_ENV: 'production',
         APP_ENV: name,
         LOG_LEVEL: defaults.logLevel,
+        SENTRY_DSN: (name === 'dev' && monitoring.backendDsn) || '',
         ...overrides[name],
       };
       // The dev environment also runs optimized production images.
       z.literal('production').parse(values.NODE_ENV);
       z.literal(name).parse(values.APP_ENV);
       logLevel.parse(values.LOG_LEVEL);
+      sentryDsn.parse(values.SENTRY_DSN);
       // Dev-only switching into test accounts must never reach production.
       if (name !== 'dev' && values.AUTH_TEST_ACCOUNTS_ENABLED !== undefined)
         throw new Error('AUTH_TEST_ACCOUNTS_ENABLED is allowed only in dev');

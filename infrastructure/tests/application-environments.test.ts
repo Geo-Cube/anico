@@ -64,3 +64,37 @@ test('test accounts cannot be enabled outside dev', () => {
       /only in dev/,
     );
 });
+
+const backendDsn =
+  'http://0123456789abcdef0123456789abcdef@anico-glitchtip:8000/1';
+
+test('registered GlitchTip DSN reaches only dev; empty DSN keeps monitoring off', () => {
+  const disabled = prepareApplicationEnvironments(settings);
+  assert.equal(disabled.environments.dev?.variables.SENTRY_DSN, '');
+  assert.equal(disabled.environments.prod?.variables.SENTRY_DSN, '');
+
+  const registered = prepareApplicationEnvironments(
+    settings,
+    {},
+    { backendDsn },
+  );
+  assert.equal(registered.environments.dev?.variables.SENTRY_DSN, backendDsn);
+  assert.equal(registered.environments.prod?.variables.SENTRY_DSN, '');
+});
+
+test('explicit applicationVariables override the registered DSN and invalid DSNs are rejected', () => {
+  const result = prepareApplicationEnvironments(
+    settings,
+    { dev: { SENTRY_DSN: '' } },
+    { backendDsn },
+  );
+  assert.equal(result.environments.dev?.variables.SENTRY_DSN, '');
+  assert.throws(() =>
+    prepareApplicationEnvironments(settings, {}, { backendDsn: 'not a url' }),
+  );
+  assert.throws(() =>
+    prepareApplicationEnvironments(settings, {
+      prod: { SENTRY_DSN: 'glitchtip' },
+    }),
+  );
+});

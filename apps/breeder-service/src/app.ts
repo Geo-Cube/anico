@@ -7,6 +7,7 @@ import { AuthorizationError } from '@anico/auth';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { healthRouter } from './health/health-router.js';
+import { captureServerError } from './observability.js';
 import { apiDocsRouter } from './openapi/docs-router.js';
 
 export function createApp(dependencies: {
@@ -20,7 +21,14 @@ export function createApp(dependencies: {
 }) {
   const app = express();
   app.disable('x-powered-by');
-  app.use(pinoHttp({ logger: dependencies.logger }));
+  app.use(
+    pinoHttp({
+      logger: dependencies.logger,
+      autoLogging: {
+        ignore: (req) => req.url === '/health' || req.url === '/ready',
+      },
+    }),
+  );
   app.use(healthRouter(dependencies));
   if (dependencies.apiDocs) app.use(apiDocsRouter());
   if (dependencies.authenticate) app.use(dependencies.authenticate);
@@ -64,6 +72,7 @@ export function createApp(dependencies: {
       return;
     }
     req.log.error({ err: error }, 'Request failed');
+    captureServerError(error);
     res.status(500).json({ error: 'Internal server error' });
   };
   app.use(handleError);

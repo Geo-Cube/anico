@@ -9,7 +9,7 @@ Platforma pro bezpečné propojování ověřených chovatelů (psi, koně). MVP
 - npm workspaces + Turborepo, Node ≥ 22.19, TypeScript (ESM, importy s `.js` příponou).
 - `apps/breeder-service` – Express 5, **Mongoose 8 / MongoDB**, Zod 4, Pino, Vitest 4, Supertest, `mongodb-memory-server`.
 - `breeder-service` je doplněk, nikoli přejmenování `breeding-service`. `auth-service` dál spravuje společné přihlášení; backendy ověřují JWT přes `@anico/auth` a používají `req.auth`, nikdy klientské `x-user-*` hlavičky.
-- UC-01 backend existuje lokálně; není nasazený ani napojený na frontend a neposkytuje dokončení onboardingu. Vývojový notifikátor e-maily nedoručuje.
+- UC-01 backend (`breeder-service`) je nasazený na devu a frontendová administrace ověření chovatelů jej volá; aktuální stav určuje [docs/STAV-PROJEKTU.md](docs/STAV-PROJEKTU.md). Neposkytuje dokončení onboardingu. Vývojový notifikátor e-maily nedoručuje.
 - `apps/frontend` – React + Vite. `packages/shared-schemas` – Zod kontrakty (`@anico/shared-schemas`) + katalogy plemen (`catalogs/*.json`).
 - Doménový modul: `src/modules/<domena>/{domain,application,infrastructure,http}`. Doména a use cases **nezávisí** na Expressu, Mongoose ani Zodu; `server.ts` vkládá implementace portů (`domain/ports.ts`).
 - Přeložení pojmů z analýzy: tabulka → kolekce, FK → reference (`*Id`), DB constraint → unique/partial index + schema validace, podmíněný UPDATE → `findOneAndUpdate` s filtrem na stav, migrace → `.mjs` v `apps/breeder-service/migrations/` (`npm run db:new`).

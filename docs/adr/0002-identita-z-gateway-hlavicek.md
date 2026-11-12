@@ -36,5 +36,5 @@ Jméno a e-mail mohou v platné auth identitě chybět; absence těchto údajů 
 
 - Backend UC-01 používá současnou auth integraci; nesmí zavádět druhý login ani důvěryhodnou hlavičkovou zkratku.
 - HTTP testy mohou vložit autentizační middleware, který nastaví `req.auth`; bezpečnostní scénáře musí pokrýt neplatný token, podvržené hlavičky, role a nullable profilové údaje.
-- Služba existuje lokálně. Cloudové nasazení, gateway route, DB oprávnění a napojení frontendového UC-01 zůstávají samostatnou prací.
+- V době rozhodnutí služba existovala jen lokálně. Cloudové nasazení, gateway route, DB oprávnění a napojení administrace UC-01 jsou od té doby hotové ([stav projektu](../STAV-PROJEKTU.md)).
 - Dokončení onboardingu není součástí tohoto API. Rozhodovací notifikátor je vývojový a skutečné e-maily nedoručuje.

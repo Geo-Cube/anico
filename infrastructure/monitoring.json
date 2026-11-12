@@ -1,0 +1,14 @@
+{
+  "hostname": "monitoring.anico.online",
+  "project": "anico-monitoring",
+  "containerName": "anico-glitchtip",
+  "databaseContainerName": "anico-glitchtip-db",
+  "tunnelContainerName": "anico-glitchtip-tunnel",
+  "network": "anico-monitoring",
+  "appNetwork": "anico-dev-app",
+  "databaseVolume": "anico-glitchtip-db",
+  "uploadsVolume": "anico-glitchtip-uploads",
+  "rootDirectory": "/srv/anico/shared/monitoring",
+  "image": "glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6",
+  "databaseImage": "postgres:18-alpine@sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b"
+}

@@ -1,0 +1,94 @@
+# Host watchdog: anico-watchdog.timer → Healthchecks.io (dead-man switch).
+# Bez registrovaného ping URL se timer neinstaluje a dřívější instalace se odstraní.
+- name: Install and enable the Healthchecks.io watchdog
+  when: anico_monitoring_watchdog | bool
+  block:
+    - name: Prepare root-only watchdog configuration directory
+      ansible.builtin.file:
+        path: /etc/anico
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Install the private ping URL
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../.pulumi/monitoring/watchdog.env'
+        dest: /etc/anico/watchdog.env
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      diff: false
+    - name: Ensure the local libexec directory exists
+      ansible.builtin.file:
+        path: /usr/local/libexec
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    - name: Install the watchdog script
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../scripts/anico-watchdog.sh'
+        dest: /usr/local/libexec/anico-watchdog
+        owner: root
+        group: root
+        mode: '0755'
+    - name: Install the watchdog units
+      ansible.builtin.template:
+        src: '{{ playbook_dir }}/templates/{{ item }}.j2'
+        dest: '/etc/systemd/system/{{ item }}'
+        owner: root
+        group: root
+        mode: '0644'
+      loop: [anico-watchdog.service, anico-watchdog.timer]
+    - name: Validate the watchdog units
+      ansible.builtin.command:
+        argv:
+          [
+            systemd-analyze,
+            verify,
+            /etc/systemd/system/anico-watchdog.service,
+            /etc/systemd/system/anico-watchdog.timer,
+          ]
+      changed_when: false
+      when: not ansible_check_mode
+    - name: Enable the five-minute watchdog timer
+      ansible.builtin.systemd_service:
+        name: anico-watchdog.timer
+        daemon_reload: true
+        enabled: true
+        state: started
+    - name: Run one watchdog check now and send the first ping
+      ansible.builtin.systemd_service:
+        name: anico-watchdog.service
+        state: started
+      changed_when: false
+      when: not ansible_check_mode
+
+- name: Remove the watchdog when no ping URL is registered
+  when: not (anico_monitoring_watchdog | bool)
+  block:
+    - name: Check for a previously installed watchdog timer
+      ansible.builtin.stat:
+        path: /etc/systemd/system/anico-watchdog.timer
+      register: anico_watchdog_timer
+    - name: Stop and disable the previously installed timer
+      ansible.builtin.systemd_service:
+        name: anico-watchdog.timer
+        enabled: false
+        state: stopped
+      when: anico_watchdog_timer.stat.exists
+    - name: Remove watchdog files including the private ping URL
+      ansible.builtin.file:
+        path: '{{ item }}'
+        state: absent
+      loop:
+        - /etc/systemd/system/anico-watchdog.timer
+        - /etc/systemd/system/anico-watchdog.service
+        - /usr/local/libexec/anico-watchdog
+        - /etc/anico/watchdog.env
+      register: anico_watchdog_removed
+    - name: Reload systemd after removing the watchdog units
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: anico_watchdog_removed.changed

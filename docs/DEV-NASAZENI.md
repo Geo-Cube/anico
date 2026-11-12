@@ -54,14 +54,15 @@ pětisložkový release: `npm run init:dev-auth -w @anico/infrastructure -- --re
 
 ## Kde měnit proměnné a credentials
 
-| Nastavení                               | Předpis                                                     |
-| --------------------------------------- | ----------------------------------------------------------- |
-| Založení dev služby / strojového Access | `devDeploymentEnabled` / `devDeploymentApiEnabled` v Pulumi |
-| Publikování dev webu                    | `infrastructure/access.json`                                |
-| Povolení lidé                           | Šifrovaný `accessMembers.developerEmails`                   |
-| Aplikační proměnné dev/prod             | Šifrovaný `applicationVariables`                            |
-| Coolify CI token                        | Šifrovaný `devDeploymentCredentials`                        |
-| Cloudflare CI klient                    | Šifrované outputs Pulumi state                              |
+| Nastavení                               | Předpis                                                                     |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| Založení dev služby / strojového Access | `devDeploymentEnabled` / `devDeploymentApiEnabled` v Pulumi                 |
+| Publikování dev webu                    | `infrastructure/access.json`                                                |
+| Povolení lidé                           | Šifrovaný `accessMembers.developerEmails`                                   |
+| Aplikační proměnné dev/prod             | Šifrovaný `applicationVariables`                                            |
+| Monitoring (`SENTRY_DSN`, watchdog)     | Šifrovaný `monitoringCredentials`, [návod](../infrastructure/MONITORING.md) |
+| Coolify CI token                        | Šifrovaný `devDeploymentCredentials`                                        |
+| Cloudflare CI klient                    | Šifrované outputs Pulumi state                                              |
 
 `applicationVariables` měň interaktivně; příkaz nahrazuje celý JSON, zachovej dev i prod:
 
@@ -84,6 +85,12 @@ Gateway: `/api/animal/*` a `/api/breeder/*` vedou přes ověření relace (`anic
 na příslušnou službu, veřejné jsou jen jejich `/health` a `/ready`. Stav ověření chovatele
 předává breeder-service do animal-service událostí přes interní NATS
 ([ADR-0007](adr/0007-projekce-overenych-chovatelu-pres-nats.md)); přímé volání mezi nimi není.
+
+Auth dokumentace je na `/api/auth/docs` a `/api/auth/openapi.json`. Router v
+`scripts/dev-deployment.mjs` výslovně propouští také `/api/auth/docs/` a lokální
+Swagger assets (initializer, CSS, bundle a obě favicon); obecný prefix `/api/auth/`
+nezpřístupňuje, takže privátní auth endpointy zůstávají interní.
+Změna tohoto pravidla se projeví až po novém deploymentu aplikací.
 
 CI vstup `deploy-dev.anico.online` přijme jen Service Auth a GET/PATCH určené služby
 plus kontrolu manifestu. Lidský dev a admin vyžadují jiné Access audience.

@@ -10,6 +10,7 @@ import { databaseTarget } from './database/policy.js';
 import { mongoVerifiedBreeders } from './modules/animal/infrastructure/verified-breeders.js';
 import { configuredVerificationConsumer } from './modules/animal/infrastructure/nats-verification-consumer.js';
 import { apiDocsEnabled } from './openapi/docs-router.js';
+import { closeObservability, initObservability } from './observability.js';
 
 const env = z
   .object({
@@ -21,8 +22,18 @@ const env = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
     ANIMAL_VERIFICATION_BROKER_FILE: z.string().optional(),
+    SENTRY_DSN: z.union([z.literal(''), z.url()]).optional(),
+    SENTRY_RELEASE: z.string().optional(),
   })
   .parse(process.env);
+
+initObservability({
+  dsn: env.SENTRY_DSN,
+  environment: process.env.APP_ENV || 'local',
+  release: env.SENTRY_RELEASE,
+  service: 'animal-service',
+  suppressErrorMessages: true,
+});
 
 const logger = pino({
   level: env.LOG_LEVEL,
@@ -102,6 +113,7 @@ try {
       await connection.close().catch(() => undefined);
       process.exitCode = 1;
     } finally {
+      await closeObservability(2_000);
       clearTimeout(timeout);
     }
   }
@@ -112,6 +124,7 @@ try {
   logger.fatal(
     'Startup failed; inspect database connectivity and migration status. Private details suppressed.',
   );
+  await closeObservability(2_000);
   await connection.close();
   process.exitCode = 1;
 }

@@ -62,7 +62,7 @@ try {
             $oldDatabaseVariable->delete();
             $changed = true;
         }
-        foreach (['LOG_LEVEL'] as $key) {
+        foreach (['LOG_LEVEL', 'SENTRY_DSN'] as $key) {
             if (!$environment->environment_variables()->where('key', $key)->exists()) throw new RuntimeException('Missing shared variable');
             $variable = $service->environment_variables()->where('key', $key)->first() ?? new App\Models\EnvironmentVariable;
             $variable->fill(['key' => $key, 'value' => '{{environment.'.$key.'}}',

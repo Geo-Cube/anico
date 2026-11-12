@@ -2,13 +2,14 @@ import * as hcloud from '@pulumi/hcloud';
 import * as pulumi from '@pulumi/pulumi';
 import { foundationConfigSchema } from './config.js';
 import { configureCloudflare } from './cloudflare.js';
-import type { AccessMembers } from './access.js';
+import { accessMembersSchema, type AccessMembers } from './access.js';
 import { readFileSync } from 'node:fs';
 import {
   databaseCredentialsSchema,
   type DatabaseCredentials,
 } from './dev-database.js';
 import { configureDevDatabaseAccess } from './dev-database-access.js';
+import { configureMonitoringAccess } from './monitoring-access.js';
 
 const config = new pulumi.Config();
 const settings = foundationConfigSchema.parse({
@@ -119,3 +120,23 @@ const databaseEdge = databaseEnabled
   : undefined;
 export const devDatabaseTunnelId = databaseEdge?.tunnel.id ?? null;
 export const devDatabaseTunnelToken = databaseEdge?.token ?? null;
+
+const monitoringEnabled = config.getBoolean('monitoringEnabled') ?? false;
+if (monitoringEnabled && (!edge?.github || !githubEnabled))
+  throw new Error('Monitoring access requires configured GitHub login');
+// GlitchTip UI zatím vidí stejní lidé jako dev prostředí (`accessMembers.developerEmails`).
+// Až sem půjdou produkční data, přístup vyžaduje samostatné rozhodnutí.
+const monitoringEdge = monitoringEnabled
+  ? configureMonitoringAccess(
+      cloudflareSettings,
+      JSON.parse(
+        readFileSync(new URL('../monitoring.json', import.meta.url), 'utf8'),
+      ),
+      edge!.github!.id,
+      config
+        .requireSecretObject<AccessMembers>('accessMembers')
+        .apply((raw) => accessMembersSchema.parse(raw).developerEmails),
+    )
+  : undefined;
+export const monitoringTunnelId = monitoringEdge?.tunnel.id ?? null;
+export const monitoringTunnelToken = monitoringEdge?.token ?? null;

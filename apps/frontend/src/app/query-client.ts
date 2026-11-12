@@ -1,4 +1,5 @@
 import type { Session } from '@anico/shared-schemas';
+import { captureException } from '@sentry/react';
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { discardUserData, forgetUser } from '@/features/auth/session';
 import { isApiError } from '@/shared/lib/http';
@@ -6,8 +7,11 @@ import { isApiError } from '@/shared/lib/http';
 export function createQueryClient() {
   // A 401 from any API means the server ended the session: drop the user's
   // data at once; the session guard then sends the browser to the login page.
+  // Outages go to monitoring (a no-op unless it is enabled); other 4xx are
+  // expected answers.
   const onError = (error: unknown) => {
     if (isApiError(error, 'unauthorized')) forgetUser(client);
+    else if (isApiError(error, 'unavailable')) captureException(error);
   };
   const client: QueryClient = new QueryClient({
     queryCache: new QueryCache({ onError }),

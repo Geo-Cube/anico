@@ -229,13 +229,15 @@ Aktuální `deploy:dev-auth` aplikuj až po zeleném CI a code owner review, př
 merge do dev. CI před změnou aplikací vyžaduje verzi runtime gateway 3;
 chybějící nebo stará konfigurace ponechá dosavadní release běžet.
 
-Po schválení a merge do `dev` CI sestaví, publikuje a nasadí tři images stejného
-commitu: frontend, breeding-service a auth-service. Gateway chrání aplikační API,
+Při prvním rolloutu CI po schválení a merge do `dev` sestavilo, publikovalo a nasadilo tři images
+stejného commitu: frontend, breeding-service a auth-service. Dnes nasazuje pět images včetně
+animal-service a breeder-service ([dev nasazení](DEV-NASAZENI.md)). Gateway chrání aplikační API,
 backend navíc ověřuje JWT. Health/readiness zůstávají explicitně veřejné.
 Nová auth route dovoluje pouze vyjmenované veřejné endpointy, ne `/internal/verify`.
 
-Po prvním úspěšném rollout stáhni všechny tři `image-reference` artifacts do adresářů
-`frontend`, `breeding-service`, `auth-service` a zaregistruj je jako recovery základ:
+Po prvním úspěšném rolloutu se všechny tři `image-reference` artifacts stáhly do adresářů
+`frontend`, `breeding-service`, `auth-service` a zaregistrovaly jako recovery základ
+(současný release má pět adresářů):
 
 ```bash
 npm run init:dev-auth -w @anico/infrastructure -- --release-directory /ABSOLUTNI/CESTA/K/ARTIFAKTUM --revision COMMIT_SHA
@@ -244,7 +246,7 @@ npm run init:dev-auth -w @anico/infrastructure -- --release-directory /ABSOLUTNI
 Nahraď cestu a celý 40znakový commit. Nad zapnutou auth konfigurací bootstrap
 odmítne použít historický dvoukomponentový release bez auth. Uložené reference
 jsou součástí šifrovaného Pulumi configu a recovery snapshotu. Běžné IaC reapply
-zachová novější trojici nasazenou CI.
+zachová novější release nasazený CI; současný pětisložkový release registruje [dev nasazení](DEV-NASAZENI.md).
 
 Nakonec otevři dev v prohlížeči: GitHub Access → Přihlásit přes Google → návrat
 do aplikace. Nový účet je breeder; první skutečný owner se jmenuje výslovně

@@ -28,6 +28,7 @@
   "dependencies": {
     "@anico/auth": "^0.1.0",
     "@anico/shared-schemas": "^0.1.0",
+    "@sentry/node": "^11.12.0",
     "express": "^5.1.0",
     "mongoose": "^8.19.0",
     "pino": "^10.0.0",

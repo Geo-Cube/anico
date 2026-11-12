@@ -58,7 +58,7 @@ nasazení a přihlášení i odhlášení je potvrzené v prohlížeči.
 2. Upravím kód, ověřím jej a otevřu PR do `dev`.
 3. CI a code owner review rozhodnou, zda lze změnu sloučit.
 4. Po úspěšných kontrolách merge do `dev` vzniknou images v GHCR. Deploy job
-   je předá Coolify podle konkrétních digestů a ověří zdraví všech tří komponent.
+   je předá Coolify podle konkrétních digestů a ověří zdraví všech pěti komponent.
 
 Na VPS se aplikace nekompilují. Nová mikroservisa potřebuje vlastní odpovědnost,
 API kontrakt, image a konfiguraci nasazení; není to jen další složka.
@@ -66,10 +66,11 @@ API kontrakt, image a konfiguraci nasazení; není to jen další složka.
 ## Co ještě není hotové
 
 Google i Microsoft login/logout na devu funguje. Volitelné propojení účtů je nasazené, ale vlastník ho nevyužívá.
-Lokální Google/Microsoft login, předání identity do lokálního i sdíleného API a logout jsou také ověřené. Zbývá napojení business UI na API,
-autorizace jednotlivých domén a doručování registrace další službě.
-Message broker není nasazený. Apple a produkci jsme odložili. Provozní limity,
-monitoring a zálohy s testem obnovy ještě zbývají.
+Lokální Google/Microsoft login, předání identity do lokálního i sdíleného API a logout jsou také ověřené.
+UC-01–UC-03 jsou nasazené na devu včetně frontendu a právě probíhá jejich testování v prohlížeči;
+aktuální stav je v [přehledu projektu](STAV-PROJEKTU.md). Message broker NATS je nasazený,
+registrační události ale zatím nikdo nezpracovává. Apple a produkci jsme odložili. Monitoring
+(GlitchTip + Healthchecks.io) je připravený a čeká na nasazení; provozní limity a zálohy s testem obnovy ještě zbývají.
 IaC obnoví nastavení, **nikoli ztracená data bez záloh**.
 
 Na začátek stačí [vývojářský návod](MANUAL-PRO-VYVOJARE.md) a [tahák příkazů](PRIKAZY.md).

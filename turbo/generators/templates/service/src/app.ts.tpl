@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { AuthorizationError } from '@anico/auth';
 import { healthRouter } from './health/health-router.js';
+import { captureServerError } from './observability.js';
 
 export function createApp(dependencies: {
   logger: Logger;
@@ -12,7 +13,14 @@ export function createApp(dependencies: {
 }) {
   const app = express();
   app.disable('x-powered-by');
-  app.use(pinoHttp({ logger: dependencies.logger }));
+  app.use(
+    pinoHttp({
+      logger: dependencies.logger,
+      autoLogging: {
+        ignore: (req) => req.url === '/health' || req.url === '/ready',
+      },
+    }),
+  );
   app.use(healthRouter(dependencies));
   if (dependencies.authenticate) app.use(dependencies.authenticate);
   app.use(express.json({ limit: '32kb' }));
@@ -47,6 +55,7 @@ export function createApp(dependencies: {
       return;
     }
     req.log.error({ err: error }, 'Request failed');
+    captureServerError(error);
     res.status(500).json({ error: 'Internal server error' });
   };
   app.use(handleError);

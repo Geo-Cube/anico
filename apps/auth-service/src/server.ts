@@ -16,6 +16,7 @@ import { configuredRegistrationPublisher } from './modules/auth/infrastructure/n
 import { mongoRegistrationOutbox } from './modules/auth/infrastructure/registration-outbox.js';
 import { registrationDispatcher } from './modules/auth/application/registration-dispatcher.js';
 import { apiDocsEnabled } from './openapi/docs-router.js';
+import { closeObservability, initObservability } from './observability.js';
 
 const env = z
   .object({
@@ -26,8 +27,18 @@ const env = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
+    SENTRY_DSN: z.union([z.literal(''), z.url()]).optional(),
+    SENTRY_RELEASE: z.string().optional(),
   })
   .parse(process.env);
+
+initObservability({
+  dsn: env.SENTRY_DSN,
+  environment: process.env.APP_ENV || 'local',
+  release: env.SENTRY_RELEASE,
+  service: 'auth-service',
+  suppressErrorMessages: true,
+});
 
 const logger = pino({
   level: env.LOG_LEVEL,
@@ -105,6 +116,7 @@ try {
       await connection.close().catch(() => undefined);
       process.exitCode = 1;
     } finally {
+      await closeObservability(2_000);
       clearTimeout(timeout);
     }
   }
@@ -115,6 +127,7 @@ try {
   logger.fatal(
     'Startup failed; inspect database connectivity and migration status. Private details suppressed.',
   );
+  await closeObservability(2_000);
   await dispatcher?.stop().catch(() => undefined);
   await connection.close();
   process.exitCode = 1;

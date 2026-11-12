@@ -33,7 +33,11 @@
     "init:dev-auth": "node --import tsx scripts/init-dev-auth.mjs",
     "deploy:dev-auth": "bash scripts/deploy-dev-auth.sh",
     "init:dev-events": "node --import tsx scripts/init-dev-events.mjs",
-    "deploy:dev-events": "bash scripts/deploy-dev-events.sh"
+    "deploy:dev-events": "bash scripts/deploy-dev-events.sh",
+    "init:monitoring": "node --import tsx scripts/init-monitoring.mjs",
+    "register:monitoring": "node --import tsx scripts/register-monitoring.mjs",
+    "prepare:monitoring": "node --import tsx scripts/prepare-monitoring.mjs",
+    "deploy:monitoring": "bash scripts/deploy-monitoring.sh"
   },
   "dependencies": {
     "@pulumi/cloudflare": "^6.23.1",
