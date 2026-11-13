@@ -87,15 +87,17 @@ export function composeForRelease(references, revision, options = {}) {
           HOST: '0.0.0.0',
           PORT: '3000',
           LOG_LEVEL: '${LOG_LEVEL:-debug}',
-          SENTRY_DSN: '${SENTRY_DSN:-}',
           SENTRY_RELEASE: revision,
         },
         networks: ['app', 'data'],
-        secrets: [{ source: 'mongodb-uri', target: 'dev-mongodb-uri' }],
+        secrets: [
+          { source: 'mongodb-uri', target: 'dev-mongodb-uri' },
+          { source: 'sentry-dsn', target: 'sentry-dsn' },
+        ],
         command: [
           'sh',
           '-c',
-          'export MONGODB_URI="$$(cat /run/secrets/dev-mongodb-uri)"; exec node apps/breeding-service/dist/server.js',
+          'export MONGODB_URI="$$(cat /run/secrets/dev-mongodb-uri)"; export SENTRY_DSN="$$(cat /run/secrets/sentry-dsn)"; exec node apps/breeding-service/dist/server.js',
         ],
         labels: {
           ...labels('backend', 3000),
@@ -126,6 +128,11 @@ export function composeForRelease(references, revision, options = {}) {
       'mongodb-uri': {
         file: '/srv/anico/dev/applications/secrets/mongodb-uri',
       },
+      // DSN jen pro backendy: Coolify dává proměnné služby všem komponentám včetně frontendu.
+      // Prázdný soubor = monitoring vypnutý.
+      'sentry-dsn': {
+        file: '/srv/anico/dev/applications/secrets/sentry-dsn',
+      },
     },
     networks: {
       app: { external: true, name: 'anico-dev-app' },
@@ -154,7 +161,6 @@ export function composeForRelease(references, revision, options = {}) {
         HOST: '0.0.0.0',
         PORT: '3000',
         LOG_LEVEL: 'info',
-        SENTRY_DSN: '${SENTRY_DSN:-}',
         SENTRY_RELEASE: revision,
         MIGRATE_ON_START: 'true',
         MONGODB_URI_FILE: '/run/secrets/auth-mongodb-uri',
@@ -170,9 +176,17 @@ export function composeForRelease(references, revision, options = {}) {
         AUTH_REGISTRATION_BROKER_FILE:
           '/run/secrets/auth-registration-broker-json',
       },
-      secrets: Object.keys(compose.secrets)
-        .filter((name) => name.startsWith('auth-'))
-        .map((name) => ({ source: name, target: name })),
+      secrets: [
+        ...Object.keys(compose.secrets)
+          .filter((name) => name.startsWith('auth-'))
+          .map((name) => ({ source: name, target: name })),
+        { source: 'sentry-dsn', target: 'sentry-dsn' },
+      ],
+      command: [
+        'sh',
+        '-c',
+        'export SENTRY_DSN="$$(cat /run/secrets/sentry-dsn)"; exec node apps/auth-service/dist/server.js',
+      ],
       labels: {
         ...labels('auth', 3000),
         'traefik.http.routers.anico-dev-auth.rule':
@@ -242,7 +256,6 @@ function addDomainServices(compose, images, common) {
         HOST: '0.0.0.0',
         PORT: '3000',
         LOG_LEVEL: '${LOG_LEVEL:-debug}',
-        SENTRY_DSN: '${SENTRY_DSN:-}',
         SENTRY_RELEASE: revision,
         AUTH_JWKS_URL: 'http://auth:3000/.well-known/jwks.json',
         AUTH_ISSUER: 'https://dev.anico.online/api/auth',
@@ -253,11 +266,12 @@ function addDomainServices(compose, images, common) {
       secrets: [
         { source: `${name}-mongodb-uri`, target: `${name}-mongodb-uri` },
         { source: broker, target: broker },
+        { source: 'sentry-dsn', target: 'sentry-dsn' },
       ],
       command: [
         'sh',
         '-c',
-        `export MONGODB_URI="$$(cat /run/secrets/${name}-mongodb-uri)"; exec node apps/${workspace}/dist/server.js`,
+        `export MONGODB_URI="$$(cat /run/secrets/${name}-mongodb-uri)"; export SENTRY_DSN="$$(cat /run/secrets/sentry-dsn)"; exec node apps/${workspace}/dist/server.js`,
       ],
       depends_on: { auth: { condition: 'service_healthy' } },
       labels: {

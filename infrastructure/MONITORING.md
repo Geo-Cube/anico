@@ -21,6 +21,10 @@ Healthchecks.io: když přestanou chodit pingy z `anico-watchdog.timer`, pošle 
 - **Backendy** (`auth`, `breeder`, `animal`, ukázkový backend) mají `@sentry/node`. Bez
   `SENTRY_DSN` je SDK vypnuté a nic neodesílá. S DSN posílají neočekávané chyby (5xx)
   a Pino logy (info a výš) interně na `http://anico-glitchtip:8000` přes síť `anico-dev-app`.
+  DSN dostávají jen tyto čtyři kontejnery jako read-only soubor `/run/secrets/sentry-dsn`
+  (na serveru `/srv/anico/dev/applications/secrets/sentry-dsn`, UID 1000), který start kontejneru
+  exportuje do `SENTRY_DSN`. Proměnnou služby ani sdílenou proměnnou Coolify nepoužíváme:
+  Coolify ji předává všem komponentám včetně frontendu. Prázdný soubor = SDK vypnuté.
 - **Frontend** má `@sentry/react`, zapnutý jen v produkčním buildu na `dev.anico.online`.
   Posílá na stejný původ `POST /api/monitoring/envelope`; Traefik požadavek přepíše na
   projekt GlitchTipu, doplní klíč a **odstraní cookies, `Authorization` a IP hlavičky**.
@@ -91,15 +95,13 @@ dřív; aplikace začnou posílat až po sloučení PR se SDK a kroku 7.
 
    ```bash
    npm run deploy:monitoring -w @anico/infrastructure       # ingest router pro frontend
-   npm run configure:applications -w @anico/infrastructure  # sdílená proměnná SENTRY_DSN
-   npm run configure:dev-deployment -w @anico/infrastructure
+   npm run configure:dev-deployment -w @anico/infrastructure -- --extra-vars anico_deploy_start=true
    ```
 
-   Backendy načtou `SENTRY_DSN` při dalším startu: další CI release nebo restart služby
-   `anico-dev-applications` v Coolify.
-
-   **Pozor:** `configure:dev-deployment` vyžaduje sdílenou proměnnou `SENTRY_DSN`. Po sloučení
-   těchto změn proto vždy nejdřív spusť `configure:applications` (bez registrace nastaví prázdnou hodnotu).
+   `configure:dev-deployment` zapíše soubor `sentry-dsn` (bez registrace prázdný) a backendy ho
+   načtou při startu, který tento příkaz spustí; jinak až při dalším CI release nebo restartu služby
+   `anico-dev-applications` v Coolify. `configure:applications` s DSN nepracuje, jen smaže
+   dřívější sdílenou proměnnou `SENTRY_DSN`.
 
 8. **Volitelně Coolify:** Settings → Notifications; Teams v nabídce nejspíš není, použij Email
    a zapni selhání deploye.
@@ -123,13 +125,27 @@ vytvořit znovu. URL webhooku je tajná (kdo ji zná, může do chatu psát); p�
 
 ## Změny a vypnutí
 
-| Změna                        | Postup                                                                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Nová ping URL                | `pbpaste \| npm run init:monitoring … -- --healthchecks-ping-url`, pak `deploy:monitoring`                        |
-| Vypnout watchdog             | `npm run init:monitoring -w @anico/infrastructure -- --clear-healthchecks-ping-url`, pak `deploy:monitoring`      |
-| Vypnout odesílání z backendů | `applicationVariables.dev.SENTRY_DSN = ""` ([proměnné](../docs/DEV-NASAZENI.md#kde-měnit-proměnné-a-credentials)) |
-| Nové DSN                     | `register:monitoring`, pak krok 7                                                                                 |
-| Aktualizace GlitchTipu       | Nový digest v `monitoring.json`, `deploy:monitoring`; migrace DB běží při startu                                  |
+| Změna                        | Postup                                                                                                                                                                |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nová ping URL                | `pbpaste \| npm run init:monitoring … -- --healthchecks-ping-url`, pak `deploy:monitoring`                                                                            |
+| Vypnout watchdog             | `npm run init:monitoring -w @anico/infrastructure -- --clear-healthchecks-ping-url`, pak `deploy:monitoring`                                                          |
+| Vypnout odesílání z backendů | Odeber registraci (viz níže), pak `configure:dev-deployment -- --extra-vars anico_deploy_start=true`                                                                  |
+| Nové DSN                     | `register:monitoring`, pak krok 7                                                                                                                                     |
+| Výměna uniklého klíče        | V projektu vytvoř nový Client Key, zaregistruj jeho DSN, krok 7, pak starý klíč **smaž**. GlitchTip 6.2 při příjmu `is_active` nekontroluje, vypnutý klíč dál funguje |
+| Aktualizace GlitchTipu       | Nový digest v `monitoring.json`, `deploy:monitoring`; migrace DB běží při startu                                                                                      |
+
+Odebrání registrace (hodnoty se nevypisují; skript načte šifrovaný JSON, pole smaže, zbytek uloží
+zpět šifrovaně a uložený stav ověří):
+
+```bash
+npm run register:monitoring -w @anico/infrastructure -- --clear-backend-dsn
+```
+
+`pulumi config rm --path 'monitoringCredentials.backendDsn'` nepoužívej: `monitoringCredentials` je
+šifrovaný JSON řetězec, ne strukturovaný objekt, takže příkaz skončí úspěšně a DSN zůstane.
+Bez `backendDsn` zapíše `configure:dev-deployment` prázdný soubor a SDK po restartu nic neodesílá.
+Frontend: `-- --clear-frontend-dsn`, pak `deploy:monitoring` (zruší ingest router).
+Opětovné zapnutí: `register:monitoring` a krok 7.
 
 Heslo PostgreSQL platí jen při prvním vytvoření DB; rotace není automatizovaná.
 

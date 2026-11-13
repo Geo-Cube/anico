@@ -25,6 +25,26 @@ export const monitoringCredentialsSchema = z.strictObject({
 });
 export type MonitoringCredentials = z.infer<typeof monitoringCredentialsSchema>;
 
+/**
+ * Odebere registrované DSN. `monitoringCredentials` je šifrovaný JSON řetězec,
+ * ne strukturovaný Pulumi objekt, takže `config rm --path` ho nezmění; zbytek
+ * (secrets, ping URL, druhé DSN) zůstane beze změny.
+ */
+export function withoutRegisteredDsn(
+  raw: unknown,
+  target: 'backend' | 'frontend',
+): MonitoringCredentials {
+  const { backendDsn, frontendDsn, ...rest } =
+    monitoringCredentialsSchema.parse(raw);
+  const kept = target === 'backend' ? { frontendDsn } : { backendDsn };
+  return monitoringCredentialsSchema.parse({
+    ...rest,
+    ...Object.fromEntries(
+      Object.entries(kept).filter(([, value]) => value !== undefined),
+    ),
+  });
+}
+
 export const monitoringSettingsSchema = z.strictObject({
   hostname: z.literal(hostname),
   project: z.literal('anico-monitoring'),

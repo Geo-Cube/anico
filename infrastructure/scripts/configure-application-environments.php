@@ -73,6 +73,15 @@ try {
                     $changed = true;
                 }
             }
+            // Retired keys (SENTRY_DSN is now a backend-only secret file) must not linger.
+            foreach ($definition['retiredVariables'] as $key) {
+                $retired = $environment->environment_variables()->where('key', $key)->get();
+                if ($retired->isEmpty()) continue;
+                if ($verify) throw new RuntimeException('Retired variable present');
+                if ($plan) { $summary[] = 'Delete '.$name.' variable '.$key; continue; }
+                foreach ($retired as $variable) $variable->delete();
+                $changed = true;
+            }
             $summary[] = $name.': branch '.$definition['sourceBranch'].', '.count($definition['variables']).' variables verified (values hidden)';
         }
     });

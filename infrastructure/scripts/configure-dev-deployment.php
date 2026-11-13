@@ -62,7 +62,14 @@ try {
             $oldDatabaseVariable->delete();
             $changed = true;
         }
-        foreach (['LOG_LEVEL', 'SENTRY_DSN'] as $key) {
+        // DSN teď dostávají jen backendy jako soubor; proměnná služby by šla i do frontendu.
+        $oldSentryVariable = $service->environment_variables()->where('key', 'SENTRY_DSN')->first();
+        if ($oldSentryVariable) {
+            if ($oldSentryVariable->value !== '{{environment.SENTRY_DSN}}') throw new RuntimeException('Unexpected monitoring variable');
+            $oldSentryVariable->delete();
+            $changed = true;
+        }
+        foreach (['LOG_LEVEL'] as $key) {
             if (!$environment->environment_variables()->where('key', $key)->exists()) throw new RuntimeException('Missing shared variable');
             $variable = $service->environment_variables()->where('key', $key)->first() ?? new App\Models\EnvironmentVariable;
             $variable->fill(['key' => $key, 'value' => '{{environment.'.$key.'}}',

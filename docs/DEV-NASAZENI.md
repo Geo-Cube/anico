@@ -60,7 +60,7 @@ pětisložkový release: `npm run init:dev-auth -w @anico/infrastructure -- --re
 | Publikování dev webu                    | `infrastructure/access.json`                                                |
 | Povolení lidé                           | Šifrovaný `accessMembers.developerEmails`                                   |
 | Aplikační proměnné dev/prod             | Šifrovaný `applicationVariables`                                            |
-| Monitoring (`SENTRY_DSN`, watchdog)     | Šifrovaný `monitoringCredentials`, [návod](../infrastructure/MONITORING.md) |
+| Monitoring (GlitchTip DSN, watchdog)    | Šifrovaný `monitoringCredentials`, [návod](../infrastructure/MONITORING.md) |
 | Coolify CI token                        | Šifrovaný `devDeploymentCredentials`                                        |
 | Cloudflare CI klient                    | Šifrované outputs Pulumi state                                              |
 
@@ -79,7 +79,11 @@ animal-service a breeder-service mají vlastní DB (`anico_animal`, `anico_breed
 a soubory `animal-mongodb-uri` / `breeder-mongodb-uri` ve stejném adresáři. Vytvoří je
 `init:dev-database` (zachová ostatní hesla), `deploy:dev-database` a `configure:dev-deployment`.
 Frontend je nemá; do společného service `.env` ani do image URI nevkládej.
-Coolify totiž společný `.env` přidává všem komponentám.
+Coolify totiž společný `.env` přidává všem komponentám. Ze stejného důvodu dostávají GlitchTip DSN
+jen čtyři backendy (`backend`, `auth`, `animal`, `breeder`) jako soubor `sentry-dsn` ve stejném
+adresáři; zapisuje ho `configure:dev-deployment` z `monitoringCredentials.backendDsn` (bez registrace
+prázdný = monitoring vypnutý). `SENTRY_DSN` v `applicationVariables` je odmítnut a `configure:applications`
+dřívější sdílenou proměnnou `SENTRY_DSN` smaže.
 
 Gateway: `/api/animal/*` a `/api/breeder/*` vedou přes ověření relace (`anico-session`)
 na příslušnou službu, veřejné jsou jen jejich `/health` a `/ready`. Stav ověření chovatele
