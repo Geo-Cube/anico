@@ -75,10 +75,10 @@ Runtime image ověřuje `scripts/check-breeder-container.sh` (v kořeni repa, CI
 dočasná MongoDB na interní síti, migrace při startu, `/ready` 200, 401 bez identity, `/docs` a `/openapi.json`,
 odmítnutí `db:reset` mimo osobní databázi a čisté ukončení po SIGTERM. Vyžaduje Docker.
 
-Služba není nasazená. GHCR publish, Coolify, gateway routa `/api/breeder`, proměnné a účty DB
-vyžadují explicitní infrastrukturní integraci; tento backend nemění živý deployment.
-Současný frontend a jeho sdílené přihlášení zůstávají zachované. Administrace chovatelů
-je dál simulace bez tohoto API; endpoint pro dokončení onboardingového profilu zatím neexistuje.
+Služba je nasazená na devu (GHCR image, Coolify, vlastní DB účet a secrets) za gateway routou
+`/api/breeder`, kterou chrání `anico-session`; veřejné jsou jen `/api/breeder/health` a `/ready`
+([dev nasazení](../../docs/DEV-NASAZENI.md)). Administrace chovatelů ve frontendu toto API volá.
+Endpoint pro dokončení onboardingového profilu zatím neexistuje.
 
 ## UC-01 API (ověření chovatele)
 
@@ -188,7 +188,6 @@ produkčního nasazení. Selhání odeslání rozhodnutí nezruší.
 ## Otevřené body
 
 - Produkční e-mail provider (vývojový adaptér jen loguje).
-- Nasazení (image, Coolify, DB účty) a gateway routa `/api/breeder`.
 - IČO a adresa chovatele nejsou v analýze; po upřesnění je doplní nová migrace a kontrakt.
 - GDPR retence certifikátů a osobních údajů, mazání.
 - Původní analýza v `docs/business/` v repozitáři chybí.

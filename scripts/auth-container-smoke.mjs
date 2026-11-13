@@ -27,7 +27,9 @@ if (process.argv.includes('--proxy-config')) {
             },
           },
           clear: {
-            headers: { customRequestHeaders: { 'X-Anico-Gateway-Key': '' } },
+            headers: {
+              customRequestHeaders: { 'X-Anico-Gateway-Key': '', Cookie: '' },
+            },
           },
           verify: {
             forwardAuth: {

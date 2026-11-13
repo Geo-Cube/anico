@@ -195,7 +195,8 @@ nejsou seznamem nedokončených kroků Google nasazení.
    `X-Anico-Identity` a předávat Cookie, Origin, X-CSRF-Token a původní HTTP metodu.
    Soukromý `/internal/verify` vyžaduje gateway credential ze secret souboru.
    Traefik před ověřením přepíše `X-Anico-Gateway-Key` hodnotou z chráněné
-   konfigurace a po ověření ji odstraní. Backend tento údaj nedostává; credential
+   konfigurace a po ověření ji odstraní spolu s `Cookie` a `X-Anico-Development-Token`.
+   Backend tyto údaje nedostává, identitu má jen z `X-Anico-Identity`; credential
    není součástí upstream URL.
    Veřejný router jej nesmí zpřístupnit. Session/callback/JWKS/health mají vlastní
    explicitní pravidla; callback ani login nesmí vyžadovat již existující relaci.

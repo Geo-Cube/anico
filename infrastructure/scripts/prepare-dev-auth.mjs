@@ -76,6 +76,8 @@ try {
               customRequestHeaders: {
                 'X-Anico-Gateway-Key': '',
                 'X-Anico-Development-Token': '',
+                // Relační cookie patří jen auth-service; business backend dostává JWT.
+                Cookie: '',
               },
             },
           },
