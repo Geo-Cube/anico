@@ -134,14 +134,17 @@ vytvořit znovu. URL webhooku je tajná (kdo ji zná, může do chatu psát); p�
 | Výměna uniklého klíče        | V projektu vytvoř nový Client Key, zaregistruj jeho DSN, krok 7, pak starý klíč **smaž**. GlitchTip 6.2 při příjmu `is_active` nekontroluje, vypnutý klíč dál funguje |
 | Aktualizace GlitchTipu       | Nový digest v `monitoring.json`, `deploy:monitoring`; migrace DB běží při startu                                                                                      |
 
-`register:monitoring` registraci backend DSN smazat neumí (prázdné `backendDsn` ignoruje). Odeber ji
-přímo v šifrovaném secretu (hodnoty se nevypisují):
+Odebrání registrace (hodnoty se nevypisují; skript načte šifrovaný JSON, pole smaže, zbytek uloží
+zpět šifrovaně a uložený stav ověří):
 
 ```bash
-npm run pulumi -w @anico/infrastructure -- config rm --path 'monitoringCredentials.backendDsn' --stack shared
+npm run register:monitoring -w @anico/infrastructure -- --clear-backend-dsn
 ```
 
+`pulumi config rm --path 'monitoringCredentials.backendDsn'` nepoužívej: `monitoringCredentials` je
+šifrovaný JSON řetězec, ne strukturovaný objekt, takže příkaz skončí úspěšně a DSN zůstane.
 Bez `backendDsn` zapíše `configure:dev-deployment` prázdný soubor a SDK po restartu nic neodesílá.
+Frontend: `-- --clear-frontend-dsn`, pak `deploy:monitoring` (zruší ingest router).
 Opětovné zapnutí: `register:monitoring` a krok 7.
 
 Heslo PostgreSQL platí jen při prvním vytvoření DB; rotace není automatizovaná.

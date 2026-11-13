@@ -12,6 +12,7 @@ import {
   monitoringGithubMissing,
   internalBackendDsn,
   parseGlitchTipDsn,
+  withoutRegisteredDsn,
 } from '../src/monitoring.js';
 
 const settings = monitoringSettingsSchema.parse(
@@ -84,6 +85,28 @@ test('credentials accept only generated secrets, Healthchecks.io pings and Glitc
       false,
       JSON.stringify(invalid),
     );
+});
+
+test('removing a registration drops only the chosen DSN and keeps the rest', () => {
+  const registered = {
+    ...base,
+    healthchecksPingUrl:
+      'https://hc-ping.com/5c9f1c4e-1a2b-4c3d-8e9f-0a1b2c3d4e5f',
+    backendDsn: `http://${projectPublicId}@anico-glitchtip:8000/1`,
+    frontendDsn,
+  };
+  const { backendDsn: _backend, ...withoutBackend } = registered;
+  const { frontendDsn: _frontend, ...withoutFrontend } = registered;
+  assert.deepEqual(withoutRegisteredDsn(registered, 'backend'), withoutBackend);
+  assert.deepEqual(
+    withoutRegisteredDsn(registered, 'frontend'),
+    withoutFrontend,
+  );
+  // Repeated removal is harmless and removes nothing else.
+  assert.deepEqual(
+    withoutRegisteredDsn(withoutBackend, 'backend'),
+    withoutBackend,
+  );
 });
 
 test('DSN parsing extracts the public key and project id', () => {
