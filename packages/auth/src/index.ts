@@ -33,7 +33,7 @@ export function createIdentityVerifier(options: {
       algorithms: ['ES256'],
       typ: 'anico-identity+jwt',
       requiredClaims: ['sub', 'iat', 'exp', 'jti'],
-      maxTokenAge: '60s',
+      maxTokenAge: '30s',
       clockTolerance: 2,
     });
     const identity = IdentitySchema.parse(payload.identity);
