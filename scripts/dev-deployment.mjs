@@ -160,6 +160,7 @@ export function composeForRelease(references, revision, options = {}) {
         APP_ENV: 'dev',
         HOST: '0.0.0.0',
         PORT: '3000',
+        AUTH_TRUSTED_PROXY_CIDRS_FILE: '/run/config/trusted-proxy-cidrs',
         LOG_LEVEL: 'info',
         SENTRY_RELEASE: revision,
         MIGRATE_ON_START: 'true',
@@ -181,6 +182,15 @@ export function composeForRelease(references, revision, options = {}) {
           .filter((name) => name.startsWith('auth-'))
           .map((name) => ({ source: name, target: name })),
         { source: 'sentry-dsn', target: 'sentry-dsn' },
+      ],
+      volumes: [
+        {
+          type: 'bind',
+          source: '/srv/anico/dev/auth/trusted-proxy-cidrs',
+          target: '/run/config/trusted-proxy-cidrs',
+          read_only: true,
+          bind: { create_host_path: false },
+        },
       ],
       command: [
         'sh',

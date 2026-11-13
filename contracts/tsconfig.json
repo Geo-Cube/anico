@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Kontrakty importují zdrojáky služeb (NodeNext, přípony .js) i frontendu
+    // (Bundler, alias @/); Bundler rozlišení pokryje obojí.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["node"],
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "paths": { "@/*": ["../apps/frontend/src/*"] }
+  },
+  "include": ["support/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+  "exclude": ["node_modules"]
+}

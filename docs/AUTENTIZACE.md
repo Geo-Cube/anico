@@ -205,6 +205,59 @@ nejsou seznamem nedokončených kroků Google nasazení.
 7. Lokální přihlášení používá níže popsaný loopback/PKCE tok; vyžaduje tuto verzi
    auth-service i runtime gateway 3. Před nasazením nefunguje jen aktualizací klienta.
 
+### IP limit a důvěra proxy
+
+Auth omezuje veřejné routy na 120 požadavků za 60 s podle `req.ip`;
+IPv6 používá standardní `/56` seskupení `express-rate-limit`. Výjimky zůstávají
+jen `/health`, `/ready`, `/internal/verify`. JWKS není výjimka: vyčerpaný
+veřejný klient jej už nenačte, interní backend s odlišným socketem má vlastní
+bucket (ověřeno HTTP boundary testem, nikoli zátěží v nasazení).
+
+`AUTH_TRUSTED_PROXY_CIDRS` je explicitní čárkami oddělený seznam IPv4/IPv6
+CIDR. Bez konfigurace je prázdný: klienta určuje socket, nikoli hlavička.
+`AUTH_TRUSTED_PROXY_CIDRS_FILE` načte tentýž seznam ze souboru při startu a
+má přednost před přímou proměnnou; neplatná konfigurace nebo chybějící soubor
+zabrání startu. `/0` není povoleno. Nikdy nepoužívat globální `trust proxy=true`,
+RFC1918 jako celek ani klientské `CF-Connecting-IP` jako klíč.
+
+Dev předpis při `deploy:dev-auth` objeví přes Docker pouze konkrétní adresy
+`coolify-proxy` a jediného spravovaného cloudflared (label `com.anico.role=tunnel`).
+Zapíše jejich `/32` a `/128` do nesekretního
+`/srv/anico/dev/auth/trusted-proxy-cidrs`; release compose jej připojí read-only
+do `/run/config/trusted-proxy-cidrs`. Nedůvěřuje všem aplikačním kontejnerům.
+
+Samotný allowlist bez instalace secrets, změny gateway nebo restartu aplikací:
+
+```bash
+npm run deploy:dev-auth -w @anico/infrastructure -- --tags proxy-trust --check --diff
+npm run deploy:dev-auth -w @anico/infrastructure -- --tags proxy-trust
+```
+
+Tag spouští jen zjištění adres, kontroly a zápis tohoto nesekretního souboru.
+Předpokládá existující adresář `/srv/anico/dev/auth`; celý bootstrap nespouští.
+
+Express prochází X-Forwarded-For zprava pouze přes tyto povolené proxy, u
+prvního neznámého hopu končí; podvržené levé části řetězce a CF hlavičky
+nepovolí obcházení bucketu. Traefik smí přijmout forwarded hlavičky jen od
+spravované tunnel sítě, ne od internetového klienta. Cloudflare/Tunnel tvoří
+upstream hranici důvěry; nepublikovat port auth ani proxy mimo tuto cestu.
+
+**Připravená zdrojová oprava není nasazená změna.** Rollout po schválení:
+nejprve existující IaC/bootstrap pro proxy a tunnel, poté `deploy:dev-auth`
+pro allowlist a následně běžný release auth služby. Po znovuvytvoření proxy
+nebo tunnel kontejneru znovu vygenerovat allowlist a nasadit auth: adresy nejsou
+garantovaně stabilní. Soubor se čte jen při startu; nová adresa mimo allowlist
+vede ke sdílenému bucketu. Starou adresu Docker může přidělit jinému kontejneru,
+kterému by zastaralý allowlist neprávem důvěřoval. Regenerace a restart auth proto
+patří do stejné údržby jako změna proxy; samotná přesnost `/32`/`/128` nezaručuje
+identitu kontejneru po změně topologie. Nedoplňovat naslepo širší síť.
+
+Lokální E2E/load launcher explicitně důvěřuje jen `127.0.0.1/32`; jeho gateway
+zahazuje dodané forwarded hlavičky a zapisuje skutečný socket. Všichni
+lokální klienti i interní backendy zde mají tutéž loopback IP a záměrně
+sdílejí bucket včetně JWKS. Test s různými explicitními forwarded klienty
+je oddělený od tohoto lokálního zátěžového modelu.
+
 Po odhlášení gateway zamítne další požadavek bez platné relace. Již vydaný interní
 JWT je kryptograficky platný nejvýše dalších 30 s; nesmí se zpřístupnit prohlížeči
 ani použít jako veřejný alternativní způsob vstupu do služby.

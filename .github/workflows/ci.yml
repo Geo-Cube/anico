@@ -67,6 +67,51 @@ jobs:
       - run: npm run build
       - run: npm run test:unit -w @anico/infrastructure
       - run: npm run test:coverage
+      - run: npm run test:contract
+  e2e:
+    env:
+      MONGOMS_DISABLE_POSTINSTALL: '1'
+      MONGOMS_VERSION: '7.0.24'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Prepare verified MongoDB binary
+        run: npm run test:prepare-db
+      - name: Prepare verified NATS binary
+        run: npm run test:prepare-broker
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package.json') }}
+      - name: Install Chromium with system dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - name: Install Chromium system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+        working-directory: e2e
+      - run: npm run test:e2e
+      - name: Upload E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-diagnostics-${{ github.sha }}
+          path: |
+            e2e/test-results
+            e2e/playwright-report
+            e2e/stack-logs
+          retention-days: 7
   ansible:
     runs-on: ubuntu-latest
     steps:
@@ -79,7 +124,7 @@ jobs:
       - run: python -m pip install -r infrastructure/ansible/requirements.txt
       - run: bash infrastructure/ansible/check-local.sh
   publish:
-    needs: [check, ansible]
+    needs: [check, ansible, e2e]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
     permissions:
       contents: read

@@ -73,6 +73,65 @@
         owner: root
         group: root
         mode: '0700'
+    - name: Find the managed tunnel identity
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            ps,
+            -q,
+            --filter,
+            label=com.anico.role=tunnel,
+            --filter,
+            label=com.anico.managed-by=ansible,
+          ]
+      register: anico_auth_tunnel
+      changed_when: false
+      check_mode: false
+      tags: [proxy-trust]
+    - name: Require one managed tunnel before configuring proxy trust
+      ansible.builtin.assert:
+        that: anico_auth_tunnel.stdout_lines | length == 1
+      tags: [proxy-trust]
+    - name: Inspect only the network addresses of the trusted proxy identities
+      ansible.builtin.command:
+        argv:
+          [
+            docker,
+            inspect,
+            --format,
+            '{{ "{{json .NetworkSettings.Networks}}" }}',
+            '{{ item }}',
+          ]
+      loop: ['coolify-proxy', '{{ anico_auth_tunnel.stdout_lines[0] }}']
+      register: anico_auth_proxy_networks
+      changed_when: false
+      check_mode: false
+      tags: [proxy-trust]
+    - name: Require an address for each trusted proxy identity
+      ansible.builtin.assert:
+        that: >-
+          ((item.stdout | from_json | dict2items | map(attribute="value.IPAddress") | reject("equalto", "") | list | length) +
+          (item.stdout | from_json | dict2items | map(attribute="value.GlobalIPv6Address") | reject("equalto", "") | list | length)) > 0
+      loop: '{{ anico_auth_proxy_networks.results }}'
+      tags: [proxy-trust]
+    - name: Collect exact trusted proxy host addresses
+      ansible.builtin.set_fact:
+        anico_auth_proxy_v4: '{{ anico_auth_proxy_networks.results | map(attribute="stdout") | map("from_json") | map("dict2items") | flatten | map(attribute="value.IPAddress") | reject("equalto", "") | unique | list }}'
+        anico_auth_proxy_v6: '{{ anico_auth_proxy_networks.results | map(attribute="stdout") | map("from_json") | map("dict2items") | flatten | map(attribute="value.GlobalIPv6Address") | reject("equalto", "") | unique | list }}'
+      tags: [proxy-trust]
+    - name: Refuse empty proxy trust
+      ansible.builtin.assert:
+        that: (anico_auth_proxy_v4 | length) + (anico_auth_proxy_v6 | length) >= 2
+      tags: [proxy-trust]
+    - name: Install nonsecret exact proxy allowlist for the next auth release
+      ansible.builtin.copy:
+        content: '{{ ((anico_auth_proxy_v4 | map("regex_replace", "$", "/32") | list) + (anico_auth_proxy_v6 | map("regex_replace", "$", "/128") | list)) | join(",") }}'
+        dest: /srv/anico/dev/auth/trusted-proxy-cidrs
+        owner: root
+        group: root
+        mode: '0444'
+      tags: [proxy-trust]
     - name: Install auth-only runtime secrets
       ansible.builtin.copy:
         src: '{{ playbook_dir }}/../../.pulumi/dev-auth/{{ item }}'

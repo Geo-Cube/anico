@@ -15,9 +15,12 @@ export function createApp(dependencies: {
   isReady: () => boolean;
   /** Veřejné API docs; server zapíná pouze mimo produkci. */
   apiDocs?: boolean;
+  /** Explicitní CIDR proxy; neznámý socket nikdy nesmí určovat klienta hlavičkou. */
+  trustedProxyCidrs?: string[];
 }) {
   const app = express();
   app.disable('x-powered-by');
+  app.set('trust proxy', dependencies.trustedProxyCidrs ?? []);
   app.use(
     pinoHttp({
       logger: dependencies.logger,
@@ -40,6 +43,8 @@ export function createApp(dependencies: {
       limit: 120,
       standardHeaders: 'draft-8',
       legacyHeaders: false,
+      // Express ignoruje nedůvěryhodné hlavičky; validátor je nesmí vypisovat.
+      validate: { xForwardedForHeader: false, forwardedHeader: false },
       skip: (req) =>
         ['/health', '/ready', '/internal/verify'].includes(req.path),
     }),
