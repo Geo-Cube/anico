@@ -5,6 +5,11 @@ if (process.env.MONGODB_URI_FILE)
     process.env.MONGODB_URI_FILE,
     'utf8',
   ).trim();
+if (process.env.AUTH_TRUSTED_PROXY_CIDRS_FILE)
+  process.env.AUTH_TRUSTED_PROXY_CIDRS = readFileSync(
+    process.env.AUTH_TRUSTED_PROXY_CIDRS_FILE,
+    'utf8',
+  ).trim();
 import { pino } from 'pino';
 import { z } from 'zod';
 import { createApp } from './app.js';
@@ -23,6 +28,19 @@ const env = z
     PORT: z.coerce.number().int().min(1).max(65535).default(3001),
     HOST: z.enum(['127.0.0.1', '0.0.0.0', '::1', '::']).default('127.0.0.1'),
     MONGODB_URI: z.string().regex(/^mongodb(?:\+srv)?:\/\//),
+    AUTH_TRUSTED_PROXY_CIDRS: z
+      .string()
+      .default('')
+      .transform((value) =>
+        value ? value.split(',').map((cidr) => cidr.trim()) : [],
+      )
+      .pipe(
+        z.array(
+          z
+            .union([z.cidrv4(), z.cidrv6()])
+            .refine((cidr) => !cidr.endsWith('/0')),
+        ),
+      ),
     MIGRATE_ON_START: z.enum(['true', 'false']).default('false'),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -86,6 +104,7 @@ try {
     logger,
     modules: await createModules(connection),
     apiDocs: apiDocsEnabled(process.env),
+    trustedProxyCidrs: env.AUTH_TRUSTED_PROXY_CIDRS,
     isReady: () => !stopping && connection.readyState === 1,
   });
   const server = app.listen(env.PORT, env.HOST, () =>

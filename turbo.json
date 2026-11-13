@@ -74,6 +74,53 @@
         "MONGOMS_VERSION",
         "MONGOMS_RUNTIME_DOWNLOAD"
       ]
+    },
+    "test:contract": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": [
+        "MONGOMS_SYSTEM_BINARY",
+        "MONGOMS_VERSION",
+        "MONGOMS_RUNTIME_DOWNLOAD"
+      ],
+      "passThroughEnv": ["NATS_SERVER_BINARY", "TMPDIR"]
+    },
+    "test:e2e": {
+      "dependsOn": [
+        "^build",
+        "@anico/frontend#build",
+        "@anico/auth-service#build",
+        "@anico/breeder-service#build",
+        "@anico/animal-service#build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "CI",
+        "HOME",
+        "TMPDIR",
+        "PLAYWRIGHT_*",
+        "E2E_*",
+        "NATS_SERVER_BINARY",
+        "MONGOMS_*"
+      ]
+    },
+    "test:load": {
+      "dependsOn": [
+        "^build",
+        "@anico/frontend#build",
+        "@anico/auth-service#build",
+        "@anico/breeder-service#build",
+        "@anico/animal-service#build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "CI",
+        "HOME",
+        "TMPDIR",
+        "LOAD_*",
+        "NATS_SERVER_BINARY",
+        "MONGOMS_*"
+      ]
     }
   }
 }

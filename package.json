@@ -13,7 +13,10 @@
   "workspaces": [
     "apps/*",
     "packages/*",
-    "infrastructure"
+    "infrastructure",
+    "e2e",
+    "load",
+    "contracts"
   ],
   "scripts": {
     "build": "turbo run build",
@@ -29,6 +32,9 @@
     "test:unit": "turbo run test:unit",
     "test:integration": "turbo run test:integration",
     "test:coverage": "turbo run test:coverage",
+    "test:e2e": "turbo run test:e2e",
+    "test:load": "turbo run test:load --",
+    "test:contract": "turbo run test:contract",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "secrets:check": "bash .github/scripts/check-secrets.sh",

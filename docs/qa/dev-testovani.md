@@ -5,6 +5,12 @@ Doplňují automatické plány [UC-01](uc-01-test-plan.md) a [UC-03](uc-03-test-
 pravidla jsou v [doméně](../anico-domain.md), [návrhu UC-02](../design/uc-02-zvirata.md)
 a [návrhu UC-03](../design/uc-03-doklady.md).
 
+Automatická obdoba hlavních toků běží přes `npm run test:e2e` v Chromiu nad vlastním
+lokálním stackem ([spuštění a omezení](../../e2e/README.md)); kontrakty API a NATS ověřuje
+`npm run test:contract`. Zátěžové scénáře spouští `npm run test:load`
+([návod](../../load/README.md)). Žádná z těchto sad nezapisuje do sdíleného devu.
+Ruční kolo zůstává potřebné pro skutečné OIDC, Access, Traefik a konfiguraci nasazení.
+
 Výsledek zapisuj do sloupce **Výsledek**: `OK`, `CHYBA #číslo-úkolu`, `BLOKOVÁNO (důvod)`
 nebo `—` (neprovedeno). Každá chyba je GitHub issue s postupem reprodukce (šablona v §6).
 Kritická chyba (přístup bez oprávnění, ztráta nebo napůl uložená data) se opravuje

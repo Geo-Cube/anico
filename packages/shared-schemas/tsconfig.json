@@ -8,5 +8,6 @@
     "types": [],
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["tests", "dist", "node_modules"]
 }

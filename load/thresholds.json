@@ -1,0 +1,4 @@
+{
+  "default": { "p95Ms": 2000, "maxErrorRate": 0.01 },
+  "scenarios": {}
+}

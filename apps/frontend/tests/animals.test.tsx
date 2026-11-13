@@ -1,4 +1,8 @@
-import { animalBreeds, type Animal } from '@anico/shared-schemas';
+import {
+  animalBreeds,
+  type Animal,
+  type AnimalDocumentList,
+} from '@anico/shared-schemas';
 import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
@@ -151,6 +155,32 @@ beforeEach(() => {
       HttpResponse.json({ items: [animal], nextCursor: null }),
     ),
     http.get('/api/animal/animals/:id', () => HttpResponse.json(animal)),
+    http.get('/api/animal/animals/:id/documents', () =>
+      HttpResponse.json({
+        animalId: animal.id,
+        documentsState: 'PENDING',
+        documents: [
+          {
+            id: '123456789012345678901237',
+            animalId: animal.id,
+            documentType: 'PEDIGREE',
+            versionNumber: 1,
+            previousDocumentId: null,
+            isCurrent: true,
+            file: {
+              fileName: 'argo-pedigree.pdf',
+              contentType: 'application/pdf',
+              size: 2048,
+            },
+            assessmentStatus: 'PENDING',
+            submittedAt: '2026-01-01T00:00:00.000Z',
+            reviewedBy: null,
+            reviewedAt: null,
+            rejectionReason: null,
+          },
+        ],
+      } satisfies AnimalDocumentList),
+    ),
     http.get(
       '/api/animal/animals/:id/photos/:photoId/file',
       () =>

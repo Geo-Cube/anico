@@ -50,6 +50,27 @@ Scénáře a protokol: [testování na devu](qa/dev-testovani.md).
   backendů, chyby frontendu, upozornění do Teams) a Healthchecks.io watchdog (zdraví kontejnerů, disk, RAM,
   výpadek VPS). Sentry SDK v backendech i frontendu je bez DSN vypnuté. Ověřeno lokálně: testy a smoke proti
   falešnému příjmu (chyba se stackem, logy, žádné cookies/hlavičky/těla/query). IaC zatím neaplikované.
+- **Automatizace testů** – jednotkové testy `@anico/auth` a `@anico/shared-schemas`,
+  kontrakty frontend/API a NATS mezi službami (`npm run test:contract`) a Playwright
+  (`npm run test:e2e`) nad izolovaným lokálním stackem. E2E pokrývají UC-01–UC-03,
+  vrácení a zamítnutí žádosti, projekci přes NATS a izolaci účtů. CI spouští kontrakty
+  i E2E před publikací image. Lokální gateway nahrazuje Traefik a relace administrátorů
+  vznikají testovacím seedem; skutečné OIDC, Cloudflare Access ani nasazený dev tyto testy
+  neověřují. Příkazy a omezení: [přehled](PRIKAZY.md#kontroly), [E2E](../e2e/README.md).
+- **Lokální zátěžové testy** – `npm run test:load` měří čtení a zápis přes gateway
+  i přímo na backendy, kontroluje souběžné rozhodování a konzistenci outboxu/projekce.
+  Quick i plný běh prošly; plný běh 60 kol rozhodování bez porušení invariantů.
+  Prahy jsou orientační, nikoli SLA. Workflow `Load tests` se spouští pouze ručně
+  (`workflow_dispatch`); neblokuje každý PR. Návod a nálezy rate limitu:
+  [zátěžové testy](../load/README.md).
+- **Nálezy z automatizace** – frontendové testy zvířat mají typovaný handler seznamu
+  dokladů místo neobsloužených MSW požadavků. Auth má explicitní allowlist adres proxy,
+  takže důvěryhodné forwarded klienty rozděluje do samostatných IP bucketů; výchozí
+  konfigurace hlavičkám nedůvěřuje. HTTP regrese pokrývají spoofing i IPv6.
+  Samotný allowlist je na devu připravený (13. 11., `deploy:dev-auth --tags proxy-trust`):
+  jediná změna souboru, následná kontrola `changed=0`, stejné ID/image 17 kontejnerů.
+  Oprava aplikace ještě nasazená není; zbývá release auth
+  ([postup a hranice důvěry](AUTENTIZACE.md#ip-limit-a-důvěra-proxy)).
 
 Ověřeno: frontendové testy (101) a průchod v Chromiu proti skutečné breeder-service s MongoDB/GridFS
 (podání → vrácení → oprava bez souboru → verze 2 s historií u admina). Na devu zatím ne.

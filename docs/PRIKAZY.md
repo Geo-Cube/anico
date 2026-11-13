@@ -67,25 +67,36 @@ Reset a řešení přerušené migrace: [DB postup](DATABAZE.md).
 
 ## Kontroly
 
-| Chci                                                | Příkaz                                             |
-| --------------------------------------------------- | -------------------------------------------------- |
-| Zkontrolovat / opravit formát                       | `npm run format:check` / `npm run format`          |
-| Zkontrolovat TypeScript                             | `npm run typecheck`                                |
-| Spustit testy workspaces                            | `npm test`                                         |
-| Testy + coverage všech workspaces                   | `npm run test:coverage`                            |
-| Jen frontendové testy                               | `npm test -w @anico/frontend`                      |
-| Jen backendové unit testy                           | `npm run test:unit -w @anico/tvoje-service`        |
-| Jen HTTP integrační testy                           | `npm run test:integration -w @anico/tvoje-service` |
-| Testy infrastruktury                                | `npm test -w @anico/infrastructure`                |
-| Testy lokálního tunelu                              | `npm run test:dev-remote`                          |
-| Testy nasazovacího klienta                          | `npm run test:deployment`                          |
-| Ansible syntaxe a Python testy, bez přístupu na VPS | `bash infrastructure/ansible/check-local.sh`       |
-| Secrets v commitnuté historii                       | `npm run secrets:check`                            |
-| Docker smoke testy, vyžadují Docker                 | `npm run containers:check`                         |
+| Chci                                                | Příkaz                                                                            |
+| --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Zkontrolovat / opravit formát                       | `npm run format:check` / `npm run format`                                         |
+| Zkontrolovat TypeScript                             | `npm run typecheck`                                                               |
+| Spustit testy workspaces                            | `npm test`                                                                        |
+| Testy + coverage všech workspaces                   | `npm run test:coverage`                                                           |
+| Jen frontendové testy                               | `npm test -w @anico/frontend`                                                     |
+| Jen backendové unit testy                           | `npm run test:unit -w @anico/tvoje-service`                                       |
+| Jen HTTP integrační testy                           | `npm run test:integration -w @anico/tvoje-service`                                |
+| Testy infrastruktury                                | `npm test -w @anico/infrastructure`                                               |
+| Kontrakty frontend/API a událostí mezi službami     | `npm run test:contract`                                                           |
+| E2E v Chromiu proti celému lokálnímu stacku         | `npm run test:e2e`                                                                |
+| Zátěžové scénáře proti lokálnímu stacku             | `npm run test:load`                                                               |
+| Unit testy sdílené autentizace / schémat            | `npm run test:unit -w @anico/auth` / `npm run test:unit -w @anico/shared-schemas` |
+| Testy lokálního tunelu                              | `npm run test:dev-remote`                                                         |
+| Testy nasazovacího klienta                          | `npm run test:deployment`                                                         |
+| Ansible syntaxe a Python testy, bez přístupu na VPS | `bash infrastructure/ansible/check-local.sh`                                      |
+| Secrets v commitnuté historii                       | `npm run secrets:check`                                                           |
+| Docker smoke testy, vyžadují Docker                 | `npm run containers:check`                                                        |
 
 Další kontroly vývojových nástrojů: `npm run test:dev-tools` a
 `npm run test:generators`. Testovací MongoDB lze předem připravit pomocí
 `npm run test:prepare-db`; žádná osobní ani sdílená DB se k testům nepoužívá.
+
+Před prvním E2E během nainstaluj Chromium: `npm exec -w @anico/e2e -- playwright install chromium`
+(na Linuxu přidej `--with-deps`). E2E i zátěžové testy si spouštějí vlastní MongoDB,
+NATS, auth/breeder/animal služby a gateway; nepřipojují se ke sdílenému devu.
+`npm test` zahrnuje kontrakty, ale nikoli E2E ani zátěž. `test:coverage` zahrnuje služby,
+frontend a oba sdílené balíčky; kontrakty a E2E běží v CI samostatně.
+Podrobnosti a omezení: [E2E](../e2e/README.md), [zátěž](../load/README.md).
 
 `npm run preview -w @anico/frontend` pouze zobrazí build; nemá dev API proxy.
 
