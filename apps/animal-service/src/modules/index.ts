@@ -8,6 +8,8 @@ import { mongooseAnimalRepository } from './animal/infrastructure/mongoose-repos
 import { sharpPhotoResizer } from './animal/infrastructure/sharp-photo-resizer.js';
 import { DocumentsRouter } from './documents/http/documents-router.js';
 import { mongooseDocumentsRepository } from './documents/infrastructure/mongoose-documents-repository.js';
+import { OffersRouter } from './offers/http/offers-router.js';
+import { mongooseOffersRepository } from './offers/infrastructure/mongoose-offers-repository.js';
 // anico:module-imports
 
 // Composition root: framework/database adapters are connected here, outside domain/use cases.
@@ -39,6 +41,14 @@ export function createModules(
       verification: dependencies.verification,
       newId,
       logger: dependencies.logger,
+    }),
+  );
+  router.use(
+    '/',
+    OffersRouter({
+      repository: mongooseOffersRepository(connection),
+      verification: dependencies.verification,
+      newId,
     }),
   );
   // anico:module-routes

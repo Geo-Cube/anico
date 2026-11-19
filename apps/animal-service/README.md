@@ -48,6 +48,7 @@ src/
       infrastructure/       # Mongoose adaptér
       http/                 # Express + sdílená Zod validace
     documents/              # doklady zvířat UC-03 (stejné vrstvy)
+    offers/                 # nabídky zvířat US-04 (stejné vrstvy)
     index.ts                # propojení modulů a adaptérů
   app.ts                    # HTTP aplikace bez listen
   server.ts                 # konfigurace, DB spojení, start a shutdown
@@ -146,6 +147,21 @@ Stejný typ může být v podání vícekrát; ani další podání stejného ty
 Pouze endpoint `/versions` nahradí aktuální `REJECTED` verzi jedním nástupcem (+1, odkaz na předchůdce).
 Původní soubor a rozhodnutí zůstávají v historii této řady. Seznam a fronta pracují s aktuálními verzemi
 všech řad; odvozený stav má prioritu `PENDING` > `APPROVED` > `REJECTED`, bez dokladů `NOT_SUBMITTED`.
+
+### Nabídky zvířat (US-04)
+
+Modul [`offers`](src/modules/offers/README.md); nabídky jsou pole `offers[]` v dokumentu zvířete.
+
+| Metoda a cesta ve službě         | Co dělá                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| `POST /offers`                   | JSON `animalId`, `regionId`, volitelně `validFrom`, `validTo`, `message`; 201   |
+| `GET /offers/mine`               | Všechny nabídky chovatele se zvířetem; aktivní a naplánované nahoře             |
+| `POST /offers/:offerId/withdraw` | Stáhne blokující nabídku (bez těla, nevratné), vrací 200 s `WITHDRAWN` nabídkou |
+
+Zvíře má nejvýše jednu blokující (`SCHEDULED` / `ACTIVE`) nabídku, jinak 409 s `current`.
+Stav se odvozuje z časů a stažení. Stažení neblokující nabídky je 409, cizí nebo neexistující
+zvíře či nabídka 404, neplatný vstup (včetně `validTo` nejpozději v `validFrom` nebo
+`validFrom` v minulosti) 400.
 
 Všechny operace chovatele se zvířaty i doklady vyžadují ověřený účet: služba při
 každém požadavku čte vlastní kolekci `verifiedBreeders` podle `req.auth.userId`.

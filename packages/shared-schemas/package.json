@@ -15,7 +15,8 @@
       "import": "./dist/index.js"
     },
     "./catalogs/dog-breeds.json": "./catalogs/dog-breeds.json",
-    "./catalogs/horse-breeds.json": "./catalogs/horse-breeds.json"
+    "./catalogs/horse-breeds.json": "./catalogs/horse-breeds.json",
+    "./catalogs/regions.json": "./catalogs/regions.json"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

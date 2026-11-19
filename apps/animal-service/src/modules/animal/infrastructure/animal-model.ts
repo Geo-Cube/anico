@@ -4,10 +4,13 @@ import {
   AnimalSexSchema,
   AnimalSpeciesSchema,
   AssessmentStatusSchema,
+  MAX_OFFER_MESSAGE_LENGTH,
+  RegionIdSchema,
   type Animal,
   type AnimalDocumentType,
   type AnimalPhotoSize,
   type AssessmentStatus,
+  type RegionId,
 } from '@anico/shared-schemas';
 import type { PhotoContentType } from '../domain/entity.js';
 
@@ -52,6 +55,19 @@ export interface StoredPhotoVariant {
   size: number;
 }
 
+/** Nabídka vnořená ve zvířeti (US-04); stav se z uložených údajů odvozuje, neukládá se. */
+export interface StoredOffer {
+  _id: Types.ObjectId;
+  regionId: RegionId;
+  validFrom: Date;
+  validTo: Date | null;
+  message: string | null;
+  createdAt: Date;
+  createdBy: string;
+  withdrawnAt: Date | null;
+  withdrawnBy: string | null;
+}
+
 export interface StoredAnimal {
   ownerUserId: string;
   name: string;
@@ -71,6 +87,8 @@ export interface StoredAnimal {
   documents: StoredDocumentVersion[];
   /** Optimistická kontrola zápisů do `documents`; mění ji každé podání i rozhodnutí. */
   documentsRevision: number;
+  /** Nabídky zvířete (US-04); CRUD zvířat a doklady je nikdy nečtou. */
+  offers: StoredOffer[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +109,7 @@ export const PROFILE_WITH_DOCUMENT_STATUSES = {
   'documents.reviewedAt': 0,
   'documents.rejectionReason': 0,
   documentsRevision: 0,
+  offers: 0,
 };
 
 const variantSchema = {
@@ -166,6 +185,24 @@ const documentVersionSchema = new Schema<StoredDocumentVersion>(
   { strict: 'throw' },
 );
 
+const offerSchema = new Schema<StoredOffer>(
+  {
+    regionId: { type: String, required: true, enum: RegionIdSchema.options },
+    validFrom: { type: Date, required: true },
+    validTo: { type: Date, default: null },
+    message: {
+      type: String,
+      default: null,
+      maxlength: MAX_OFFER_MESSAGE_LENGTH,
+    },
+    createdAt: { type: Date, required: true },
+    createdBy: { type: String, required: true, maxlength: 36 },
+    withdrawnAt: { type: Date, default: null },
+    withdrawnBy: { type: String, default: null, maxlength: 36 },
+  },
+  { strict: 'throw' },
+);
+
 export function animalModel(connection: Connection): Model<StoredAnimal> {
   const existing = connection.models.Animal as Model<StoredAnimal> | undefined;
   if (existing) return existing;
@@ -203,6 +240,7 @@ export function animalModel(connection: Connection): Model<StoredAnimal> {
       profileRevision: { type: Number, default: 0 },
       documents: { type: [documentVersionSchema], default: [] },
       documentsRevision: { type: Number, default: 0 },
+      offers: { type: [offerSchema], default: [] },
     },
     {
       timestamps: true,

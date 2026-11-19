@@ -71,6 +71,13 @@ Scénáře a protokol: [testování na devu](qa/dev-testovani.md).
   jediná změna souboru, následná kontrola `changed=0`, stejné ID/image 17 kontejnerů.
   Oprava aplikace ještě nasazená není; zbývá release auth
   ([postup a hranice důvěry](AUTENTIZACE.md#ip-limit-a-důvěra-proxy)).
+- **US-04 Vytvořit nabídku (backend)** – implementováno na větvi `feature/us04-create-offer-api`, nenasazeno,
+  frontend nenapojen. Modul `offers` v `animal-service` (`POST /offers`, `GET /offers/mine`,
+  `POST /offers/:offerId/withdraw`), nabídky vnořené ve zvířeti, stav odvozený z času, jedna `SCHEDULED`/`ACTIVE`
+  nabídka na zvíře vynucená atomickým zápisem, katalog krajů v `@anico/shared-schemas`
+  ([ADR-0008](adr/0008-nabidky-vnorene-ve-zvireti.md), [návrh](design/uc-04-nabidky.md),
+  [testovací plán](qa/uc-04-test-plan.md)). Úprava, reaktivace a smazání nabídky nejsou; poptávky (US-05) neexistují,
+  ve stažení je `TODO(US-05)`.
 
 Ověřeno: frontendové testy (101) a průchod v Chromiu proti skutečné breeder-service s MongoDB/GridFS
 (podání → vrácení → oprava bez souboru → verze 2 s historií u admina). Na devu zatím ne.

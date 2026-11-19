@@ -18,11 +18,18 @@ import {
   AnimalSpeciesSchema,
   AssessmentStatusSchema,
   CreateAnimalSchema,
+  CreateOfferSchema,
   DecideAnimalDocumentSchema,
   DocumentReviewListSchema,
   DocumentReviewSchema,
   MAX_DOCUMENTS_PER_SUBMISSION,
   MAX_PHOTOS_PER_ANIMAL,
+  MyOfferListSchema,
+  MyOfferSchema,
+  OfferIdSchema,
+  OfferSchema,
+  OfferStatusSchema,
+  RegionIdSchema,
   ServiceHealthResponseSchema,
   UpdateAnimalSchema,
 } from '@anico/shared-schemas';
@@ -67,6 +74,16 @@ const AnimalDocumentConflictSchema = z.strictObject({
       'Důvod konfliktu. `current` (aktuální verze téže řady) chybí jen u `Documents changed concurrently; retry`.',
     ),
   current: AnimalDocumentSchema.optional(),
+});
+const OfferConflictSchema = z.strictObject({
+  error: z
+    .enum(['Animal already has an active offer', 'Offer cannot be withdrawn'])
+    .describe(
+      'Důvod konfliktu. `current` (blokující nebo stahovaná nabídka) chybí jen při opakovaném souběhu zápisu.',
+    ),
+  current: z
+    .strictObject({ id: OfferIdSchema, status: OfferStatusSchema })
+    .optional(),
 });
 const SubmitAnimalDocumentsFormSchema = z.strictObject({
   documentTypes: z
@@ -133,6 +150,14 @@ const components = [
   ['SubmitAnimalDocumentsForm', SubmitAnimalDocumentsFormSchema],
   ['ReplaceAnimalDocumentForm', ReplaceAnimalDocumentFormSchema],
   ['AnimalDocumentConflict', AnimalDocumentConflictSchema],
+  ['RegionId', RegionIdSchema],
+  ['OfferId', OfferIdSchema],
+  ['OfferStatus', OfferStatusSchema],
+  ['CreateOffer', CreateOfferSchema],
+  ['Offer', OfferSchema],
+  ['MyOffer', MyOfferSchema],
+  ['MyOfferList', MyOfferListSchema],
+  ['OfferConflict', OfferConflictSchema],
   ['ServiceHealthResponse', ServiceHealthResponseSchema],
   ['Error', ErrorSchema],
   ['ValidationError', ValidationErrorSchema],
@@ -190,6 +215,12 @@ const responses = {
   NotFound: errorResponse(
     'Zvíře, fotografie nebo doklad neexistuje, nebo patří jinému chovateli – `{"error":"Animal not found"}` / `{"error":"Photo not found"}` / `{"error":"Document not found"}`.',
   ),
+  AnimalNotFound: errorResponse(
+    'Zvíře neexistuje, nebo patří jinému chovateli – `{"error":"Animal not found"}`.',
+  ),
+  OfferNotFound: errorResponse(
+    'Nabídka neexistuje, nebo patří jinému chovateli – `{"error":"Offer not found"}`.',
+  ),
   PayloadTooLarge: errorResponse(
     `Soubor je větší než ${MAX_MIB} MiB, nebo JSON tělo překračuje limit – \`{"error":"Payload too large"}\`. Nic se neuloží.`,
   ),
@@ -242,6 +273,13 @@ const queryParameter = (
   description: string,
   schema: JsonObject,
 ) => ({ name, in: 'query', required: false, description, schema });
+const offerIdParameter = {
+  name: 'offerId',
+  in: 'path',
+  required: true,
+  description: 'ID nabídky.',
+  schema: ref('OfferId'),
+};
 const documentIdParameter = {
   name: 'documentId',
   in: 'path',
@@ -261,14 +299,16 @@ const readAccess =
   'Vlastník zvířete s ověřeným účtem, nebo posuzovatel (role `admin` | `owner`), který ověření ani vlastnictví nepotřebuje.';
 const conflict = (description: string) =>
   errorResponse(description, ref('AnimalDocumentConflict'));
+const offerConflict = (description: string) =>
+  errorResponse(description, ref('OfferConflict'));
 
 /** OpenAPI 3.1 dokument animal-service (UC-02 zvířata a fotografie, UC-03 doklady) ze sdílených Zod schémat. */
 export function openApiDocument(): JsonObject {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'AniCo animal-service – zvířata a doklady',
-      version: '0.2.0',
+      title: 'AniCo animal-service – zvířata, doklady a nabídky',
+      version: '0.3.0',
       description: [
         'Profily zvířat s fotografiemi (UC-02) a doklady zvířat (UC-03, ADR-0005). Chovatel spravuje jen svá zvířata; administrátor posuzuje doklady.',
         '',
@@ -277,6 +317,8 @@ export function openApiDocument(): JsonObject {
         'Každá příloha zakládá samostatnou řadu verzí: `versionNumber: 1`, `previousDocumentId: null`, `PENDING`. Více řad stejného typu je povoleno i v jednom podání. Nová verze vzniká jen explicitní náhradou aktuální zamítnuté verze; původní soubor a rozhodnutí zůstávají v historii. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.',
         '',
         'Operace chovatele vyžadují ověřený účet z breeder-service (`isVerified`), ověřuje se při každém požadavku. Cizí i neexistující zvíře je 404. Identitu doplňuje gateway do hlavičky `x-anico-identity`.',
+        '',
+        'Nabídky (US-04) jsou zvířecí `offers[]` ve stejném dokumentu. Stav (`SCHEDULED`, `ACTIVE`, `WITHDRAWN`, `EXPIRED`) se odvozuje z časů a stažení, neukládá se. Zvíře má nejvýše jednu blokující nabídku a stažení je nevratné.',
       ].join('\n'),
     },
     servers: [
@@ -295,6 +337,10 @@ export function openApiDocument(): JsonObject {
       {
         name: 'document-review',
         description: 'Posuzování dokladů (role `admin` | `owner`).',
+      },
+      {
+        name: 'offers',
+        description: 'Nabídky vlastních zvířat (US-04).',
       },
       { name: 'health', description: 'Stav služby (veřejné).' },
     ],
@@ -663,6 +709,82 @@ export function openApiDocument(): JsonObject {
             '401': responseRef('Unauthorized'),
             '403': responseRef('ReviewerForbidden'),
             '500': responseRef('InternalError'),
+          },
+        },
+      },
+      '/offers': {
+        post: {
+          tags: ['offers'],
+          operationId: 'createOffer',
+          summary: 'Vytvořit nabídku',
+          description:
+            'Vlastník zvířete s ověřeným účtem. Zvíře smí mít nejvýše jednu blokující (`SCHEDULED` nebo `ACTIVE`) nabídku; kontrola a zápis jsou jedna atomická operace. Chybějící `validFrom` znamená „ihned“ (počátek v minulosti je přijat jen s tolerancí 1 minuty), chybějící nebo `null` `validTo` „bez omezení“; `validTo` musí být po `validFrom`. Zpráva se ořízne, prázdná je `null`. Vlastník, stav ani audit se z těla nepřebírají.',
+          requestBody: {
+            required: true,
+            content: json(ref('CreateOffer')),
+          },
+          responses: {
+            '201': {
+              description: 'Vytvořená nabídka (bez hlavičky `Location`).',
+              content: json(ref('Offer')),
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '404': responseRef('AnimalNotFound'),
+            '409': offerConflict(
+              '`Animal already has an active offer` – `current` je blokující nabídka (chybí jen při opakovaném souběhu zápisu).',
+            ),
+            '413': errorResponse(
+              'Tělo přesahuje limit – `{"error":"Payload too large"}`.',
+            ),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
+          },
+        },
+      },
+      '/offers/mine': {
+        get: {
+          tags: ['offers'],
+          operationId: 'listMyOffers',
+          summary: 'Moje nabídky',
+          description:
+            'Všechny nabídky přihlášeného chovatele s ověřeným účtem včetně stažených a vypršelých. `SCHEDULED` a `ACTIVE` jsou nahoře, uvnitř skupiny nejnovější první. Stav se odvozuje z časů a stažení k okamžiku požadavku. `nextCursor` je zatím vždy `null`.',
+          responses: {
+            '200': {
+              description: 'Nabídky chovatele.',
+              content: json(ref('MyOfferList')),
+            },
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
+          },
+        },
+      },
+      '/offers/{offerId}/withdraw': {
+        parameters: [offerIdParameter],
+        post: {
+          tags: ['offers'],
+          operationId: 'withdrawOffer',
+          summary: 'Stáhnout nabídku',
+          description:
+            'Jen vlastník s ověřeným účtem a jen nad blokující (`SCHEDULED` nebo `ACTIVE`) nabídkou; stažení je jeden atomický zápis a je nevratné. Tělo se nečte.',
+          responses: {
+            '200': {
+              description:
+                'Stažená nabídka (`WITHDRAWN`, `canWithdraw: false`).',
+              content: json(ref('Offer')),
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '404': responseRef('OfferNotFound'),
+            '409': offerConflict(
+              '`Offer cannot be withdrawn` – nabídka je už `WITHDRAWN` nebo `EXPIRED`; `current` nese její stav.',
+            ),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
           },
         },
       },

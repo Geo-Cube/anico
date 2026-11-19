@@ -5,6 +5,7 @@ import { OPENAPI_FILE, renderOpenApiJson } from '../../scripts/openapi.js';
 import { healthRouter } from '../../src/health/health-router.js';
 import { AnimalRouter } from '../../src/modules/animal/http/router.js';
 import { DocumentsRouter } from '../../src/modules/documents/http/documents-router.js';
+import { OffersRouter } from '../../src/modules/offers/http/offers-router.js';
 import { openApiDocument } from '../../src/openapi/document.js';
 
 type Json = Record<string, any>;
@@ -41,7 +42,7 @@ describe('OpenAPI document of animal-service', () => {
     );
   });
 
-  it('documents exactly the routes registered by the animal, documents and health routers', () => {
+  it('documents exactly the routes registered by the animal, documents, offers and health routers', () => {
     const unused = async () => {
       throw new Error('not called');
     };
@@ -78,6 +79,19 @@ describe('OpenAPI document of animal-service', () => {
           verification: { isVerified: unused },
           newId: () => '',
           logger: { warn: () => undefined },
+        }),
+      ),
+      ...routesOf(
+        OffersRouter({
+          repository: {
+            load: unused,
+            append: unused,
+            listByOwner: unused,
+            findOwned: unused,
+            withdraw: unused,
+          },
+          verification: { isVerified: unused },
+          newId: () => '',
         }),
       ),
     ].sort();

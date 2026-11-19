@@ -1,0 +1,18 @@
+{
+  "regions": [
+    { "id": "praha", "name": "Hlavní město Praha" },
+    { "id": "stredocesky", "name": "Středočeský kraj" },
+    { "id": "jihocesky", "name": "Jihočeský kraj" },
+    { "id": "plzensky", "name": "Plzeňský kraj" },
+    { "id": "karlovarsky", "name": "Karlovarský kraj" },
+    { "id": "ustecky", "name": "Ústecký kraj" },
+    { "id": "liberecky", "name": "Liberecký kraj" },
+    { "id": "kralovehradecky", "name": "Královéhradecký kraj" },
+    { "id": "pardubicky", "name": "Pardubický kraj" },
+    { "id": "vysocina", "name": "Kraj Vysočina" },
+    { "id": "jihomoravsky", "name": "Jihomoravský kraj" },
+    { "id": "olomoucky", "name": "Olomoucký kraj" },
+    { "id": "zlinsky", "name": "Zlínský kraj" },
+    { "id": "moravskoslezsky", "name": "Moravskoslezský kraj" }
+  ]
+}
