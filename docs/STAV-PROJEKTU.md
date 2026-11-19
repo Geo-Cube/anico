@@ -57,6 +57,10 @@ Scénáře a protokol: [testování na devu](qa/dev-testovani.md).
   i E2E před publikací image. Lokální gateway nahrazuje Traefik a relace administrátorů
   vznikají testovacím seedem; skutečné OIDC, Cloudflare Access ani nasazený dev tyto testy
   neověřují. Příkazy a omezení: [přehled](PRIKAZY.md#kontroly), [E2E](../e2e/README.md).
+- **Náhled fotografií zvířete při posouzení dokladu (US 03, frontend)** na
+  `/administrace/chovatele/doklady/:animalId/:documentId/fotografie`; rozepsaný důvod zamítnutí přežije
+  cestu tam a zpět. Ověřeno jen proti MSW: čeká na BE `GET /api/animal/animals/:animalId/photos` a přístup
+  admina k souborům fotografií, do té doby náhled na devu ukáže chybový stav.
 - **Lokální zátěžové testy** – `npm run test:load` měří čtení a zápis přes gateway
   i přímo na backendy, kontroluje souběžné rozhodování a konzistenci outboxu/projekce.
   Quick i plný běh prošly; plný běh 60 kol rozhodování bez porušení invariantů.
