@@ -4,9 +4,9 @@ import type {
   DocumentAnimal,
 } from '@anico/shared-schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Images, TriangleAlert } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useOutlet, useParams } from 'react-router';
 import { breedLabel, sexLabel, speciesLabel } from '@/features/animals/api';
 import { sessionGeneration, useCurrentSession } from '@/features/auth';
 import { ApproveRequestDialog } from '@/features/breeders/ApproveRequestDialog';
@@ -20,6 +20,7 @@ import { Card } from '@/shared/ui/card';
 import { QueryErrorState } from '@/shared/ui/state-panel';
 import {
   DOCUMENT_TYPE_LABEL,
+  QUEUE_PATH,
   decideDocument,
   documentConflict,
   documentsKey,
@@ -28,9 +29,7 @@ import {
   reviewQueueKey,
 } from './api';
 import { AssessmentChip, FileActions, VersionHistory } from './DocumentParts';
-
-/** Absolutní cesta fronty; detail leží o dvě úrovně níž (`:animalId/:documentId`). */
-const QUEUE_PATH = '/administrace/chovatele/doklady';
+import type { DocumentPhotosContext } from './DocumentPhotos';
 
 const eyebrow =
   'text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase';
@@ -109,6 +108,19 @@ function ReviewPanel({
   const [conflict, setConflict] = useState(false);
   const typeLabel = DOCUMENT_TYPE_LABEL[target.documentType];
   const pending = target.isCurrent && target.assessmentStatus === 'PENDING';
+  // Náhled fotografií je vnořená trasa; posouzení zůstává připojené (jen skryté),
+  // aby rozepsaný důvod zamítnutí přežil.
+  const outlet = useOutlet({
+    animal,
+    typeLabel,
+  } satisfies DocumentPhotosContext);
+  const previewing = outlet !== null;
+  const photosLink = useRef<HTMLAnchorElement>(null);
+  const wasPreviewing = useRef(false);
+  useEffect(() => {
+    if (wasPreviewing.current && !previewing) photosLink.current?.focus();
+    wasPreviewing.current = previewing;
+  }, [previewing]);
 
   const decide = useMutation({
     mutationFn: (input: DecideAnimalDocumentInput) =>
@@ -152,8 +164,12 @@ function ReviewPanel({
   const decisionError =
     decide.isError && !documentConflict(decide.error) ? decide.error : null;
 
-  return (
-    <section className="flex flex-col gap-6" aria-labelledby="document-title">
+  const review = (
+    <section
+      hidden={previewing}
+      className="flex flex-col gap-6"
+      aria-labelledby="document-title"
+    >
       <div className="flex flex-col gap-1">
         <nav
           aria-label="Drobečková navigace"
@@ -215,6 +231,18 @@ function ReviewPanel({
               <code className="break-all">{animal.ownerUserId}</code>
             </dd>
           </dl>
+          <Link
+            ref={photosLink}
+            to="fotografie"
+            className={buttonVariants({
+              variant: 'outline',
+              size: 'sm',
+              className: 'self-start',
+            })}
+          >
+            <Images aria-hidden />
+            Zobrazit fotografie
+          </Link>
         </Card>
 
         <Card className="flex flex-col justify-between gap-4 p-6">
@@ -297,7 +325,7 @@ function ReviewPanel({
       </div>
 
       <ApproveRequestDialog
-        open={dialog === 'approve' && pending}
+        open={dialog === 'approve' && pending && !previewing}
         isSaving={isSaving}
         title="Schválit doklad"
         description={
@@ -316,7 +344,7 @@ function ReviewPanel({
         onConfirm={() => decide.mutate({ decision: 'APPROVED' })}
       />
       <RejectRequestDialog
-        open={dialog === 'reject' && pending}
+        open={dialog === 'reject' && pending && !previewing}
         isSaving={isSaving}
         error={
           dialog === 'reject' && decisionError !== null
@@ -332,5 +360,12 @@ function ReviewPanel({
         }
       />
     </section>
+  );
+
+  return (
+    <>
+      {review}
+      {outlet}
+    </>
   );
 }
