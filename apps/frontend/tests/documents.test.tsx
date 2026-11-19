@@ -1386,7 +1386,7 @@ describe('doklady zvířete – administrátor', () => {
     );
 
     it('jedna fotografie ukáže počítadlo „Fotografie 1 ze 1“', async () => {
-      respondWith([photo(1)]);
+      respondWith([photo(1, true)]);
       renderApp(previewPath);
       expect(await bigImage(1, 1)).toBeInTheDocument();
       expect(screen.getByText('Fotografie 1 ze 1')).toBeInTheDocument();

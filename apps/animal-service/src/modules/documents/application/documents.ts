@@ -1,4 +1,4 @@
-import { AuthorizationError, type Identity, type Role } from '@anico/auth';
+import { AuthorizationError, type Identity } from '@anico/auth';
 import type {
   AnimalDocumentType,
   DecideAnimalDocumentInput,
@@ -22,13 +22,12 @@ import {
 import type { FileStorage } from '../../../files/file-storage.js';
 import type { BreederVerification } from '../../animal/domain/entity.js';
 import {
+  isReviewer,
   verifiedBreeder,
   type WarnLogger,
 } from '../../animal/application/verified-breeder.js';
 import type { AnimalDocumentsRepository } from '../domain/ports.js';
 
-/** Role posuzovatele dokladů (stejné jako u UC-01). */
-const REVIEWER_ROLES: readonly Role[] = ['admin', 'owner'];
 const QUEUE_LIMIT = 500;
 const WRITE_ATTEMPTS = 3;
 
@@ -48,9 +47,6 @@ class UnknownWriteOutcome extends Error {
     super('Document write outcome unknown', { cause });
   }
 }
-
-const isReviewer = (identity: Identity) =>
-  REVIEWER_ROLES.some((role) => identity.roles.includes(role));
 
 export function documentUseCases(dependencies: {
   repository: AnimalDocumentsRepository;

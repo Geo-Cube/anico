@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import dogs from '../catalogs/dog-breeds.json' with { type: 'json' };
 import horses from '../catalogs/horse-breeds.json' with { type: 'json' };
 import {
+  AnimalPhotoListSchema,
   AnimalProfileSchema,
   AnimalSchema,
   CreateAnimalSchema,
@@ -277,5 +278,14 @@ describe('AnimalSchema', () => {
       photo(i, i === 0),
     );
     expect(AnimalSchema.safeParse({ ...animal, photos }).success).toBe(false);
+  });
+
+  it('seznam fotografií pro posuzovatele drží stejná pravidla jako fotografie zvířete', () => {
+    const parse = (items: unknown[]) =>
+      AnimalPhotoListSchema.safeParse({ items }).success;
+    expect(parse([])).toBe(true);
+    expect(parse([photo(1, false), photo(2, true)])).toBe(true);
+    expect(parse([photo(1, false)])).toBe(false);
+    expect(parse([photo(1, true), photo(2, true)])).toBe(false);
   });
 });

@@ -125,7 +125,8 @@ identitu pro požadavky z UI doplňuje gateway, ne autorizační dialog Swaggeru
 | `GET /animals/:animalId`                      | Detail vlastního zvířete                                                 |
 | `PATCH /animals/:animalId`                    | Změní profil i fotografie jedním zápisem                                 |
 | `DELETE /animals/:animalId`                   | Odstraní zvíře, fotografie i všechny verze dokladů se soubory, vrací 204 |
-| `GET /animals/:animalId/photos/:photoId/file` | Soubor fotografie (`inline`, `nosniff`, `sandbox` CSP)                   |
+| `GET /animals/:animalId/photos`               | Fotografie v pořadí galerie; vlastník, nebo posuzovatel (ADR-0008)       |
+| `GET /animals/:animalId/photos/:photoId/file` | Soubor fotografie (`inline`, `nosniff`, `sandbox` CSP); totéž oprávnění  |
 
 ### Doklady zvířat (UC-03)
 
@@ -154,7 +155,8 @@ schválení), při chybě čtení DB 503. Výpadek brokeru nepřeruší použív
 projekce; consumer se znovu připojuje na pozadí. Breeder HTTP API se nevolá.
 Cizí nebo neexistující zvíře, fotografie či doklad je 404; chybějící role 403.
 Posuzovatel (`admin` | `owner`) čte a rozhoduje o dokladech bez vlastnictví
-i ověření; ke správě cizích zvířat oprávnění nemá.
+i ověření a čte fotografie zvířete s doklady ([ADR-0008](../../docs/adr/0008-posuzovatel-cte-fotografie-zvirete.md));
+ke správě cizích zvířat oprávnění nemá.
 
 Z lokálního frontendu používej prefix **`/api/animal`**, například
 `fetch('/api/animal/animals')`. Vlastní server běží na portu **3002**;
