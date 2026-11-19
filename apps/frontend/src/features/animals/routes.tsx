@@ -4,6 +4,7 @@ import { DocumentReplacePage } from '@/features/documents/DocumentReplacePage';
 import { DocumentUploadPage } from '@/features/documents/DocumentUploadPage';
 import { AnimalDetailPage } from './AnimalDetailPage';
 import { AnimalFormPage } from './AnimalForm';
+import { AnimalOfferPage } from './AnimalOfferPage';
 import { AnimalsPage } from './AnimalsPage';
 import { VerifiedBreederGate } from './VerifiedBreederGate';
 
@@ -16,7 +17,6 @@ export const animalsRoutes: RouteObject[] = [
       { path: 'nove', element: <AnimalFormPage /> },
       { path: ':animalId', element: <AnimalDetailPage /> },
       { path: ':animalId/upravit', element: <AnimalFormPage /> },
-      // Doklady UC-03: podání (WF 02/03), historie verzí, doplnění zamítnutého (WF 09).
       { path: ':animalId/doklady/nahrat', element: <DocumentUploadPage /> },
       {
         path: ':animalId/doklady/:documentId',
@@ -27,5 +27,10 @@ export const animalsRoutes: RouteObject[] = [
         element: <DocumentReplacePage />,
       },
     ],
+  },
+  {
+    path: 'nabidky',
+    element: <VerifiedBreederGate />,
+    children: [{ path: ':offerId', element: <AnimalOfferPage /> }],
   },
 ];
