@@ -13,11 +13,11 @@ Odkazuj se na ID: `UC-01`, `UC-03/A3`, `WF 05`, `US-02`.
 
 ## 2. Aktéři a oprávnění
 
-| Aktér          | Co smí                                                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Vlastník AniCo | Jmenuje administrátory (přes správu uživatelů). V UC nemá scénář.                                                              |
-| Administrátor  | Posuzuje žádosti chovatelů a doklady zvířat, stahuje přílohy, vidí historii rozhodnutí.                                        |
-| Chovatel       | Spravuje svůj účet; po schválení vlastní zvířata, fotografie, doklady. K soukromým přílohám jiného chovatele **nemá přístup**. |
+| Aktér          | Co smí                                                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Vlastník AniCo | Jmenuje administrátory (přes správu uživatelů). V UC nemá scénář.                                                                    |
+| Administrátor  | Posuzuje žádosti chovatelů a doklady zvířat, stahuje přílohy, vidí historii rozhodnutí a fotografie posuzovaného zvířete (ADR-0008). |
+| Chovatel       | Spravuje svůj účet; po schválení vlastní zvířata, fotografie, doklady. K soukromým přílohám jiného chovatele **nemá přístup**.       |
 
 - Admin práva zajišťuje správa uživatelů. **Schválení chovatelského účtu admin práva nepřiděluje.**
 - Vlastníka a admina systém určuje **z přihlášení**, nikdy z payloadu požadavku (`breeder_id` u zvířete se přebírá z identity).
@@ -96,6 +96,7 @@ Přesná adresa se neeviduje.
 6. Aktuální verze = poslední v řetězci. Do fronty admina patří jen aktuální `PENDING` verze, ne historické.
 7. „Stav dokladů“ zvířete v UI je odvozený údaj: priorita PENDING > APPROVED > REJECTED; bez dokladů „Nedoložené“. **Není uložen.** Filtr: Všechna / Ověřená / K posouzení / Zamítnutá / Nedoložená.
 8. Historii verzí (soubor, čas, admin, rozhodnutí, důvod) smí vidět vlastník zvířete a admin; jinak odmítnout.
+9. Admin při posuzování dokladů smí prohlížet fotografie daného zvířete (jen číst, [ADR-0008](adr/0008-posuzovatel-cte-fotografie-zvirete.md)). Fotografie zůstávají volitelné; jejich absence posouzení nebrání.
 
 ### US-04 – Nabídky
 

@@ -2,7 +2,7 @@ import {
   AnimalDocumentHistorySchema,
   AnimalDocumentListSchema,
   AnimalDocumentSchema,
-  AnimalPhotoSchema,
+  AnimalPhotoListSchema,
   DocumentReviewListSchema,
   type AnimalDocument,
   type AnimalDocumentFile,
@@ -10,7 +10,6 @@ import {
   type AssessmentStatus,
   type DecideAnimalDocumentInput,
 } from '@anico/shared-schemas';
-import { z } from 'zod';
 import { animalKey } from '@/features/animals/api';
 import { isUnverifiedBreeder } from '@/features/animals/AnimalError';
 import { apiBlob, apiRequest, isApiError } from '@/shared/lib/http';
@@ -49,15 +48,13 @@ export const historyQuery = (animalId: string, documentId: string) => ({
     }),
 });
 
-// TODO(US03 BE): endpoint GET /animals/:animalId/photos pro admina zatím neexistuje (pracuje se proti mocku)
-// a soubory GET /animals/:animalId/photos/:photoId/file?size= vydá BE jen vlastníkovi; obojí zpřístupnit adminovi
-// a schéma přesunout do shared-schemas spolu s BE.
+/** Fotografie zvířete pro náhled při posouzení dokladu; čte je i posuzovatel (ADR-0008). */
 export const animalPhotosQuery = (animalId: string) => ({
   queryKey: [...animalKey, animalId, 'photos'] as const,
   queryFn: ({ signal }: { signal: AbortSignal }) =>
     apiRequest(`${base}/animals/${encodeURIComponent(animalId)}/photos`, {
       signal,
-      schema: z.object({ items: z.array(AnimalPhotoSchema) }),
+      schema: AnimalPhotoListSchema,
     }),
 });
 
