@@ -27,3 +27,11 @@ a `AnimalSchema` z `@anico/shared-schemas`. `CreateAnimalSchema` kontroluje tak�
 druhu a ID plemene; PATCH backend ověřuje proti výslednému uloženému stavu.
 `animalBreeds('dog')` / `animalBreeds('horse')` poskytne stejné položky pro výběr v UI
 bez kopírování JSONů nebo vlastních seznamů.
+
+## Kraje pro nabídky
+
+`regions.json` obsahuje 14 krajů České republiky (včetně Hlavního města Prahy) jako pole
+`regions` s položkami `{id, name}` v pořadí číselníku. Nabídka (US-04) ukládá stabilní `id`
+(např. `jihomoravsky`), UI zobrazuje české `name`. Nepoužívej vlastní seznam krajů:
+`RegionIdSchema` validuje `id` proti tomuto souboru a `regions()` z `@anico/shared-schemas`
+vrací stejné položky pro výběr v UI. Při přejmenování kraje zachovej jeho `id`.

@@ -1,4 +1,4 @@
-# AniCo – doménový kontext pro agenty (MVP: US-01 až US-03)
+# AniCo – doménový kontext pro agenty (MVP: US-01 až US-04)
 
 Kompaktní výtah z business analýzy (BPMI DL Business Model – Tým 5). Je to **jediný zdroj pravdy pro agenty**.
 Při rozporu s původní analýzou vyhrává analýza – rozpor nahlas ohlas a oprav tento soubor.
@@ -7,8 +7,8 @@ Odkazuj se na ID: `UC-01`, `UC-03/A3`, `WF 05`, `US-02`.
 ## 1. Rozsah
 
 - AniCo: platforma pro bezpečné propojování ověřených chovatelů (psi, koně) za účelem krytí.
-- **V MVP zpracováno:** UC-01 Ověřit chovatele, UC-02 Přidat zvíře (+ zobrazit/upravit/odstranit, fotografie), UC-03 Doložit údaje o zvířeti (doklady, posouzení, nové verze).
-- **Nezpracováno (US-04 až US-10):** nabídky, vyhledávání, poptávky, sdílení kontaktů. Nenavrhuj ani neimplementuj je. Neblokuj je ale zbytečně (např. nevymýšlej vazby, které by se musely rušit).
+- **V MVP zpracováno:** UC-01 Ověřit chovatele, UC-02 Přidat zvíře (+ zobrazit/upravit/odstranit, fotografie), UC-03 Doložit údaje o zvířeti (doklady, posouzení, nové verze). Od 19. 11. 2026 též US-04 Vytvořit nabídku (jen backend, [ADR-0008](adr/0008-nabidky-vnorene-ve-zvireti.md)).
+- **Nezpracováno (US-05 až US-10):** vyhledávání, poptávky, sdílení kontaktů, detail nabídky. Nenavrhuj ani neimplementuj je. Neblokuj je ale zbytečně (např. nevymýšlej vazby, které by se musely rušit).
 - Registraci a přihlášení zajišťuje **základní správa uživatelů** (externí vůči AniCo). AniCo si po registraci „převezme účet“ (identifikátor účtu = `breeder_id`).
 
 ## 2. Aktéři a oprávnění
@@ -37,7 +37,7 @@ Správa zvířat a dokladů vyžaduje `is_verified=True` – ověřuje se **znov
 
 ## 4. Datový model (zkráceně)
 
-Vazby: Chovatel 1—0..1 Žádost o ověření; Chovatel 1—0..N Zvíře; Zvíře 1—0..N Doklad zvířete (verze). Fotografie a Soubor jsou vnořené struktury.
+Vazby: Chovatel 1—0..1 Žádost o ověření; Chovatel 1—0..N Zvíře; Zvíře 1—0..N Doklad zvířete (verze); Zvíře 1—0..N Nabídka. Fotografie a Soubor jsou vnořené struktury.
 
 **Chovatel:** `breeder_id` (= id účtu, neměnné), `first_name`, `last_name`, `email_address`, `breeding_station_name` / `breeding_station_number` (NULL do prvního podání, pak povinné), `is_verified`. Jméno, příjmení a e-mail lze samostatně upravit jen před prvním podáním (`NOT_SUBMITTED`); oprava vrácené žádosti zůstává dle ADR-0004.
 
@@ -96,6 +96,22 @@ Přesná adresa se neeviduje.
 6. Aktuální verze = poslední v řetězci. Do fronty admina patří jen aktuální `PENDING` verze, ne historické.
 7. „Stav dokladů“ zvířete v UI je odvozený údaj: priorita PENDING > APPROVED > REJECTED; bez dokladů „Nedoložené“. **Není uložen.** Filtr: Všechna / Ověřená / K posouzení / Zamítnutá / Nedoložená.
 8. Historii verzí (soubor, čas, admin, rozhodnutí, důvod) smí vidět vlastník zvířete a admin; jinak odmítnout.
+
+### US-04 – Nabídky
+
+> **Rozhodnutí uživatele (19. 11. 2026, [ADR-0008](adr/0008-nabidky-vnorene-ve-zvireti.md)):** US-04 je v rozsahu;
+> nabídky jsou vnořené ve zvířeti (`animal-service`, modul `offers`). Podrobnosti: [návrh UC-04](design/uc-04-nabidky.md).
+
+**Nabídka (`offer`):** `offer_id`, `animal_id`, `region` (číselník 14 krajů), `valid_from`, `valid_to` (NULL = bez omezení), `message` (volitelná, ≤ 1000 znaků), `created_at/by`, `withdrawn_at/by` (audit). Vlastník = vlastník zvířete.
+
+1. Nabídku smí vytvořit a stáhnout **jen ověřený chovatel (UC-01)** pro **své** zvíře; ověřuje se na serveru při každé operaci. Ověření dokladů zvířete **není** podmínkou.
+2. Zvíře má **nejvýše jednu** naplánovanou (`SCHEDULED`) nebo aktivní (`ACTIVE`) nabídku. Druhá → 409 s odkazem na stávající. Kontrola a zápis jsou **atomické** (dvě souběžná vytvoření: jedno projde).
+3. Stav nabídky je **odvozený z času**, není uložen: `WITHDRAWN` (stažena) → `EXPIRED` (`valid_to ≤ teď`) → `SCHEDULED` (`valid_from > teď`) → jinak `ACTIVE`. Hranice: `valid_from = teď` je `ACTIVE`, `valid_to = teď` je `EXPIRED`.
+4. Čas: `valid_from` chybí = ihned; `valid_from` nesmí být starší než 60 s; `valid_to` musí být po `valid_from` i po teď (nabídka nesmí vzniknout už skončená); obě data nejpozději v roce 9999 UTC.
+5. Nabídku **nelze upravit, znovu aktivovat ani smazat.** Stáhnout lze jen `SCHEDULED` a `ACTIVE`; stažená a skončená je konečná. Po stažení nebo skončení lze vytvořit novou.
+6. Smazání zvířete (UC-02/6) smaže i jeho nabídky.
+7. Cizí i neexistující zvíře/nabídka → 404, neověřený chovatel → 403.
+8. Poptávky (US-05) zatím neexistují. Doporučení: stav poptávky „Vypršela – Nabídka byla stažena“ odvodit z `withdrawn_at` nabídky.
 
 ### Soubory (průřezově)
 

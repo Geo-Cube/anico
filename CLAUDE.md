@@ -1,6 +1,6 @@
 # AniCo – pokyny pro Claude Code
 
-Platforma pro bezpečné propojování ověřených chovatelů (psi, koně). MVP = US-01–US-03 (ověření chovatele, zvíře, doklady). Komunikace a dokumentace česky, identifikátory anglicky.
+Platforma pro bezpečné propojování ověřených chovatelů (psi, koně). MVP = US-01–US-03 (ověření chovatele, zvíře, doklady) + backend US-04 (nabídky). Komunikace a dokumentace česky, identifikátory anglicky.
 
 **Doménový podklad:** [docs/anico-domain.md](docs/anico-domain.md) (invarianty, otevřené otázky), [návrh UC-01](docs/design/uc-01-overeni-chovatele.md) a [ADR](docs/adr/). Citované původní analytické soubory nejsou v repozitáři (`docs/business/` neexistuje); jejich obsah si nevymýšlej. Aktuální implementační stav a technické kontrakty určují [docs/STAV-PROJEKTU.md](docs/STAV-PROJEKTU.md), [docs/ARCHITEKTURA.md](docs/ARCHITEKTURA.md) a [docs/INTEGRACE-IDENTITY.md](docs/INTEGRACE-IDENTITY.md).
 
@@ -28,7 +28,7 @@ Platforma pro bezpečné propojování ověřených chovatelů (psi, koně). MVP
 - Tajemství nikdy do gitu (`npm run secrets:check`). `.env*` nečti ani needituj. Žádné `db:remote:*`/reset/unlock bez výslovného pokynu.
 - Úspěšně provedené migrace neupravuj, přidej novou.
 - Bezpečnost: identita z přihlášení (`current-breeder.ts`), nikdy `breeder_id`/`is_verified`/`reviewed_by` z těla požadavku; autorizace při každém čtení i zápisu včetně souborů.
-- Nerozšiřuj rozsah o US-04–US-10.
+- Nerozšiřuj rozsah o US-05–US-10. US-04 (nabídky) žije v `animal-service` (modul `offers`, [ADR-0008](docs/adr/0008-nabidky-vnorene-ve-zvireti.md)).
 
 ## Tým agentů (`.claude/agents`)
 

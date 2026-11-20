@@ -122,12 +122,17 @@ describe('Veřejná API dokumentace animal-service', () => {
       '/animals/507f1f77bcf86cd799439011/documents',
       '/animals/507f1f77bcf86cd799439011/photos/507f1f77bcf86cd799439012/file',
       '/document-reviews',
+      '/offers/mine',
     ]) {
       await request(app).get(path).expect(401);
     }
     await request(app).post('/animals').send({}).expect(401);
     await request(app)
       .post('/animals/507f1f77bcf86cd799439011/documents')
+      .expect(401);
+    await request(app).post('/offers').send({}).expect(401);
+    await request(app)
+      .post('/offers/507f1f77bcf86cd799439011/withdraw')
       .expect(401);
   });
 

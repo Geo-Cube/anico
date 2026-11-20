@@ -325,3 +325,21 @@ export {
   type DocumentReview,
   type DocumentReviewList,
 } from './animal-document.js';
+
+export {
+  RegionIdSchema,
+  OfferIdSchema,
+  OfferStatusSchema,
+  MAX_OFFER_MESSAGE_LENGTH,
+  CreateOfferSchema,
+  OfferSchema,
+  MyOfferSchema,
+  MyOfferListSchema,
+  regions,
+  type RegionId,
+  type OfferStatus,
+  type CreateOfferInput,
+  type Offer,
+  type MyOffer,
+  type MyOfferList,
+} from './offer.js';

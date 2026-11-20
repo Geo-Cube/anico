@@ -8,6 +8,7 @@ import { pinoHttp } from 'pino-http';
 import { AuthorizationError } from '@anico/auth';
 import { ZodError } from 'zod';
 import { AnimalError } from './modules/animal/domain/entity.js';
+import { OfferError } from './modules/offers/domain/offer.js';
 import { UploadError } from './http/files.js';
 import { healthRouter } from './health/health-router.js';
 import { captureServerError } from './observability.js';
@@ -54,6 +55,10 @@ export function createApp(dependencies: {
     }
     if (error instanceof AuthorizationError) {
       res.status(error.status).json({ error: error.message });
+      return;
+    }
+    if (error instanceof OfferError) {
+      res.status(error.status).json({ error: error.message, ...error.details });
       return;
     }
     if (error instanceof AnimalError || error instanceof UploadError) {
