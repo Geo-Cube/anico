@@ -14,6 +14,8 @@ Stažení je nevratné, nabídku nelze upravit ani smazat.
   Vytvoření i stažení je jeden podmíněný atomický zápis.
 - `http`: `POST /offers` (201), `GET /offers/mine`, `POST /offers/:offerId/withdraw`;
   `OfferError` mapuje centrální handler v `src/app.ts` (400, 404, 409 s `current`).
+  UC-07 přidává `POST /offers/:offerId/inquiries` (201); vstupní a potvrzovací kontrakt
+  je popsán v [frontend integrační příručce](../../../docs/UC-07-FRONTEND.md).
 
 Vlastník a audit (`createdBy`, `withdrawnBy`) se berou z `req.auth`, nikdy z těla; v odpovědích
 se nevracejí. Událost vzniku a stažení se loguje (`offer.created`, `offer.withdrawn`) bez osobních
