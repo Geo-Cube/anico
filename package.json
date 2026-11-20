@@ -31,6 +31,7 @@
     "test": "turbo run test",
     "test:unit": "turbo run test:unit",
     "test:integration": "turbo run test:integration",
+    "test:integration:remote": "node scripts/dev-remote.mjs --test-integration",
     "test:coverage": "turbo run test:coverage",
     "test:e2e": "turbo run test:e2e",
     "test:load": "turbo run test:load --",

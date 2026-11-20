@@ -170,13 +170,21 @@ export function remoteArguments(args) {
         '--retry',
         '--owner',
         '--use-running-tunnel',
+        '--test-integration',
         '--service',
         '--frontend',
       ].includes(key) ||
       values.has(key)
     )
       throw new Error('Unsupported or duplicate remote development option');
-    if (['--check', '--use-running-tunnel', '--frontend'].includes(key)) {
+    if (
+      [
+        '--check',
+        '--use-running-tunnel',
+        '--frontend',
+        '--test-integration',
+      ].includes(key)
+    ) {
       if (inline !== undefined)
         throw new Error('Boolean flags do not accept values');
       values.set(key, true);
@@ -189,6 +197,7 @@ export function remoteArguments(args) {
   }
   const command = values.get('--db');
   const check = values.has('--check');
+  const testIntegration = values.has('--test-integration');
   if (
     command &&
     (!['status', 'migrate', 'seed', 'reset', 'unlock'].includes(command) ||
@@ -201,10 +210,12 @@ export function remoteArguments(args) {
         (check ? 1 : 0) +
           (values.has('--service') ? 1 : 0) +
           (values.has('--frontend') ? 1 : 0) +
+          (values.has('--test-integration') ? 1 : 0) +
           (values.has('--service') && values.has('--use-running-tunnel')
             ? 1
             : 0)) ||
-    (values.has('--frontend') && (check || command)) ||
+    (values.has('--frontend') && (check || command || testIntegration)) ||
+    (testIntegration && (check || command)) ||
     (values.has('--retry') && command !== 'migrate') ||
     (values.has('--confirm') && !['reset', 'unlock'].includes(command)) ||
     (values.has('--owner') && command !== 'unlock') ||
@@ -224,6 +235,7 @@ export function remoteArguments(args) {
     command,
     extra,
     reuse: values.has('--use-running-tunnel'),
+    testIntegration,
     service: values.has('--service')
       ? remoteServiceName(values.get('--service'))
       : undefined,

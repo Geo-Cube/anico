@@ -18,6 +18,7 @@ import {
   AnimalSpeciesSchema,
   AssessmentStatusSchema,
   CreateAnimalSchema,
+  CreateInquirySchema,
   CreateOfferSchema,
   DecideAnimalDocumentSchema,
   DocumentReviewListSchema,
@@ -30,6 +31,7 @@ import {
   OfferSchema,
   OfferStatusSchema,
   RegionIdSchema,
+  SubmitInquiryResponseSchema,
   ServiceHealthResponseSchema,
   UpdateAnimalSchema,
 } from '@anico/shared-schemas';
@@ -158,6 +160,8 @@ const components = [
   ['MyOffer', MyOfferSchema],
   ['MyOfferList', MyOfferListSchema],
   ['OfferConflict', OfferConflictSchema],
+  ['CreateInquiry', CreateInquirySchema],
+  ['SubmitInquiryResponse', SubmitInquiryResponseSchema],
   ['ServiceHealthResponse', ServiceHealthResponseSchema],
   ['Error', ErrorSchema],
   ['ValidationError', ValidationErrorSchema],
@@ -782,6 +786,38 @@ export function openApiDocument(): JsonObject {
             '404': responseRef('OfferNotFound'),
             '409': offerConflict(
               '`Offer cannot be withdrawn` – nabídka je už `WITHDRAWN` nebo `EXPIRED`; `current` nese její stav.',
+            ),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
+          },
+        },
+      },
+      '/offers/{offerId}/inquiries': {
+        parameters: [offerIdParameter],
+        post: {
+          tags: ['offers'],
+          operationId: 'submitInquiry',
+          summary: 'Odeslat poptávku',
+          description:
+            'Ověřený chovatel odešle povinnou zprávu k aktivní cizí nabídce. Odesílatel se bere z přihlášení, vlastní nabídku nelze použít a stejný odesílatel nesmí mít k nabídce současně druhou PENDING poptávku. Kontrola a atomický zápis proběhnou společně. Odeslání kontakty nezpřístupní.',
+          requestBody: {
+            required: true,
+            content: json(ref('CreateInquiry')),
+          },
+          responses: {
+            '201': {
+              description: 'Poptávka vytvořená ve stavu PENDING.',
+              content: json(ref('SubmitInquiryResponse')),
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '404': responseRef('OfferNotFound'),
+            '409': errorResponse(
+              'Nabídka již není aktivní nebo odesílatel už má PENDING poptávku.',
+            ),
+            '413': errorResponse(
+              'Tělo přesahuje limit – `{"error":"Payload too large"}`.',
             ),
             '500': responseRef('InternalError'),
             '503': responseRef('VerificationUnavailable'),

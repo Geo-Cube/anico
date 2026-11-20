@@ -1,4 +1,8 @@
-import type { OfferStatus, RegionId } from '@anico/shared-schemas';
+import type {
+  InquiryStatus,
+  OfferStatus,
+  RegionId,
+} from '@anico/shared-schemas';
 
 /** Uložená nabídka zvířete (US-04); `createdBy`/`withdrawnBy` neopouští službu. */
 export interface OfferRecord {
@@ -13,6 +17,24 @@ export interface OfferRecord {
   createdBy: string;
   withdrawnAt: Date | null;
   withdrawnBy: string | null;
+}
+
+/** Poptávka odeslaná ověřeným chovatelem k jedné nabídce. */
+export interface InquiryRecord {
+  id: string;
+  offerId: string;
+  senderBreederId: string;
+  message: string;
+  status: InquiryStatus;
+  submittedAt: Date;
+}
+
+/** Kontext nabídky potřebný k odeslání poptávky; příjemce se odvozuje z vlastnictví zvířete. */
+export interface OfferInquiryTarget {
+  animalId: string;
+  animalName: string;
+  ownerUserId: string;
+  offer: OfferRecord;
 }
 
 /** Pořadí: withdrawnAt → WITHDRAWN; validTo <= now → EXPIRED; validFrom > now → SCHEDULED; jinak ACTIVE. */
@@ -74,7 +96,7 @@ export function planValidity(
 
 export class OfferError extends Error {
   constructor(
-    public readonly status: 400 | 404 | 409,
+    public readonly status: 400 | 403 | 404 | 409 | 503,
     message: string,
     public readonly details?: {
       /** Chyby validace při 400 ve tvaru Zod issues. */

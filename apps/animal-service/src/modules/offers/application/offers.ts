@@ -1,5 +1,9 @@
 import type { Identity } from '@anico/auth';
-import type { CreateOfferInput, OfferStatus } from '@anico/shared-schemas';
+import type {
+  CreateInquiryInput,
+  CreateOfferInput,
+  OfferStatus,
+} from '@anico/shared-schemas';
 import { verifiedBreeder } from '../../animal/application/verified-breeder.js';
 import type { BreederVerification } from '../../animal/domain/entity.js';
 import {
@@ -8,6 +12,7 @@ import {
   offerNotFound,
   offerStatus,
   planValidity,
+  type InquiryRecord,
   type OfferRecord,
 } from '../domain/offer.js';
 import type { OfferAnimal, OfferRepository } from '../domain/ports.js';
@@ -23,6 +28,12 @@ export interface OfferView {
 
 export interface MyOfferView extends OfferView {
   animal: OfferAnimal;
+}
+
+export interface SubmittedInquiryView {
+  inquiry: InquiryRecord;
+  animalName: string;
+  regionId: OfferRecord['regionId'];
 }
 
 function viewOf(offer: OfferRecord, now: Date): OfferView {
@@ -134,6 +145,67 @@ export function offerUseCases(dependencies: {
       throw new OfferError(409, 'Offer cannot be withdrawn', {
         current: { id: existing.id, status: offerStatus(existing, now) },
       });
+    },
+
+    /** Odeslání poptávky ověřeným chovatelem k aktivní cizí nabídce (UC-07). */
+    async submitInquiry(
+      actor: Identity | undefined,
+      offerId: string,
+      readInput: () => Promise<CreateInquiryInput>,
+    ): Promise<SubmittedInquiryView> {
+      const identity = await breeder(actor);
+      const input = await readInput();
+      const now = clock();
+      const target = await repository.findForInquiry(offerId);
+      if (!target || target.ownerUserId === identity.userId)
+        throw new OfferError(404, 'Offer not found');
+
+      let ownerVerified: boolean;
+      try {
+        ownerVerified = await dependencies.verification.isVerified(
+          target.ownerUserId,
+        );
+      } catch {
+        throw new OfferError(503, 'Breeder verification unavailable');
+      }
+      if (!ownerVerified)
+        throw new OfferError(403, 'Offer owner is not verified');
+
+      const status = offerStatus(target.offer, now);
+      if (status !== 'ACTIVE')
+        throw new OfferError(409, 'Offer is no longer active', {
+          current: { id: target.offer.id, status },
+        });
+
+      const inquiry: InquiryRecord = {
+        id: newId(),
+        offerId: target.offer.id,
+        senderBreederId: identity.userId,
+        message: input.message,
+        status: 'PENDING',
+        submittedAt: now,
+      };
+      if (
+        await repository.appendInquiry(target, inquiry, identity.userId, now)
+      ) {
+        return {
+          inquiry,
+          animalName: target.animalName,
+          regionId: target.offer.regionId,
+        };
+      }
+
+      const after = await repository.findForInquiry(offerId);
+      if (!after || after.ownerUserId === identity.userId)
+        throw new OfferError(404, 'Offer not found');
+      if (after.ownerUserId !== target.ownerUserId)
+        throw new OfferError(404, 'Offer not found');
+      const afterStatus = offerStatus(after.offer, clock());
+      if (afterStatus !== 'ACTIVE')
+        throw new OfferError(409, 'Offer is no longer active', {
+          current: { id: after.offer.id, status: afterStatus },
+        });
+      throw new OfferError(409, 'Inquiry is already pending');
     },
   };
 }

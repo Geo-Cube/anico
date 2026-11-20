@@ -89,6 +89,8 @@ describe('OpenAPI document of animal-service', () => {
             listByOwner: unused,
             findOwned: unused,
             withdraw: unused,
+            findForInquiry: unused,
+            appendInquiry: unused,
           },
           verification: { isVerified: unused },
           newId: () => '',

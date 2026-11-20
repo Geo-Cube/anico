@@ -18,6 +18,43 @@ export function regions(): readonly { id: RegionId; name: string }[] {
 
 export const OfferIdSchema = z.string().regex(/^[a-f0-9]{24}$/i);
 
+export const InquiryIdSchema = z.string().regex(/^[a-f0-9]{24}$/i);
+
+export const InquiryStatusSchema = z.enum(['PENDING', 'EXPIRED']);
+export type InquiryStatus = z.infer<typeof InquiryStatusSchema>;
+
+export const MAX_INQUIRY_MESSAGE_LENGTH = 1000;
+
+export const CreateInquirySchema = z.strictObject({
+  message: z
+    .string()
+    .trim()
+    .min(1, 'Message is required')
+    .max(MAX_INQUIRY_MESSAGE_LENGTH),
+});
+export type CreateInquiryInput = z.infer<typeof CreateInquirySchema>;
+
+export const InquirySchema = z.strictObject({
+  id: InquiryIdSchema,
+  offerId: OfferIdSchema,
+  senderBreederId: z.string(),
+  message: z.string(),
+  status: InquiryStatusSchema,
+  submittedAt: z.iso.datetime(),
+});
+export type Inquiry = z.infer<typeof InquirySchema>;
+
+export const SubmitInquiryResponseSchema = z.strictObject({
+  id: InquiryIdSchema,
+  offerId: OfferIdSchema,
+  animalName: z.string(),
+  regionId: RegionIdSchema,
+  message: z.string(),
+  status: InquiryStatusSchema,
+  submittedAt: z.iso.datetime(),
+});
+export type SubmitInquiryResponse = z.infer<typeof SubmitInquiryResponseSchema>;
+
 /** Stav nabídky se odvozuje z časů a stažení; neukládá se (US-04). */
 export const OfferStatusSchema = z.enum([
   'SCHEDULED',

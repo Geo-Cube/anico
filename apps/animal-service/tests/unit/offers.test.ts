@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AuthorizationError } from '@anico/auth';
 import { testIdentity } from '@anico/auth/testing';
-import type { CreateOfferInput } from '@anico/shared-schemas';
+import type {
+  CreateInquiryInput,
+  CreateOfferInput,
+} from '@anico/shared-schemas';
 import { offerUseCases } from '../../src/modules/offers/application/offers.js';
 import {
   OFFER_START_TOLERANCE_MS,
@@ -296,6 +299,57 @@ function memoryRepository(initial: AnimalOffers[] = []) {
         return null;
       },
     ),
+    findForInquiry: vi.fn(async (offerId: string) => {
+      for (const entry of animals.values()) {
+        const offer = entry.offers.find((item) => item.id === offerId);
+        if (offer)
+          return {
+            animalId: entry.animalId,
+            animalName: animal.name,
+            ownerUserId: entry.ownerUserId,
+            offer,
+          };
+      }
+      return null;
+    }),
+    appendInquiry: vi.fn(async (target, inquiry, senderBreederId, now) => {
+      const entry = animals.get(target.animalId);
+      if (
+        !entry ||
+        entry.ownerUserId !== target.ownerUserId ||
+        entry.ownerUserId === senderBreederId
+      )
+        return false;
+      const offer = entry.offers.find((item) => item.id === target.offer.id);
+      if (!offer || offer.withdrawnAt || offerStatus(offer, now) !== 'ACTIVE')
+        return false;
+      const stored = (offer as OfferRecord & { inquiries?: unknown[] })
+        .inquiries;
+      const inquiries = stored ?? [];
+      if (
+        inquiries.some(
+          (item) =>
+            typeof item === 'object' &&
+            item !== null &&
+            'senderBreederId' in item &&
+            item.senderBreederId === senderBreederId &&
+            'status' in item &&
+            item.status === 'PENDING',
+        )
+      )
+        return false;
+      (offer as OfferRecord & { inquiries: unknown[] }).inquiries = [
+        ...inquiries,
+        {
+          id: inquiry.id,
+          senderBreederId,
+          message: inquiry.message,
+          status: inquiry.status,
+          submittedAt: inquiry.submittedAt,
+        },
+      ];
+      return true;
+    }),
   };
   return { repository, animals };
 }
@@ -807,5 +861,122 @@ describe('UC04-ACC guard', () => {
     const readInput = vi.fn(async () => input());
     await useCases(repository).offers.create(owner, readInput);
     expect(readInput).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('UC-07 submit inquiry', () => {
+  const activeForeignOffer = () =>
+    record({
+      id: 'e'.repeat(24),
+      ownerUserId: stranger.userId,
+      validFrom: at(-HOUR),
+      validTo: null,
+    });
+
+  it('stores a PENDING inquiry for an active foreign offer', async () => {
+    const foreign = activeForeignOffer();
+    const { repository, animals } = memoryRepository([
+      {
+        animalId: ANIMAL_ID,
+        ownerUserId: stranger.userId,
+        offers: [foreign],
+      },
+    ]);
+    const readInput = vi.fn(async (): Promise<CreateInquiryInput> => ({
+      message: 'Zajímá mě krytí',
+    }));
+
+    const submitted = await useCases(repository).offers.submitInquiry(
+      owner,
+      foreign.id,
+      readInput,
+    );
+
+    expect(submitted).toMatchObject({
+      inquiry: {
+        offerId: foreign.id,
+        senderBreederId: owner.userId,
+        message: 'Zajímá mě krytí',
+        status: 'PENDING',
+        submittedAt: NOW,
+      },
+      animalName: animal.name,
+      regionId: foreign.regionId,
+    });
+    expect(readInput).toHaveBeenCalledTimes(1);
+    expect(repository.appendInquiry).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        animals.get(ANIMAL_ID)!.offers[0] as OfferRecord & {
+          inquiries: unknown[];
+        }
+      ).inquiries,
+    ).toHaveLength(1);
+  });
+
+  it('rejects an own offer, inactive offer and duplicate pending inquiry', async () => {
+    const own = record({ id: '1'.repeat(24), ownerUserId: owner.userId });
+    const ownRepository = memoryRepository([
+      { animalId: ANIMAL_ID, ownerUserId: owner.userId, offers: [own] },
+    ]);
+    await expect(
+      useCases(ownRepository.repository).offers.submitInquiry(
+        owner,
+        own.id,
+        async () => ({ message: 'Ahoj' }),
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+
+    const expired = record({
+      id: '2'.repeat(24),
+      ownerUserId: stranger.userId,
+      validTo: at(-1),
+    });
+    const expiredRepository = memoryRepository([
+      { animalId: ANIMAL_ID, ownerUserId: stranger.userId, offers: [expired] },
+    ]);
+    await expect(
+      useCases(expiredRepository.repository).offers.submitInquiry(
+        owner,
+        expired.id,
+        async () => ({ message: 'Ahoj' }),
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+
+    const foreign = activeForeignOffer();
+    const duplicateRepository = memoryRepository([
+      { animalId: ANIMAL_ID, ownerUserId: stranger.userId, offers: [foreign] },
+    ]);
+    const duplicateUseCases = useCases(duplicateRepository.repository);
+    await duplicateUseCases.offers.submitInquiry(
+      owner,
+      foreign.id,
+      async () => ({
+        message: 'První',
+      }),
+    );
+    await expect(
+      duplicateUseCases.offers.submitInquiry(owner, foreign.id, async () => ({
+        message: 'Druhá',
+      })),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('rejects an unverified offer owner without writing', async () => {
+    const foreign = activeForeignOffer();
+    const { repository } = memoryRepository([
+      { animalId: ANIMAL_ID, ownerUserId: stranger.userId, offers: [foreign] },
+    ]);
+    const result = useCases(repository, {
+      isVerified: async (userId) => userId === owner.userId,
+    }).offers.submitInquiry(owner, foreign.id, async () => ({
+      message: 'Ahoj',
+    }));
+
+    await expect(result).rejects.toMatchObject({
+      status: 403,
+      message: 'Offer owner is not verified',
+    });
+    expect(repository.appendInquiry).not.toHaveBeenCalled();
   });
 });

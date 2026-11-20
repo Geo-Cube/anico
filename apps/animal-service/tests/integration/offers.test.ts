@@ -16,6 +16,7 @@ import { testIdentity } from '@anico/auth/testing';
 import {
   MyOfferListSchema,
   OfferSchema,
+  SubmitInquiryResponseSchema,
   animalBreeds,
 } from '@anico/shared-schemas';
 import { createApp } from '../../src/app.js';
@@ -1423,6 +1424,66 @@ describe('US-04 offers over HTTP with MongoDB', () => {
         (await animals().indexes()).some((i) => i.name === 'animals_offer_id'),
       ).toBe(true);
       expect(await storedOffers(animalId)).toEqual(stored);
+    });
+  });
+
+  describe('UC-07 submitting inquiries', () => {
+    it('creates one PENDING inquiry for an active foreign offer and rejects a duplicate', async () => {
+      const animalId = await createAnimal(owner);
+      const created = await post(fixed, owner, {
+        animalId,
+        regionId: 'jihomoravsky',
+      }).expect(201);
+
+      const first = await request(fixed)
+        .post(`/offers/${created.body.id}/inquiries`)
+        .set(auth(stranger))
+        .send({ message: '  Zajímá mě krytí  ' })
+        .expect(201);
+      const inquiry = SubmitInquiryResponseSchema.parse(first.body);
+      expect(inquiry).toMatchObject({
+        offerId: created.body.id,
+        animalName: 'Luna',
+        regionId: 'jihomoravsky',
+        message: 'Zajímá mě krytí',
+        status: 'PENDING',
+      });
+      expect(first.body).not.toHaveProperty('senderBreederId');
+      expect(first.body).not.toHaveProperty('contact');
+
+      await request(fixed)
+        .post(`/offers/${created.body.id}/inquiries`)
+        .set(auth(stranger))
+        .send({ message: 'Druhá zpráva' })
+        .expect(409);
+
+      const doc = await animals().findOne({
+        _id: new Types.ObjectId(animalId),
+      });
+      const storedOffer = (doc?.offers as StoredOfferDocument[]).find(
+        (offer) => offer._id.toString() === created.body.id,
+      );
+      expect(storedOffer).toBeDefined();
+    });
+
+    it('rejects an own offer and trims a blank message into validation 400', async () => {
+      const animalId = await createAnimal(owner);
+      const created = await post(fixed, owner, {
+        animalId,
+        regionId: 'praha',
+      }).expect(201);
+
+      await request(fixed)
+        .post(`/offers/${created.body.id}/inquiries`)
+        .set(auth(owner))
+        .send({ message: 'Ahoj' })
+        .expect(404);
+
+      await request(fixed)
+        .post(`/offers/${created.body.id}/inquiries`)
+        .set(auth(stranger))
+        .send({ message: '   ' })
+        .expect(400);
     });
   });
 
