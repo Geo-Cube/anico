@@ -1,4 +1,5 @@
 import type { RouteObject } from 'react-router';
+import { DocumentPhotos } from '@/features/documents/DocumentPhotos';
 import { DocumentReviewDetail } from '@/features/documents/DocumentReviewDetail';
 import { DocumentReviewQueue } from '@/features/documents/DocumentReviewQueue';
 import { BreederRequestDetail } from './BreederRequestDetail';
@@ -23,7 +24,12 @@ export const breedersRoutes: RouteObject[] = [
     path: 'doklady',
     children: [
       { index: true, element: <DocumentReviewQueue /> },
-      { path: ':animalId/:documentId', element: <DocumentReviewDetail /> },
+      {
+        path: ':animalId/:documentId',
+        element: <DocumentReviewDetail />,
+        // Náhled fotografií zvířete nad rozpracovaným posouzením (US 03).
+        children: [{ path: 'fotografie', element: <DocumentPhotos /> }],
+      },
     ],
   },
 ];

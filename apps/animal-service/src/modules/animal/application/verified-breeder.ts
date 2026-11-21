@@ -1,9 +1,15 @@
-import { AuthorizationError, type Identity } from '@anico/auth';
+import { AuthorizationError, type Identity, type Role } from '@anico/auth';
 import { AnimalError, type BreederVerification } from '../domain/entity.js';
 
 export interface WarnLogger {
   warn(details: object, message: string): void;
 }
+
+/** Role posuzovatele dokladů (stejné jako u UC-01). */
+const REVIEWER_ROLES: readonly Role[] = ['admin', 'owner'];
+
+export const isReviewer = (identity: Identity) =>
+  REVIEWER_ROLES.some((role) => identity.roles.includes(role));
 
 /**
  * Ověření z místní projekce: bez identity 401, chybějící projekce 403,

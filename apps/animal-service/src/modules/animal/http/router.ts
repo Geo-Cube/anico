@@ -6,6 +6,7 @@ import {
   AnimalIdSchema,
   AnimalListSchema,
   AnimalPhotoIdSchema,
+  AnimalPhotoListSchema,
   AnimalPhotoSizeSchema,
   AnimalSchema,
   AnimalSpeciesSchema,
@@ -15,6 +16,7 @@ import {
   UpdateAnimalSchema,
   animalBreeds,
   type Animal,
+  type AnimalPhoto,
 } from '@anico/shared-schemas';
 import type { FileStorage } from '../../../files/file-storage.js';
 import {
@@ -28,6 +30,7 @@ import { animalUseCases, type PhotoUpload } from '../application/animals.js';
 import type { WarnLogger } from '../application/verified-breeder.js';
 import type {
   AnimalRecord,
+  AnimalPhoto as StoredPhoto,
   AnimalRepository,
   BreederVerification,
   PhotoResizer,
@@ -46,17 +49,19 @@ const PhotoFileQuerySchema = z.strictObject({
   size: AnimalPhotoSizeSchema.optional(),
 });
 
+const photoDto = (photo: StoredPhoto): AnimalPhoto => ({
+  id: photo.id,
+  fileName: photo.file.fileName,
+  contentType: photo.file.contentType,
+  size: photo.file.size,
+  isPrimary: photo.isPrimary,
+});
+
 function toDto(animal: AnimalRecord): Animal {
   const { revision: _revision, photos, createdAt, updatedAt, ...rest } = animal;
   return {
     ...rest,
-    photos: photos.map((photo) => ({
-      id: photo.id,
-      fileName: photo.file.fileName,
-      contentType: photo.file.contentType,
-      size: photo.file.size,
-      isPrimary: photo.isPrimary,
-    })),
+    photos: photos.map(photoDto),
     createdAt: createdAt.toISOString(),
     updatedAt: updatedAt.toISOString(),
   };
@@ -159,6 +164,11 @@ export function AnimalRouter(dependencies: {
   router.delete('/animals/:animalId', async (req, res) => {
     await animals.remove(req.auth, animalIdOf(req));
     res.sendStatus(204);
+  });
+
+  router.get('/animals/:animalId/photos', async (req, res) => {
+    const photos = await animals.listPhotos(req.auth, animalIdOf(req));
+    res.json(contract(AnimalPhotoListSchema, { items: photos.map(photoDto) }));
   });
 
   router.get('/animals/:animalId/photos/:photoId/file', async (req, res) => {
