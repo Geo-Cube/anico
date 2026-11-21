@@ -115,15 +115,17 @@ export function animalUseCases(dependencies: {
 
   /**
    * Čtení fotografií: posuzovatel dokladů (UC-03, ADR-0008) bez ověření a vlastnictví, ale jen
-   * u zvířete s doklady (posuzuje jeho doklady), jinak ověřený vlastník. Profil ani změny
-   * posuzovateli zůstávají nepřístupné.
+   * u zvířete s doklady (posuzuje jeho doklady), jinak ověřený vlastník – i když je zároveň
+   * posuzovatelem. Profil ani změny posuzovateli zůstávají nepřístupné.
    */
   async function photoReadableAnimal(actor: Identity | undefined, id: string) {
     if (!actor || !isReviewer(actor))
       return (await ownedAnimal(actor, id)).animal;
     const animal = await repository.find(id);
-    if (!animal || animal.documentsState === 'NOT_SUBMITTED')
-      throw animalNotFound();
+    if (!animal) throw animalNotFound();
+    if (animal.documentsState !== 'NOT_SUBMITTED') return animal;
+    if (animal.ownerUserId !== actor.userId) throw animalNotFound();
+    await breeder(actor);
     return animal;
   }
 

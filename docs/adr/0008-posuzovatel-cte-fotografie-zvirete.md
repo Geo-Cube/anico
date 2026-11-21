@@ -21,6 +21,7 @@ plemeno, pohlaví, čip), ne fotografie.
 2. Profil (`GET /animals/:animalId`), seznam zvířat a všechny zápisy zůstávají jen vlastníkovi; posuzovatel
    na ně dostane 404 / 403 jako dosud.
 3. Chovatel bez role posuzovatele dál čte jen fotografie svých zvířat; cizí i neexistující zvíře je 404.
+   Posuzovatel, který zvíře sám vlastní, čte jeho fotografie i bez dokladů, a to jako ověřený vlastník.
 4. Soubory se dál streamují přes službu (žádné presigned URL); autorizace proběhne při každém požadavku.
 5. Fotografie zůstávají volitelné: zvíře bez fotografií vrací prázdný seznam a posouzení dokladu na
    fotografiích nezávisí (rozhodnutí ani detail dokladu je nenačítají).

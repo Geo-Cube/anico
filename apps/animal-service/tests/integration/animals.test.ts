@@ -469,6 +469,26 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
     expect(await files()).toEqual(stored);
   });
 
+  it('lets a reviewer who owns the animal read its photos before documents are submitted, still only as a verified owner', async () => {
+    const res = await multipart('post', '/animals', dog, [PNG], admin).expect(
+      201,
+    );
+    const own = AnimalSchema.parse(res.body);
+    const photo = own.photos[0]!;
+    const list = () =>
+      request(app).get(`/animals/${own.id}/photos`).set(auth(admin));
+    const file = () =>
+      request(app)
+        .get(`/animals/${own.id}/photos/${photo.id}/file`)
+        .set(auth(admin));
+
+    await list().expect(200, { items: own.photos });
+    await file().expect(200);
+    verificationDown = true;
+    await list().expect(503);
+    await file().expect(503);
+  });
+
   it('stores JPEG/PNG metadata and serves the original bytes with safe inline headers', async () => {
     const animal = await create({ ...dog, primaryUploadIndex: 1 }, [PNG, JPEG]);
     expect(animal.photos).toEqual([
