@@ -1,5 +1,9 @@
 import type { AnimalSpecies } from '@anico/shared-schemas';
-import type { OfferRecord } from './offer.js';
+import type {
+  InquiryRecord,
+  OfferInquiryTarget,
+  OfferRecord,
+} from './offer.js';
 
 /** Základní údaje zvířete u nabídky v seznamu. */
 export interface OfferAnimal {
@@ -38,4 +42,16 @@ export interface OfferRepository {
     ownerUserId: string,
     withdrawal: { at: Date; by: string },
   ): Promise<OfferRecord | null>;
+  /** Nabídka, základní údaje zvířete a vlastník potřební pro UC-07. */
+  findForInquiry(offerId: string): Promise<OfferInquiryTarget | null>;
+  /**
+   * Jeden podmíněný zápis: aktivní cizí nabídka, bez PENDING poptávky stejného odesílatele.
+   * `false` znamená duplicitní/inaktivní stav nebo změnu vlastníka/nabídky.
+   */
+  appendInquiry(
+    target: OfferInquiryTarget,
+    inquiry: InquiryRecord,
+    senderBreederId: string,
+    now: Date,
+  ): Promise<boolean>;
 }

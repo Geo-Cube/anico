@@ -1,9 +1,11 @@
 import { Router, type Request } from 'express';
 import {
+  CreateInquirySchema,
   CreateOfferSchema,
   MyOfferListSchema,
   OfferIdSchema,
   OfferSchema,
+  SubmitInquiryResponseSchema,
   type Offer,
 } from '@anico/shared-schemas';
 import { offerUseCases, type OfferView } from '../application/offers.js';
@@ -82,6 +84,37 @@ export function OffersRouter(dependencies: {
       'Offer withdrawn',
     );
     res.json(contract(OfferSchema, toDto(withdrawn)));
+  });
+
+  router.post('/offers/:offerId/inquiries', async (req, res) => {
+    const offerId = offerIdOf(req);
+    const submitted = await offers.submitInquiry(
+      req.auth,
+      offerId,
+      async () => {
+        await readJsonBody(req, res);
+        return CreateInquirySchema.parse(req.body);
+      },
+    );
+    req.log.info(
+      {
+        event: 'inquiry.created',
+        inquiryId: submitted.inquiry.id,
+        offerId: submitted.inquiry.offerId,
+      },
+      'Inquiry created',
+    );
+    res.status(201).json(
+      contract(SubmitInquiryResponseSchema, {
+        id: submitted.inquiry.id,
+        offerId: submitted.inquiry.offerId,
+        message: submitted.inquiry.message,
+        status: submitted.inquiry.status,
+        submittedAt: submitted.inquiry.submittedAt.toISOString(),
+        animalName: submitted.animalName,
+        regionId: submitted.regionId,
+      }),
+    );
   });
 
   return router;

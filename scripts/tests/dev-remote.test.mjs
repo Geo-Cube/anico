@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { loadRemoteWorkspaces } from '../dev-workspace.mjs';
+import { startTestMongo } from '../start-test-mongo.mjs';
 import {
   remoteDevelopmentConfig,
   remoteDevelopmentServices,
@@ -52,6 +53,29 @@ test('errors do not expose MongoDB connection strings', () => {
     ),
     '[Cloudflare login opened in browser; private parameters hidden]',
   );
+});
+
+test('integration tests cannot use remote or configured MongoDB', async () => {
+  for (const [name, value] of [
+    ['ANICO_DEV_SERVICE', 'animal-service'],
+    ['TEST_MONGODB_URI', 'mongodb://127.0.0.1:27018/test'],
+    ['MONGODB_URI', 'mongodb://127.0.0.1:27018/test'],
+  ]) {
+    const previous = process.env[name];
+    process.env[name] = value;
+    try {
+      await assert.rejects(
+        () =>
+          startTestMongo({
+            start: async () => undefined,
+          }),
+        /MongoMemoryServer; remote or configured MongoDB is forbidden/,
+      );
+    } finally {
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    }
+  }
 });
 
 test('selected service reuses credentials/authSource but isolates database and application port', () => {
@@ -149,6 +173,7 @@ test('database commands allow only named tasks and explicit recovery flags', asy
   );
   for (const args of [
     ['--db=drop'],
+    ['--test-integration'],
     ['--db=migrate', '--check'],
     ['--db'],
     ['--check=true'],

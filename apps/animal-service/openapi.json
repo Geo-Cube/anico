@@ -797,6 +797,65 @@
           "503": { "$ref": "#/components/responses/VerificationUnavailable" }
         }
       }
+    },
+    "/offers/{offerId}/inquiries": {
+      "parameters": [
+        {
+          "name": "offerId",
+          "in": "path",
+          "required": true,
+          "description": "ID nabídky.",
+          "schema": { "$ref": "#/components/schemas/OfferId" }
+        }
+      ],
+      "post": {
+        "tags": ["offers"],
+        "operationId": "submitInquiry",
+        "summary": "Odeslat poptávku",
+        "description": "Ověřený chovatel odešle povinnou zprávu k aktivní cizí nabídce. Odesílatel se bere z přihlášení, vlastní nabídku nelze použít a stejný odesílatel nesmí mít k nabídce současně druhou PENDING poptávku. Kontrola a atomický zápis proběhnou společně. Odeslání kontakty nezpřístupní.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateInquiry" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Poptávka vytvořená ve stavu PENDING.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitInquiryResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/OfferNotFound" },
+          "409": {
+            "description": "Nabídka již není aktivní nebo odesílatel už má PENDING poptávku.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": {
+            "description": "Tělo přesahuje limit – `{\"error\":\"Payload too large\"}`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
     }
   },
   "components": {
@@ -1520,6 +1579,36 @@
           }
         },
         "required": ["error"],
+        "additionalProperties": false
+      },
+      "CreateInquiry": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "required": ["message"],
+        "additionalProperties": false
+      },
+      "SubmitInquiryResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "offerId": { "$ref": "#/components/schemas/OfferId" },
+          "animalName": { "type": "string" },
+          "regionId": { "$ref": "#/components/schemas/RegionId" },
+          "message": { "type": "string" },
+          "status": { "type": "string", "enum": ["PENDING", "EXPIRED"] },
+          "submittedAt": { "type": "string", "format": "date-time" }
+        },
+        "required": [
+          "id",
+          "offerId",
+          "animalName",
+          "regionId",
+          "message",
+          "status",
+          "submittedAt"
+        ],
         "additionalProperties": false
       },
       "ServiceHealthResponse": {

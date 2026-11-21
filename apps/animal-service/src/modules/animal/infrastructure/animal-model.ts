@@ -5,6 +5,7 @@ import {
   AnimalSpeciesSchema,
   AssessmentStatusSchema,
   MAX_OFFER_MESSAGE_LENGTH,
+  InquiryStatusSchema,
   RegionIdSchema,
   type Animal,
   type AnimalDocumentType,
@@ -66,6 +67,15 @@ export interface StoredOffer {
   createdBy: string;
   withdrawnAt: Date | null;
   withdrawnBy: string | null;
+  inquiries?: StoredInquiry[];
+}
+
+export interface StoredInquiry {
+  _id: Types.ObjectId;
+  senderBreederId: string;
+  message: string;
+  status: 'PENDING' | 'EXPIRED';
+  submittedAt: Date;
 }
 
 export interface StoredAnimal {
@@ -199,6 +209,30 @@ const offerSchema = new Schema<StoredOffer>(
     createdBy: { type: String, required: true, maxlength: 36 },
     withdrawnAt: { type: Date, default: null },
     withdrawnBy: { type: String, default: null, maxlength: 36 },
+    inquiries: {
+      type: [
+        new Schema<StoredInquiry>(
+          {
+            senderBreederId: { type: String, required: true, maxlength: 36 },
+            message: {
+              type: String,
+              required: true,
+              trim: true,
+              minlength: 1,
+              maxlength: MAX_OFFER_MESSAGE_LENGTH,
+            },
+            status: {
+              type: String,
+              required: true,
+              enum: InquiryStatusSchema.options,
+            },
+            submittedAt: { type: Date, required: true },
+          },
+          { strict: 'throw' },
+        ),
+      ],
+      default: [],
+    },
   },
   { strict: 'throw' },
 );

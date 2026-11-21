@@ -7,6 +7,14 @@
  * @returns {Promise<T>}
  */
 export async function startTestMongo(server) {
+  if (
+    process.env.ANICO_DEV_SERVICE ||
+    process.env.TEST_MONGODB_URI ||
+    process.env.MONGODB_URI
+  )
+    throw new Error(
+      'Integration tests require MongoMemoryServer; remote or configured MongoDB is forbidden',
+    );
   for (let attempt = 1; ; attempt++) {
     try {
       await server.start();
