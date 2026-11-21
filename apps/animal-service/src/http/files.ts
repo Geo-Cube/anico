@@ -1,6 +1,7 @@
 import type { Request, RequestHandler, Response } from 'express';
 import multer from 'multer';
-import type { z } from 'zod';
+import { z } from 'zod';
+import { AnimalPhotoSizeSchema } from '@anico/shared-schemas';
 
 /** Nečitelný multipart (400) nebo příliš velký soubor (413); nic se neuloží. */
 export class UploadError extends Error {
@@ -63,3 +64,8 @@ export function storedFileHeaders(
     'Cache-Control': 'private, no-store',
   };
 }
+
+/** Dotaz na soubor fotografie (vlastník i nabídka): bez `size` originál, jinak zmenšenina. */
+export const PhotoFileQuerySchema = z.strictObject({
+  size: AnimalPhotoSizeSchema.optional(),
+});

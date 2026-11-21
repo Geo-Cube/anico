@@ -19,6 +19,25 @@ type StoredProfile = Omit<StoredAnimal, 'documents' | 'documentsRevision'> & {
   documents?: Pick<StoredDocumentVersion, 'isCurrent' | 'assessmentStatus'>[];
 };
 
+export function toAnimalPhoto(photo: StoredPhoto): AnimalPhoto {
+  return {
+    id: photo._id.toString(),
+    file: {
+      fileName: photo.file.fileName,
+      fileReference: photo.file.fileReference,
+      contentType: photo.file.contentType,
+      size: photo.file.size,
+    },
+    variants: photo.variants
+      ? {
+          thumbnail: { ...photo.variants.thumbnail },
+          preview: { ...photo.variants.preview },
+        }
+      : null,
+    isPrimary: photo.isPrimary,
+  };
+}
+
 /** Záznamy z doby před UC-02 nová pole nemají; chybějící údaj je `null`. */
 function toRecord(doc: StoredProfile): AnimalRecord {
   return {
@@ -35,22 +54,7 @@ function toRecord(doc: StoredProfile): AnimalRecord {
     pedigreeNumber: doc.pedigreeNumber ?? null,
     microchipNumber: doc.microchipNumber ?? null,
     description: doc.description ?? null,
-    photos: (doc.photos ?? []).map((photo) => ({
-      id: photo._id.toString(),
-      file: {
-        fileName: photo.file.fileName,
-        fileReference: photo.file.fileReference,
-        contentType: photo.file.contentType,
-        size: photo.file.size,
-      },
-      variants: photo.variants
-        ? {
-            thumbnail: { ...photo.variants.thumbnail },
-            preview: { ...photo.variants.preview },
-          }
-        : null,
-      isPrimary: photo.isPrimary,
-    })),
+    photos: (doc.photos ?? []).map(toAnimalPhoto),
     revision: doc.profileRevision ?? 0,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,

@@ -29,6 +29,7 @@ import {
   planPhotos,
   type PhotoChange,
 } from '../domain/photos.js';
+import { openStoredPhoto } from './photo-files.js';
 import { verifiedBreeder, type WarnLogger } from './verified-breeder.js';
 
 const WRITE_ATTEMPTS = 3;
@@ -404,21 +405,7 @@ export function animalUseCases(dependencies: {
         (candidate) => candidate.id === photoId.toLowerCase(),
       );
       if (!photo) throw photoNotFound();
-      const variant = size ? photo.variants?.[size] : undefined;
-      if (variant) {
-        const opened = await photoVariants.open(variant.fileReference);
-        if (!opened) throw new Error('Stored photo variant file is missing');
-        return {
-          ...opened,
-          file: {
-            fileName: photo.file.fileName.replace(/\.[^.]*$/, '') + '.jpg',
-            contentType: 'image/jpeg' as const,
-          },
-        };
-      }
-      const opened = await photos.open(photo.file.fileReference);
-      if (!opened) throw new Error('Stored photo file is missing');
-      return { ...opened, file: photo.file };
+      return openStoredPhoto({ photos, photoVariants }, photo, size);
     },
   };
 }

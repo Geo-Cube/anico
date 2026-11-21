@@ -1,17 +1,30 @@
+import { pipeline } from 'node:stream/promises';
 import { Router, type Request } from 'express';
 import {
+  AnimalPhotoIdSchema,
   CreateInquirySchema,
   CreateOfferSchema,
   MyOfferListSchema,
+  OfferDetailSchema,
   OfferIdSchema,
   OfferSchema,
   SubmitInquiryResponseSchema,
   type Offer,
+  type OfferDetail,
 } from '@anico/shared-schemas';
-import { offerUseCases, type OfferView } from '../application/offers.js';
+import {
+  offerUseCases,
+  type OfferDetailView,
+  type OfferView,
+} from '../application/offers.js';
+import type { FileStorage } from '../../../files/file-storage.js';
 import type { BreederVerification } from '../../animal/domain/entity.js';
 import type { OfferRepository } from '../domain/ports.js';
-import { contract } from '../../../http/files.js';
+import {
+  PhotoFileQuerySchema,
+  contract,
+  storedFileHeaders,
+} from '../../../http/files.js';
 import { readJsonBody } from '../../../http/json-body.js';
 
 /** Odpověď nese jen veřejná pole; `createdBy`/`withdrawnBy` a vlastník službu neopouštějí. */
@@ -30,12 +43,63 @@ function toDto({ offer, status, canWithdraw }: OfferView): Offer {
   };
 }
 
+/**
+ * Whitelist: DTO detailu se skládá pole po poli, nikdy rozbalením entity. Pole, která
+ * sem nepatří (vlastník, poptávky, soubory a názvy fotek, doklady, kontakty), se tak
+ * nemohou dostat do odpovědi ani po rozšíření záznamu.
+ */
+function toDetailDto({
+  offer,
+  status,
+  animal,
+  verification,
+  canSendInquiry,
+  inquiryUnavailableReason,
+}: OfferDetailView): OfferDetail {
+  return {
+    id: offer.id,
+    animalId: offer.animalId,
+    regionId: offer.regionId,
+    validFrom: offer.validFrom.toISOString(),
+    validTo: offer.validTo?.toISOString() ?? null,
+    message: offer.message,
+    status,
+    animal: {
+      name: animal.name,
+      species: animal.species,
+      breedId: animal.breedId,
+      sex: animal.sex,
+      birthDate: animal.birthDate,
+      coatColor: animal.coatColor,
+      weightKg: animal.weightKg,
+      city: animal.city,
+      pedigreeNumber: animal.pedigreeNumber,
+      microchipNumber: animal.microchipNumber,
+      description: animal.description,
+      photos: animal.photos.map((photo) => ({
+        id: photo.id,
+        isPrimary: photo.isPrimary,
+      })),
+    },
+    verification: {
+      verified: verification.verified,
+      documentTypes: [...verification.documentTypes],
+    },
+    canSendInquiry,
+    inquiryUnavailableReason,
+  };
+}
+
+const PHOTO_EXTENSIONS = { 'image/jpeg': 'jpg', 'image/png': 'png' } as const;
+
 /** ID nabídky malými písmeny: schéma přijímá hex v obou velikostech, uložená ID jsou malá. */
 const offerIdOf = (req: Request) =>
   OfferIdSchema.parse(req.params.offerId).toLowerCase();
 
 export function OffersRouter(dependencies: {
   repository: OfferRepository;
+  photos: FileStorage;
+  photoVariants: FileStorage;
   verification: BreederVerification;
   newId: () => string;
   now?: () => Date;
@@ -70,6 +134,36 @@ export function OffersRouter(dependencies: {
         nextCursor: null,
       }),
     );
+  });
+
+  // čtení se nelogují (jako ostatní GET routy)
+  router.get('/offers/:offerId', async (req, res) => {
+    const view = await offers.detail(req.auth, offerIdOf(req));
+    res.json(contract(OfferDetailSchema, toDetailDto(view)));
+  });
+
+  router.get('/offers/:offerId/photos/:photoId/file', async (req, res) => {
+    const offerId = offerIdOf(req);
+    const photoId = AnimalPhotoIdSchema.parse(req.params.photoId).toLowerCase();
+    const { size } = PhotoFileQuerySchema.parse(req.query);
+    const opened = await offers.openPhoto(req.auth, offerId, photoId, size);
+    // Původní název souboru patří vlastníkovi zvířete; cizímu chovateli se neprozrazuje.
+    res.set(
+      storedFileHeaders(
+        {
+          fileName: `${photoId}.${PHOTO_EXTENSIONS[opened.file.contentType]}`,
+          contentType: opened.file.contentType,
+        },
+        opened.size,
+        'inline',
+      ),
+    );
+    try {
+      await pipeline(opened.stream, res);
+    } catch {
+      // hlavičky už odešly: status nelze změnit, jen ukončit spojení
+      res.destroy();
+    }
   });
 
   // tělo se nečte: stažení nemá jiné vstupy než ID v cestě

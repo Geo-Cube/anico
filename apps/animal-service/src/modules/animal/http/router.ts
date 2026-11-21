@@ -6,7 +6,6 @@ import {
   AnimalIdSchema,
   AnimalListSchema,
   AnimalPhotoIdSchema,
-  AnimalPhotoSizeSchema,
   AnimalSchema,
   AnimalSpeciesSchema,
   CreateAnimalSchema,
@@ -18,6 +17,7 @@ import {
 } from '@anico/shared-schemas';
 import type { FileStorage } from '../../../files/file-storage.js';
 import {
+  PhotoFileQuerySchema,
   UploadError,
   contract,
   multipart,
@@ -41,9 +41,6 @@ export const MAX_ANIMAL_FIELD_BYTES = 32 * 1024;
 
 const AnimalFormFieldsSchema = z.strictObject({
   [ANIMAL_FIELD]: z.string().optional(),
-});
-const PhotoFileQuerySchema = z.strictObject({
-  size: AnimalPhotoSizeSchema.optional(),
 });
 
 function toDto(animal: AnimalRecord): Animal {

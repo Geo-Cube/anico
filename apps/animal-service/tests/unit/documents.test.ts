@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { testIdentity } from '@anico/auth/testing';
+import { AnimalDocumentTypeSchema } from '@anico/shared-schemas';
 import { documentUseCases } from '../../src/modules/documents/application/documents.js';
 import type { AnimalDocumentsRepository } from '../../src/modules/documents/domain/ports.js';
 import type { FileStorage } from '../../src/files/file-storage.js';
 import {
+  approvedDocumentTypes,
   documentsState,
   historyOf,
   planReplacement,
@@ -160,5 +162,93 @@ describe('independent document chains', () => {
     expect(documentsState(replaced.versions)).toBe('APPROVED');
     replaced.versions[0]!.assessmentStatus = 'REJECTED';
     expect(documentsState(replaced.versions)).toBe('REJECTED');
+  });
+});
+
+describe('UC06-VER approvedDocumentTypes', () => {
+  type Version = Parameters<typeof approvedDocumentTypes>[0][number];
+  const version = (
+    documentType: Version['documentType'],
+    assessmentStatus: Version['assessmentStatus'],
+    isCurrent = true,
+  ): Version => ({ documentType, assessmentStatus, isCurrent });
+
+  it('UC06-VER-1: no documents, or only PENDING / REJECTED ones, give no approved type', () => {
+    expect(approvedDocumentTypes([])).toEqual([]);
+    expect(approvedDocumentTypes([version('PEDIGREE', 'PENDING')])).toEqual([]);
+    expect(approvedDocumentTypes([version('PEDIGREE', 'REJECTED')])).toEqual(
+      [],
+    );
+    expect(
+      approvedDocumentTypes([
+        version('PEDIGREE', 'PENDING'),
+        version('HEALTH_RESULTS', 'REJECTED'),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('UC06-VER-3: an APPROVED version that is no longer current does not count', () => {
+    expect(
+      approvedDocumentTypes([version('PEDIGREE', 'APPROVED', false)]),
+    ).toEqual([]);
+    expect(
+      approvedDocumentTypes([
+        version('PEDIGREE', 'APPROVED', false),
+        version('PEDIGREE', 'PENDING'),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('UC06-VER-3: an APPROVED version beside a PENDING one still counts (unlike documentsState)', () => {
+    const versions = [
+      version('PEDIGREE', 'APPROVED'),
+      version('HEALTH_RESULTS', 'PENDING'),
+    ];
+    expect(approvedDocumentTypes(versions)).toEqual(['PEDIGREE']);
+    expect(documentsState(versions)).toBe('PENDING');
+  });
+
+  it('UC06-VER-2: returns unique types in catalog order regardless of input order', () => {
+    expect(
+      approvedDocumentTypes([
+        version('BREEDING_APPROVAL', 'APPROVED'),
+        version('PEDIGREE', 'APPROVED'),
+        version('HEALTH_RESULTS', 'APPROVED'),
+      ]),
+    ).toEqual(['PEDIGREE', 'HEALTH_RESULTS', 'BREEDING_APPROVAL']);
+    expect(
+      approvedDocumentTypes([
+        version('HEALTH_RESULTS', 'APPROVED'),
+        version('PEDIGREE', 'APPROVED'),
+      ]),
+    ).toEqual(['PEDIGREE', 'HEALTH_RESULTS']);
+  });
+
+  it('UC06-VER-2: two approved versions of one type yield the type once', () => {
+    expect(
+      approvedDocumentTypes([
+        version('HEALTH_RESULTS', 'APPROVED'),
+        version('HEALTH_RESULTS', 'APPROVED'),
+      ]),
+    ).toEqual(['HEALTH_RESULTS']);
+  });
+
+  it('UC06-VER-2: the catalog order matches AnimalDocumentTypeSchema', () => {
+    const all = AnimalDocumentTypeSchema.options.map((type) =>
+      version(type, 'APPROVED'),
+    );
+    expect(approvedDocumentTypes([...all].reverse())).toEqual(
+      AnimalDocumentTypeSchema.options,
+    );
+  });
+
+  it('does not mutate its input', () => {
+    const versions = [
+      version('HEALTH_RESULTS', 'APPROVED'),
+      version('PEDIGREE', 'APPROVED'),
+    ];
+    const copy = structuredClone(versions);
+    approvedDocumentTypes(versions);
+    expect(versions).toEqual(copy);
   });
 });

@@ -6,6 +6,7 @@ import { pino } from 'pino';
 import request from 'supertest';
 import { Router } from 'express';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import {
   createIdentityVerifier,
@@ -15,11 +16,14 @@ import {
 import { testIdentity } from '@anico/auth/testing';
 import {
   MyOfferListSchema,
+  OfferDetailSchema,
   OfferSchema,
   SubmitInquiryResponseSchema,
   animalBreeds,
+  type OfferStatus,
 } from '@anico/shared-schemas';
 import { createApp } from '../../src/app.js';
+import { gridFsFileStorage } from '../../src/files/gridfs-file-storage.js';
 import { createModules } from '../../src/modules/index.js';
 import { migrateDatabase } from '../../src/database/engine.js';
 import { loadMigrations } from '../../src/database/registry.js';
@@ -34,6 +38,8 @@ import {
 const owner = testIdentity({ roles: ['breeder'] });
 const stranger = testIdentity({ roles: ['breeder'] });
 const unverified = testIdentity({ roles: ['breeder'] });
+/** Cizí ověřený chovatel, který nikdy nevlastní zvíře ani nabídku. */
+const bystander = testIdentity({ roles: ['breeder'] });
 
 /** Pevný „server time“ pro testy s vstřikovaným `now`; skutečné hodiny se nepoužívají. */
 const NOW = new Date('2030-06-15T12:00:00.000Z');
@@ -48,6 +54,85 @@ const FAR_FUTURE = new Date('2999-01-01T00:00:00.000Z');
 const dogBreed = animalBreeds('dog')[0]!.id;
 const horseBreed = animalBreeds('horse')[0]!.id;
 
+// skutečné obrázky: služba je dekóduje do zmenšenin (JPEG větší než náhled, PNG s průhledností)
+const PNG = await sharp({
+  create: {
+    width: 40,
+    height: 30,
+    channels: 4,
+    background: { r: 200, g: 100, b: 50, alpha: 0.5 },
+  },
+})
+  .png()
+  .toBuffer();
+const JPEG = await sharp({
+  create: { width: 2400, height: 1600, channels: 3, background: '#3f8c5b' },
+})
+  .jpeg()
+  .toBuffer();
+
+/** Známé hodnoty zapsané do databáze; v odpovědi detailu se nikdy neobjeví (UC06-SEC-1). */
+const SENTINEL = {
+  reason: 'SENTINEL-DUVOD-ZAMITNUTI',
+  reviewer: 'sentinel-reviewer-0001',
+  createdBy: 'sentinel-created-by-0001',
+  withdrawnBy: 'sentinel-withdrawn-by-0001',
+  inquiryMessage: 'SENTINEL-ZPRAVA-CIZI-POPTAVKY',
+  email: 'sentinel-majitel@example.test',
+  givenName: 'SentinelJmeno',
+  familyName: 'SentinelPrijmeni',
+  photoNames: ['sentinel-fotka-prvni.png', 'sentinel-fotka-druha.jpg'],
+} as const;
+
+/** Klíče, které detail nabídky nesmí nést na žádné úrovni. */
+const FORBIDDEN_KEYS = [
+  'email',
+  'phone',
+  'contact',
+  'address',
+  'fileUrl',
+  'documentUrl',
+  'fileReference',
+  'fileName',
+  'file',
+  'variants',
+  'rejectionReason',
+  'reviewedBy',
+  'reviewedAt',
+  'submittedBy',
+  'submittedAt',
+  'ownerUserId',
+  'createdBy',
+  'createdAt',
+  'withdrawnBy',
+  'withdrawnAt',
+  'inquiries',
+  'documents',
+  'senderBreederId',
+  'profileRevision',
+  'documentsRevision',
+  'givenName',
+  'familyName',
+];
+
+/** Pole nabídky, která v `NOW` dávají daný stav. */
+const OFFER_STATE: Record<OfferStatus, Partial<StoredOfferDocument>> = {
+  SCHEDULED: { validFrom: at(HOUR) },
+  ACTIVE: {},
+  WITHDRAWN: { withdrawnAt: at(-HOUR), withdrawnBy: owner.userId },
+  EXPIRED: { validFrom: at(-2 * DAY), validTo: at(-HOUR) },
+};
+
+/** Supertest parser pro binární těla i chybové odpovědi (vždy `Buffer`). */
+const binaryBody = (
+  response: request.Response,
+  done: (error: Error | null, body: Buffer) => void,
+) => {
+  const chunks: Buffer[] = [];
+  response.on('data', (chunk: Buffer) => chunks.push(chunk));
+  response.on('end', () => done(null, Buffer.concat(chunks)));
+};
+
 interface StoredOfferDocument {
   _id: Types.ObjectId;
   regionId: string;
@@ -58,6 +143,13 @@ interface StoredOfferDocument {
   createdBy: string;
   withdrawnAt: Date | null;
   withdrawnBy: string | null;
+  inquiries?: {
+    _id: Types.ObjectId;
+    senderBreederId: string;
+    message: string;
+    status: 'PENDING' | 'EXPIRED';
+    submittedAt: Date;
+  }[];
 }
 
 describe('US-04 offers over HTTP with MongoDB', () => {
@@ -125,7 +217,7 @@ describe('US-04 offers over HTTP with MongoDB', () => {
   beforeEach(async () => {
     verificationDown = false;
     // čerstvé tokeny pro každý test: pomocníci pak vrací supertest `Test` synchronně
-    for (const identity of [owner, stranger, unverified])
+    for (const identity of [owner, stranger, unverified, bystander])
       tokens.set(identity.userId, await sign(identity));
     await animals().deleteMany({});
   });
@@ -147,6 +239,8 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       '/',
       OffersRouter({
         repository: mongooseOffersRepository(connection),
+        photos: gridFsFileStorage(connection, 'animalPhotos'),
+        photoVariants: gridFsFileStorage(connection, 'animalPhotoVariants'),
         verification,
         newId,
         now: () => now,
@@ -229,6 +323,81 @@ describe('US-04 offers over HTTP with MongoDB', () => {
   ) => request(target).post(`/offers/${offerId}/withdraw`).set(auth(identity));
   const mine = (target: typeof app, identity: Identity = owner) =>
     request(target).get('/offers/mine').set(auth(identity));
+
+  const storedAnimal = async (animalId: string) =>
+    (await animals().findOne({ _id: new Types.ObjectId(animalId) }))!;
+
+  /** Raw `$push` verzí dokladů; přímý zápis stačí, HTTP cesta k posouzení vyžaduje správce. */
+  const putDocuments = (animalId: string, documents: object[]) =>
+    connection
+      .db!.collection<{ documents: object[] }>('animals')
+      .updateOne(
+        { _id: new Types.ObjectId(animalId) },
+        { $push: { documents: { $each: documents } } },
+      );
+
+  const documentVersion = (
+    documentType: 'PEDIGREE' | 'HEALTH_RESULTS' | 'BREEDING_APPROVAL',
+    assessmentStatus: 'PENDING' | 'APPROVED' | 'REJECTED',
+    overrides: Record<string, unknown> = {},
+  ) => ({
+    _id: new Types.ObjectId(),
+    documentType,
+    versionNumber: 1,
+    previousDocumentId: null,
+    isCurrent: true,
+    file: {
+      fileName: `sentinel-doklad-${documentType.toLowerCase()}.pdf`,
+      fileReference: new Types.ObjectId().toString(),
+      contentType: 'application/pdf',
+      size: 8,
+    },
+    assessmentStatus,
+    submittedAt: FAR_PAST,
+    submittedBy: owner.userId,
+    reviewedBy: assessmentStatus === 'PENDING' ? null : SENTINEL.reviewer,
+    reviewedAt: assessmentStatus === 'PENDING' ? null : FAR_PAST,
+    rejectionReason: assessmentStatus === 'REJECTED' ? SENTINEL.reason : null,
+    ...overrides,
+  });
+
+  const storedInquiry = (
+    senderBreederId: string,
+    status: 'PENDING' | 'EXPIRED',
+  ) => ({
+    _id: new Types.ObjectId(),
+    senderBreederId,
+    message: 'Zpráva poptávky',
+    status,
+    submittedAt: FAR_PAST,
+  });
+
+  /** Zvíře s fotografiemi nahranými skutečným HTTP multipartem (originál i zmenšeniny v GridFS). */
+  async function createAnimalWithPhotos(
+    identity: Identity,
+    photos: { content: Buffer; name: string }[],
+    profile: Record<string, unknown> = {},
+  ) {
+    const req = request(app)
+      .post('/animals')
+      .set(auth(identity))
+      .field(
+        'animal',
+        JSON.stringify({
+          name: 'Luna',
+          species: 'dog',
+          breedId: dogBreed,
+          sex: 'female',
+          ...profile,
+        }),
+      );
+    for (const photo of photos)
+      req.attach('photos', photo.content, {
+        filename: photo.name,
+        contentType: 'application/octet-stream',
+      });
+    return (await req.expect(201)).body.id as string;
+  }
 
   describe('UC04-CRE creating offers', () => {
     it('UC04-CRE-1 creates an immediate offer valid from the server time without exposing audit fields', async () => {
@@ -1487,12 +1656,828 @@ describe('US-04 offers over HTTP with MongoDB', () => {
     });
   });
 
+  describe('UC06 GET /offers/:offerId', () => {
+    const detailOf = (
+      offerId: string,
+      identity: Identity = stranger,
+      target: typeof app = fixed,
+    ) => request(target).get(`/offers/${offerId}`).set(auth(identity));
+    const missingOfferId = 'c'.repeat(24);
+
+    /** Úplný profil zvířete se všemi volitelnými údaji; čip se zapisuje beze změny (bez ořezu). */
+    const fullProfile = {
+      birthDate: '2022-03-01',
+      coatColor: 'šedá',
+      weightKg: 24.5,
+      city: 'Brno',
+      pedigreeNumber: 'CMKU/123',
+      microchipNumber: '  000123  ',
+      description: 'Klidná fena',
+    };
+
+    it('UC06-VIS-2/DAT-1/DAT-3 shows a foreign reader the complete current data of an ACTIVE offer', async () => {
+      const animalId = await createAnimal(owner, fullProfile);
+      const offerId = await storeOffer(animalId, {
+        regionId: 'jihomoravsky',
+        message: 'Krytí na jaře',
+        validFrom: at(-DAY),
+        validTo: FAR_FUTURE,
+      });
+
+      const res = await detailOf(offerId).expect(200);
+
+      const body = OfferDetailSchema.parse(res.body);
+      expect(body).toStrictEqual({
+        id: offerId,
+        animalId,
+        regionId: 'jihomoravsky',
+        validFrom: at(-DAY).toISOString(),
+        validTo: FAR_FUTURE.toISOString(),
+        message: 'Krytí na jaře',
+        status: 'ACTIVE',
+        animal: {
+          name: 'Luna',
+          species: 'dog',
+          breedId: dogBreed,
+          sex: 'female',
+          ...fullProfile,
+          photos: [],
+        },
+        verification: { verified: false, documentTypes: [] },
+        canSendInquiry: true,
+        inquiryUnavailableReason: null,
+      });
+      expect(body.animal.microchipNumber).toBe('  000123  ');
+    });
+
+    it('UC06-DAT-1 reflects a later profile change (no snapshot)', async () => {
+      const animalId = await createAnimal(owner);
+      const offerId = await storeOffer(animalId);
+      expect((await detailOf(offerId).expect(200)).body.animal.name).toBe(
+        'Luna',
+      );
+
+      await request(app)
+        .patch(`/animals/${animalId}`)
+        .set(auth(owner))
+        .send({ name: 'Nova', city: 'Ostrava' })
+        .expect(200);
+
+      const after = await detailOf(offerId).expect(200);
+      expect(after.body.animal).toMatchObject({
+        name: 'Nova',
+        city: 'Ostrava',
+      });
+    });
+
+    it('UC06-DAT-2 returns null (not missing) for unfilled fields, validTo and message, and [] with verified false without photos and documents', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId, {
+        validTo: null,
+        message: null,
+      });
+
+      const res = await detailOf(offerId).expect(200);
+
+      OfferDetailSchema.parse(res.body);
+      expect(res.body).toStrictEqual({
+        id: offerId,
+        animalId,
+        regionId: 'praha',
+        validFrom: FAR_PAST.toISOString(),
+        validTo: null,
+        message: null,
+        status: 'ACTIVE',
+        animal: {
+          name: 'Luna',
+          species: 'dog',
+          breedId: dogBreed,
+          sex: 'female',
+          birthDate: null,
+          coatColor: null,
+          weightKg: null,
+          city: null,
+          pedigreeNumber: null,
+          microchipNumber: null,
+          description: null,
+          photos: [],
+        },
+        verification: { verified: false, documentTypes: [] },
+        canSendInquiry: true,
+        inquiryUnavailableReason: null,
+      });
+    });
+
+    it('UC06-DAT-1 works for a horse', async () => {
+      const animalId = await createAnimal(owner, {
+        species: 'horse',
+        breedId: horseBreed,
+        sex: 'male',
+      });
+      const offerId = await storeOffer(animalId);
+      const res = await detailOf(offerId).expect(200);
+      expect(OfferDetailSchema.parse(res.body).animal).toMatchObject({
+        species: 'horse',
+        breedId: horseBreed,
+        sex: 'male',
+      });
+    });
+
+    it.each(['SCHEDULED', 'WITHDRAWN', 'EXPIRED'] as const)(
+      'UC06-VIS-3 hides a %s offer from a foreign reader with the same 404 as a nonexistent offer',
+      async (status) => {
+        const animalId = await createAnimal();
+        const offerId = await storeOffer(animalId, OFFER_STATE[status]);
+
+        const hidden = await detailOf(offerId).expect(404);
+        const missing = await detailOf(missingOfferId).expect(404);
+
+        expect(hidden.body).toEqual(missing.body);
+        expect(hidden.body).toMatchObject({ error: 'Offer not found' });
+        expect(hidden.text).toBe(missing.text);
+      },
+    );
+
+    it('UC06-NF-1 answers 404 Offer not found for an unused valid id', async () => {
+      const res = await detailOf(missingOfferId).expect(404);
+      expect(res.body).toMatchObject({ error: 'Offer not found' });
+    });
+
+    it.each(['SCHEDULED', 'ACTIVE', 'WITHDRAWN', 'EXPIRED'] as const)(
+      'UC06-VIS-1/INQ-1 shows the owner their %s offer with OWN_OFFER',
+      async (status) => {
+        const animalId = await createAnimal();
+        const offerId = await storeOffer(animalId, OFFER_STATE[status]);
+
+        const res = await detailOf(offerId, owner).expect(200);
+
+        expect(OfferDetailSchema.parse(res.body)).toMatchObject({
+          id: offerId,
+          status,
+          canSendInquiry: false,
+          inquiryUnavailableReason: 'OWN_OFFER',
+        });
+      },
+    );
+
+    it('UC06-VIS derives the status from the injected time', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId, {
+        validFrom: at(HOUR),
+        validTo: at(2 * HOUR),
+      });
+      const statusAt = async (now: Date) =>
+        (await detailOf(offerId, owner, appAt(now))).body.status;
+      expect(await statusAt(at(HOUR - 1))).toBe('SCHEDULED');
+      expect(await statusAt(at(HOUR))).toBe('ACTIVE');
+      expect(await statusAt(at(2 * HOUR))).toBe('EXPIRED');
+      expect(
+        (await detailOf(offerId, stranger, appAt(at(HOUR - 1)))).status,
+      ).toBe(404);
+      expect((await detailOf(offerId, stranger, appAt(at(HOUR)))).status).toBe(
+        200,
+      );
+      expect(
+        (await detailOf(offerId, stranger, appAt(at(2 * HOUR)))).status,
+      ).toBe(404);
+    });
+
+    it('UC06-VAL-1 accepts an upper-case id and returns it normalised', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId);
+      const res = await request(fixed)
+        .get(`/offers/${offerId.toUpperCase()}`)
+        .set(auth(stranger))
+        .expect(200);
+      expect(res.body.id).toBe(offerId);
+    });
+
+    it.each(['xyz', 'g'.repeat(24), 'a'.repeat(23), 'a'.repeat(25)])(
+      'UC06-VAL-1 rejects the id %j with 400 before the breeder guard',
+      async (badId) => {
+        const res = await detailOf(badId, stranger).expect(400);
+        expect(res.body).toMatchObject({ error: 'Validation failed' });
+        await detailOf(badId, unverified).expect(400);
+      },
+    );
+
+    it('UC06-ACC-1 answers 401 without identity, also with forged x-user-* headers', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId);
+      await request(fixed).get(`/offers/${offerId}`).expect(401);
+      await request(fixed)
+        .get(`/offers/${offerId}`)
+        .set({ 'x-user-id': stranger.userId, 'x-user-roles': 'breeder' })
+        .expect(401);
+    });
+
+    it('UC06-ACC-2 answers 403 for an unverified breeder and 503 when verification cannot be read', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId);
+      await detailOf(offerId, unverified).expect(403);
+      verificationDown = true;
+      await detailOf(offerId, stranger).expect(503);
+      await detailOf(offerId, owner).expect(503);
+    });
+
+    it('UC06-INQ-4/8 turns canSendInquiry to INQUIRY_PENDING after the reader sends an inquiry, while others still can', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId);
+      expect((await detailOf(offerId).expect(200)).body).toMatchObject({
+        canSendInquiry: true,
+        inquiryUnavailableReason: null,
+      });
+
+      await request(fixed)
+        .post(`/offers/${offerId}/inquiries`)
+        .set(auth(stranger))
+        .send({ message: 'Zajímá mě krytí' })
+        .expect(201);
+
+      expect(
+        (await detailOf(offerId, stranger).expect(200)).body,
+      ).toMatchObject({
+        canSendInquiry: false,
+        inquiryUnavailableReason: 'INQUIRY_PENDING',
+      });
+      expect(
+        (await detailOf(offerId, bystander).expect(200)).body,
+      ).toMatchObject({
+        canSendInquiry: true,
+        inquiryUnavailableReason: null,
+      });
+      expect((await detailOf(offerId, owner).expect(200)).body).toMatchObject({
+        canSendInquiry: false,
+        inquiryUnavailableReason: 'OWN_OFFER',
+      });
+    });
+
+    it('UC06-INQ-4 ignores a pending inquiry of another sender', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId, {
+        inquiries: [
+          storedInquiry(bystander.userId, 'PENDING'),
+          storedInquiry(owner.userId, 'PENDING'),
+        ],
+      });
+      expect(
+        (await detailOf(offerId, stranger).expect(200)).body,
+      ).toMatchObject({
+        canSendInquiry: true,
+        inquiryUnavailableReason: null,
+      });
+      expect(
+        (await detailOf(offerId, bystander).expect(200)).body,
+      ).toMatchObject({
+        canSendInquiry: false,
+        inquiryUnavailableReason: 'INQUIRY_PENDING',
+      });
+    });
+
+    it('UC06-INQ-5 is not blocked by an EXPIRED inquiry of the reader (written directly)', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId, {
+        inquiries: [storedInquiry(stranger.userId, 'EXPIRED')],
+      });
+      expect(
+        (await detailOf(offerId, stranger).expect(200)).body,
+      ).toMatchObject({
+        canSendInquiry: true,
+        inquiryUnavailableReason: null,
+      });
+    });
+
+    it('UC06-VER-1 lists only the types of current APPROVED documents, in catalog order', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId);
+      await putDocuments(animalId, [
+        documentVersion('BREEDING_APPROVAL', 'APPROVED'),
+        documentVersion('HEALTH_RESULTS', 'REJECTED'),
+        documentVersion('HEALTH_RESULTS', 'APPROVED', { isCurrent: false }),
+        documentVersion('PEDIGREE', 'PENDING'),
+        documentVersion('PEDIGREE', 'APPROVED'),
+        documentVersion('PEDIGREE', 'APPROVED'),
+      ]);
+
+      const res = await detailOf(offerId).expect(200);
+
+      expect(OfferDetailSchema.parse(res.body).verification).toStrictEqual({
+        verified: true,
+        documentTypes: ['PEDIGREE', 'BREEDING_APPROVAL'],
+      });
+    });
+
+    it('UC06-VER-1 is not verified with only PENDING, REJECTED or superseded documents', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId);
+      await putDocuments(animalId, [
+        documentVersion('PEDIGREE', 'PENDING'),
+        documentVersion('HEALTH_RESULTS', 'REJECTED'),
+        documentVersion('BREEDING_APPROVAL', 'APPROVED', { isCurrent: false }),
+      ]);
+      const res = await detailOf(offerId).expect(200);
+      expect(res.body.verification).toStrictEqual({
+        verified: false,
+        documentTypes: [],
+      });
+    });
+
+    it('UC06-PHO-1 lists photos in stored order as { id, isPrimary } with exactly one primary', async () => {
+      const animalId = await createAnimalWithPhotos(
+        owner,
+        [
+          { content: PNG, name: 'prvni.png' },
+          { content: JPEG, name: 'druha.jpg' },
+          { content: PNG, name: 'treti.png' },
+        ],
+        { primaryUploadIndex: 1 },
+      );
+      const offerId = await storeOffer(animalId);
+      const stored = (await storedAnimal(animalId)).photos as {
+        _id: Types.ObjectId;
+        isPrimary: boolean;
+      }[];
+
+      const res = await detailOf(offerId).expect(200);
+
+      const photos = OfferDetailSchema.parse(res.body).animal.photos;
+      expect(photos).toStrictEqual(
+        stored.map((photo) => ({
+          id: photo._id.toString(),
+          isPrimary: photo.isPrimary,
+        })),
+      );
+      expect(photos.map((photo) => photo.isPrimary)).toEqual([
+        false,
+        true,
+        false,
+      ]);
+      for (const photo of photos)
+        expect(Object.keys(photo)).toEqual(['id', 'isPrimary']);
+    });
+
+    it.each([
+      ['a foreign reader', 'stranger', 'ACTIVE'],
+      ['the owner', 'owner', 'ACTIVE'],
+      ['the owner of a withdrawn offer', 'owner', 'WITHDRAWN'],
+    ] as const)(
+      'UC06-SEC-1 never exposes sensitive stored data to %s',
+      async (_label, reader, status) => {
+        const contactOwner = testIdentity({
+          roles: ['breeder'],
+          givenName: SENTINEL.givenName,
+          familyName: SENTINEL.familyName,
+          email: SENTINEL.email,
+        });
+        tokens.set(contactOwner.userId, await sign(contactOwner));
+        const animalId = await createAnimalWithPhotos(
+          contactOwner,
+          [
+            { content: PNG, name: SENTINEL.photoNames[0] },
+            { content: JPEG, name: SENTINEL.photoNames[1] },
+          ],
+          fullProfile,
+        );
+        await putDocuments(animalId, [
+          documentVersion('PEDIGREE', 'APPROVED'),
+          documentVersion('HEALTH_RESULTS', 'REJECTED'),
+          documentVersion('BREEDING_APPROVAL', 'PENDING'),
+        ]);
+        const offerId = await storeOffer(animalId, {
+          ...OFFER_STATE[status],
+          createdBy: SENTINEL.createdBy,
+          ...(status === 'WITHDRAWN' && {
+            withdrawnBy: SENTINEL.withdrawnBy,
+          }),
+          inquiries: [
+            {
+              ...storedInquiry(bystander.userId, 'PENDING'),
+              message: SENTINEL.inquiryMessage,
+            },
+          ],
+        });
+        const doc = await storedAnimal(animalId);
+        const stored = doc.photos as {
+          file: { fileName: string; fileReference: string };
+          variants: Record<string, { fileReference: string }>;
+        }[];
+        const documents = doc.documents as {
+          file: { fileName: string; fileReference: string };
+        }[];
+        const forbiddenValues = [
+          SENTINEL.reason,
+          SENTINEL.reviewer,
+          SENTINEL.createdBy,
+          SENTINEL.withdrawnBy,
+          SENTINEL.inquiryMessage,
+          SENTINEL.email,
+          SENTINEL.givenName,
+          SENTINEL.familyName,
+          ...SENTINEL.photoNames,
+          contactOwner.userId,
+          bystander.userId,
+          ...stored.flatMap((photo) => [
+            photo.file.fileName,
+            photo.file.fileReference,
+            ...Object.values(photo.variants).map((v) => v.fileReference),
+          ]),
+          ...documents.flatMap((document) => [
+            document.file.fileName,
+            document.file.fileReference,
+          ]),
+        ];
+        // zvolené názvy skutečně skončily v databázi (a nejsou jen konstantou testu)
+        expect(stored.map((photo) => photo.file.fileName)).toEqual([
+          ...SENTINEL.photoNames,
+        ]);
+
+        const res = await detailOf(
+          offerId,
+          reader === 'owner' ? contactOwner : stranger,
+        ).expect(200);
+
+        OfferDetailSchema.parse(res.body);
+        const json = JSON.stringify(res.body);
+        for (const value of forbiddenValues) expect(json).not.toContain(value);
+        for (const key of FORBIDDEN_KEYS)
+          expect(json, `key ${key}`).not.toContain(`"${key}":`);
+        expect(Object.keys(res.body).sort()).toEqual(
+          [
+            'id',
+            'animalId',
+            'regionId',
+            'validFrom',
+            'validTo',
+            'message',
+            'status',
+            'animal',
+            'verification',
+            'canSendInquiry',
+            'inquiryUnavailableReason',
+          ].sort(),
+        );
+        expect(res.body.verification).toStrictEqual({
+          verified: true,
+          documentTypes: ['PEDIGREE'],
+        });
+        expect(res.body.animal.photos).toHaveLength(2);
+      },
+    );
+
+    it('UC06-DB-1/DB-2 reads animals with exactly one inclusive find regardless of photos, documents and inquiries', async () => {
+      const animalId = await createAnimalWithPhotos(
+        owner,
+        [
+          { content: PNG, name: 'a.png' },
+          { content: JPEG, name: 'b.jpg' },
+          { content: PNG, name: 'c.png' },
+        ],
+        fullProfile,
+      );
+      await putDocuments(animalId, [
+        documentVersion('PEDIGREE', 'APPROVED'),
+        documentVersion('HEALTH_RESULTS', 'APPROVED'),
+        documentVersion('BREEDING_APPROVAL', 'REJECTED'),
+      ]);
+      const offerId = await storeOffer(animalId, {
+        inquiries: [
+          storedInquiry(bystander.userId, 'PENDING'),
+          storedInquiry(owner.userId, 'EXPIRED'),
+          storedInquiry(stranger.userId, 'EXPIRED'),
+        ],
+      });
+      await storeOffer(animalId, { ...OFFER_STATE.WITHDRAWN });
+      const other = await createAnimal(owner);
+      await storeOffer(other);
+
+      const commands: {
+        name: string;
+        collection: unknown;
+        command: Record<string, unknown>;
+      }[] = [];
+      const client = connection.getClient();
+      const listener = (event: {
+        commandName: string;
+        command: Record<string, unknown>;
+      }) =>
+        commands.push({
+          name: event.commandName,
+          collection: event.command[event.commandName],
+          command: event.command,
+        });
+      client.on('commandStarted', listener);
+      let res;
+      try {
+        res = await detailOf(offerId, stranger).expect(200);
+      } finally {
+        client.off('commandStarted', listener);
+      }
+
+      const body = OfferDetailSchema.parse(res.body);
+      expect(body.animal.photos).toHaveLength(3);
+      expect(body.verification.documentTypes).toEqual([
+        'PEDIGREE',
+        'HEALTH_RESULTS',
+      ]);
+      const reads = ['find', 'aggregate', 'count', 'distinct', 'getMore'];
+      const animalReads = commands.filter(
+        (c) => reads.includes(c.name) && c.collection === 'animals',
+      );
+      expect(
+        animalReads.map(({ name, collection }) => ({ name, collection })),
+      ).toEqual([{ name: 'find', collection: 'animals' }]);
+
+      const projection = animalReads[0]!.command.projection as Record<
+        string,
+        unknown
+      >;
+      expect(projection).toBeDefined();
+      for (const [path, value] of Object.entries(projection))
+        expect(
+          value === 1 ||
+            value === true ||
+            (typeof value === 'object' && value !== null),
+          `projection ${path}`,
+        ).toBe(true);
+      const projected = JSON.stringify(projection);
+      for (const unwanted of [
+        'fileReference',
+        'variants',
+        'documents.file',
+        'photos.file',
+        'rejectionReason',
+        'reviewedBy',
+        'submittedBy',
+        'profileRevision',
+        'documentsRevision',
+      ])
+        expect(projected).not.toContain(unwanted);
+      expect(animalReads[0]!.command.filter).toEqual({
+        'offers._id': expect.anything(),
+      });
+    });
+
+    it('UC06-API-2 keeps GET /offers/mine ahead of the :offerId route', async () => {
+      const animalId = await createAnimal();
+      await storeOffer(animalId);
+      const res = await mine(fixed).expect(200);
+      expect(MyOfferListSchema.parse(res.body).items).toHaveLength(1);
+    });
+  });
+
+  describe('UC06 GET /offers/:offerId/photos/:photoId/file', () => {
+    const fileOf = (
+      offerId: string,
+      photoId: string,
+      identity: Identity = stranger,
+      query: Record<string, string> = {},
+    ) =>
+      request(fixed)
+        .get(`/offers/${offerId}/photos/${photoId}/file`)
+        .query(query)
+        .set(auth(identity))
+        .buffer(true)
+        .parse(binaryBody);
+    const missingId = 'c'.repeat(24);
+
+    /** Zvíře s PNG a velkým JPEG a jeho nabídka ve zvoleném stavu. */
+    async function offerWithPhotos(
+      status: OfferStatus = 'ACTIVE',
+      identity: Identity = owner,
+    ) {
+      const animalId = await createAnimalWithPhotos(identity, [
+        { content: PNG, name: SENTINEL.photoNames[0] },
+        { content: JPEG, name: SENTINEL.photoNames[1] },
+      ]);
+      const offerId = await storeOffer(animalId, {
+        ...OFFER_STATE[status],
+        createdBy: identity.userId,
+      });
+      const photos = (await storedAnimal(animalId)).photos as {
+        _id: Types.ObjectId;
+      }[];
+      return {
+        animalId,
+        offerId,
+        pngId: photos[0]!._id.toString(),
+        jpegId: photos[1]!._id.toString(),
+      };
+    }
+
+    it('UC06-FIL-1/3 serves a foreign reader the original, thumbnail and preview of an ACTIVE offer with safe inline headers', async () => {
+      const { offerId, pngId, jpegId } = await offerWithPhotos();
+
+      const png = await fileOf(offerId, pngId).expect(200);
+      expect(png.headers['content-type']).toBe('image/png');
+      expect(png.headers['content-length']).toBe(String(PNG.length));
+      expect(png.body).toEqual(PNG);
+      expect(png.headers['x-content-type-options']).toBe('nosniff');
+      expect(png.headers['content-disposition']).toMatch(/^inline;/);
+
+      const original = await fileOf(offerId, jpegId).expect(200);
+      expect(original.headers['content-type']).toBe('image/jpeg');
+      expect(original.body).toEqual(JPEG);
+
+      for (const [size, edge] of [
+        ['thumbnail', 800],
+        ['preview', 1920],
+      ] as const) {
+        const res = await fileOf(offerId, jpegId, stranger, { size }).expect(
+          200,
+        );
+        expect(res.headers['content-type']).toBe('image/jpeg');
+        expect(res.headers['content-disposition']).toMatch(/^inline;/);
+        const meta = await sharp(res.body as Buffer).metadata();
+        expect(Math.max(meta.width, meta.height)).toBe(edge);
+        expect((res.body as Buffer).length).toBeLessThan(JPEG.length);
+        expect(res.headers['content-length']).toBe(
+          String((res.body as Buffer).length),
+        );
+      }
+      const thumbnail = await fileOf(offerId, pngId, stranger, {
+        size: 'thumbnail',
+      }).expect(200);
+      expect(thumbnail.headers['content-type']).toBe('image/jpeg');
+      expect(thumbnail.body).not.toEqual(PNG);
+    });
+
+    it('UC06-FIL-1 names the file neutrally and never reveals the original file name', async () => {
+      const { animalId, offerId, pngId, jpegId } = await offerWithPhotos();
+      const stored = (await storedAnimal(animalId)).photos as {
+        file: { fileName: string };
+      }[];
+      const names = stored.map((photo) => photo.file.fileName);
+      expect(names.every((name) => name.length > 0)).toBe(true);
+
+      for (const [photoId, extension] of [
+        [pngId, 'png'],
+        [jpegId, 'jpe?g'],
+      ] as const)
+        for (const query of [{}, { size: 'thumbnail' }, { size: 'preview' }]) {
+          const res = await fileOf(offerId, photoId, stranger, query).expect(
+            200,
+          );
+          const disposition = String(res.headers['content-disposition']);
+          for (const name of names)
+            expect(disposition).not.toContain(name.replace(/\.[^.]*$/, ''));
+          expect(disposition).toContain(photoId);
+          expect(disposition).toMatch(
+            'size' in query
+              ? new RegExp(`^inline; filename="${photoId}\\.jpe?g"`)
+              : new RegExp(`^inline; filename="${photoId}\\.${extension}"`),
+          );
+        }
+    });
+
+    it.each(['SCHEDULED', 'ACTIVE', 'WITHDRAWN', 'EXPIRED'] as const)(
+      'UC06-FIL-1 serves the owner the photo of their %s offer',
+      async (status) => {
+        const { offerId, pngId } = await offerWithPhotos(status);
+        const res = await fileOf(offerId, pngId, owner).expect(200);
+        expect(res.body).toEqual(PNG);
+      },
+    );
+
+    it.each(['SCHEDULED', 'WITHDRAWN', 'EXPIRED'] as const)(
+      'UC06-FIL-2 answers a foreign reader 404 Offer not found for a %s offer, same as for a nonexistent offer',
+      async (status) => {
+        const { offerId, pngId } = await offerWithPhotos(status);
+        const hidden = await fileOf(offerId, pngId).expect(404);
+        const missing = await fileOf(missingId, pngId).expect(404);
+        expect(hidden.body.toString()).toBe(missing.body.toString());
+        expect(JSON.parse(hidden.body.toString())).toMatchObject({
+          error: 'Offer not found',
+        });
+        for (const size of ['thumbnail', 'preview'])
+          await fileOf(offerId, pngId, stranger, { size }).expect(404);
+      },
+    );
+
+    it('UC06-FIL-2 checks authorization on every request: a withdrawn offer closes the file again', async () => {
+      const { offerId, pngId } = await offerWithPhotos();
+      await fileOf(offerId, pngId).expect(200);
+      await animals().updateOne(
+        { 'offers._id': new Types.ObjectId(offerId) },
+        {
+          $set: {
+            'offers.$.withdrawnAt': at(-HOUR),
+            'offers.$.withdrawnBy': owner.userId,
+          },
+        },
+      );
+      await fileOf(offerId, pngId).expect(404);
+      await fileOf(offerId, pngId, owner).expect(200);
+    });
+
+    it('UC06-FIL-4 answers 404 Offer not found for a nonexistent offer and 404 Photo not found for a missing photo', async () => {
+      const { offerId, pngId } = await offerWithPhotos();
+      const noOffer = await fileOf(missingId, pngId).expect(404);
+      expect(JSON.parse(noOffer.body.toString())).toMatchObject({
+        error: 'Offer not found',
+      });
+      const noPhoto = await fileOf(offerId, missingId).expect(404);
+      expect(JSON.parse(noPhoto.body.toString())).toMatchObject({
+        error: 'Photo not found',
+      });
+      await fileOf(offerId, missingId, owner, { size: 'thumbnail' }).expect(
+        404,
+      );
+    });
+
+    it('UC06-FIL-4 does not serve a photo of another animal through this offer', async () => {
+      const first = await offerWithPhotos();
+      const second = await offerWithPhotos();
+      const res = await fileOf(first.offerId, second.pngId).expect(404);
+      expect(JSON.parse(res.body.toString())).toMatchObject({
+        error: 'Photo not found',
+      });
+      await fileOf(first.offerId, second.pngId, owner).expect(404);
+      await fileOf(second.offerId, second.pngId).expect(200);
+    });
+
+    it('UC06-FIL-4 does not serve a photo of an animal without photos', async () => {
+      const animalId = await createAnimal();
+      const offerId = await storeOffer(animalId);
+      await fileOf(offerId, missingId).expect(404);
+    });
+
+    it.each(['huge', 'THUMBNAIL', '', 'original'])(
+      'UC06-VAL-1 rejects size=%j with 400',
+      async (size) => {
+        const { offerId, pngId } = await offerWithPhotos();
+        const res = await fileOf(offerId, pngId, stranger, { size }).expect(
+          400,
+        );
+        expect(JSON.parse(res.body.toString())).toMatchObject({
+          error: 'Validation failed',
+        });
+      },
+    );
+
+    it.each([
+      ['offerId', 'xyz', 'a'.repeat(24)],
+      ['photoId', 'a'.repeat(24), 'xyz'],
+    ])(
+      'UC06-VAL-1 rejects a malformed %s with 400 before the breeder guard',
+      async (_name, offerId, photoId) => {
+        await fileOf(offerId, photoId, stranger).expect(400);
+        await fileOf(offerId, photoId, unverified).expect(400);
+      },
+    );
+
+    it('UC06-ACC answers 401 without identity, 403 when unverified and 503 when verification cannot be read', async () => {
+      const { offerId, pngId } = await offerWithPhotos();
+      const path = `/offers/${offerId}/photos/${pngId}/file`;
+      await request(fixed).get(path).expect(401);
+      await request(fixed)
+        .get(path)
+        .set({ 'x-user-id': stranger.userId, 'x-user-roles': 'breeder' })
+        .expect(401);
+      await fileOf(offerId, pngId, unverified).expect(403);
+      verificationDown = true;
+      await fileOf(offerId, pngId, stranger).expect(503);
+    });
+
+    it('UC06 is served by the composed service (createModules wiring)', async () => {
+      const { offerId, pngId } = await offerWithPhotos();
+      const detail = await request(app)
+        .get(`/offers/${offerId}`)
+        .set(auth(stranger))
+        .expect(200);
+      expect(OfferDetailSchema.parse(detail.body).animal.photos[0]!.id).toBe(
+        pngId,
+      );
+      const file = await request(app)
+        .get(`/offers/${offerId}/photos/${pngId}/file`)
+        .set(auth(stranger))
+        .buffer(true)
+        .parse(binaryBody)
+        .expect(200);
+      expect(file.body).toEqual(PNG);
+      await request(app)
+        .get(`/offers/${missingId}`)
+        .set(auth(stranger))
+        .expect(404);
+    });
+
+    it('UC06-FIL-5 keeps the owner route of the animal module working', async () => {
+      const { animalId, pngId } = await offerWithPhotos();
+      const composed = await request(app)
+        .get(`/animals/${animalId}/photos/${pngId}/file`)
+        .set(auth(owner))
+        .buffer(true)
+        .parse(binaryBody)
+        .expect(200);
+      expect(composed.body).toEqual(PNG);
+      expect(composed.headers['content-disposition']).toMatch(/^inline;/);
+    });
+  });
+
   describe('no other offer routes exist', () => {
     it.each([
       ['put', '/offers/<id>'],
       ['patch', '/offers/<id>'],
       ['delete', '/offers/<id>'],
-      ['get', '/offers/<id>'],
       ['get', '/offers'],
       ['put', '/offers/<id>/withdraw'],
       ['delete', '/offers/<id>/withdraw'],

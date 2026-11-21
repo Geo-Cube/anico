@@ -225,13 +225,13 @@ pro velikost těla může být zachycena globálně.
 
 ## Ověřování nabídky před formulářem
 
-Frontend by měl formulář zobrazit jen tehdy, pokud detail nabídky potvrzuje:
+Detail nabídky je `GET /offers/{offerId}` (v gateway `/api/animal/offers/{offerId}`) a nese
+`canSendInquiry` s `inquiryUnavailableReason`. Frontend zobrazí formulář jen při
+`canSendInquiry === true`. Server ho počítá z podmínek UC-07: nabídka je `ACTIVE`, je cizí
+a čtenář k ní nemá `PENDING` poptávku (detail navíc čte jen ověřený chovatel). Jinak frontend
+podle `inquiryUnavailableReason` vysvětlí proč (`OWN_OFFER`, `NOT_ACTIVE`, `INQUIRY_PENDING`).
 
-- `status === "ACTIVE"`;
-- nabídka je cizí;
-- přihlášený chovatel je ověřený.
-
-I při splnění těchto podmínek může server vrátit `409`, protože nabídka může v době
+I při `canSendInquiry === true` může server vrátit `409`, protože nabídka může v době
 odeslání skončit nebo být stažena.
 
 ## Exportované kontrakty
