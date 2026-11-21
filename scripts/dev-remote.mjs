@@ -107,11 +107,10 @@ try {
     command,
     extra,
     reuse,
-    testIntegration,
     service: selectedService,
     frontend,
   } = remoteArguments(process.argv.slice(2));
-  if (!selectedService && !check && !command && !testIntegration)
+  if (!selectedService && !check && !command)
     throw new Error(
       'Choose a service: npm run dev:backend -- --service animal, or npm run dev:fullstack -- --service animal',
     );
@@ -157,7 +156,7 @@ try {
     );
   for (const port of [
     ...(!reuse ? [settings.localPort] : []),
-    ...(!check && !command && !testIntegration
+    ...(!check && !command
       ? [...configs.map(({ port }) => port), ...(frontend ? [5173] : [])]
       : []),
   ])
@@ -225,7 +224,6 @@ try {
   }
   if (!check) {
     if (
-      !testIntegration &&
       !command &&
       configs.some(({ service }) => service.name === 'animal-service') &&
       configs.some(({ service }) => service.name === 'breeder-service')
@@ -243,11 +241,7 @@ try {
         );
     }
     let identityEnvironment = {};
-    if (
-      !testIntegration &&
-      !command &&
-      (service.name !== 'auth-service' || frontend)
-    ) {
+    if (!command && (service.name !== 'auth-service' || frontend)) {
       authRelay = await startDevelopmentRelay({
         accessSession: createAccessSession(),
         ...(frontend ? { appOrigin: 'http://127.0.0.1:5173' } : {}),
@@ -280,24 +274,13 @@ try {
     }
     const task = command
       ? ['run', `db:${command}`, '-w', service.workspace, '--', ...extra]
-      : testIntegration
-        ? [
-            'run',
-            'test',
-            '-w',
-            service.workspace,
-            '--',
-            'tests/integration/offers.test.ts',
-            '--no-file-parallelism',
-            '--maxWorkers=1',
-          ]
-        : [
-            'run',
-            'dev',
-            '--',
-            `--filter=${service.workspace}`,
-            ...(frontend ? ['--filter=@anico/frontend'] : []),
-          ];
+      : [
+          'run',
+          'dev',
+          '--',
+          `--filter=${service.workspace}`,
+          ...(frontend ? ['--filter=@anico/frontend'] : []),
+        ];
     const npmArgs = process.env.npm_execpath
       ? [process.env.npm_execpath, ...task]
       : task;
@@ -310,39 +293,35 @@ try {
           ...process.env,
           ...config.env,
           ...identityEnvironment,
-          ...(testIntegration
-            ? { TEST_MONGODB_URI: config.env.MONGODB_URI }
-            : {}),
           ANICO_DEV_SERVICE: service.name,
           ANICO_API_MODE: 'hybrid',
         },
       },
     );
-    const dependencies =
-      command || testIntegration
-        ? []
-        : configs.slice(1).map((backend) => {
-            const task = [
-              'run',
-              'dev',
-              '--',
-              `--filter=${backend.service.workspace}`,
-            ];
-            return launch(
-              process.env.npm_execpath ? process.execPath : 'npm',
-              process.env.npm_execpath
-                ? [process.env.npm_execpath, ...task]
-                : task,
-              {
-                stdio: 'inherit',
-                env: {
-                  ...process.env,
-                  ...backend.env,
-                  ...identityEnvironment,
-                },
+    const dependencies = command
+      ? []
+      : configs.slice(1).map((backend) => {
+          const task = [
+            'run',
+            'dev',
+            '--',
+            `--filter=${backend.service.workspace}`,
+          ];
+          return launch(
+            process.env.npm_execpath ? process.execPath : 'npm',
+            process.env.npm_execpath
+              ? [process.env.npm_execpath, ...task]
+              : task,
+            {
+              stdio: 'inherit',
+              env: {
+                ...process.env,
+                ...backend.env,
+                ...identityEnvironment,
               },
-            );
-          });
+            },
+          );
+        });
     const result = await Promise.race([
       once(app, 'exit').then(([code]) => code ?? 1),
       ...dependencies.map((dependency) =>
