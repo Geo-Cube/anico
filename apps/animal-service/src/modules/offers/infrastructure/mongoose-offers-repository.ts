@@ -1,4 +1,5 @@
 import { isValidObjectId, Types, type Connection } from 'mongoose';
+import { toAnimalPhoto } from '../../animal/infrastructure/mongoose-repository.js';
 import {
   animalModel,
   type StoredInquiry,
@@ -180,6 +181,99 @@ export function mongooseOffersRepository(
             }),
           }
         : null;
+    },
+
+    async findDetail(offerId, viewerUserId) {
+      if (!isValidObjectId(offerId)) return null;
+      const id = new Types.ObjectId(offerId);
+      // inkluzní projekce: soubory, důvody ani posouzení dokladů se nečtou; `offers.$elemMatch`
+      // načte celou nabídku včetně všech poptávek, ven z repozitáře jde jen `status` poptávek čtenáře
+      const doc = await model
+        .findOne(
+          { 'offers._id': id },
+          {
+            ownerUserId: 1,
+            name: 1,
+            species: 1,
+            breedId: 1,
+            sex: 1,
+            birthDate: 1,
+            coatColor: 1,
+            weightKg: 1,
+            city: 1,
+            pedigreeNumber: 1,
+            microchipNumber: 1,
+            description: 1,
+            'photos._id': 1,
+            'photos.isPrimary': 1,
+            'documents.documentType': 1,
+            'documents.isCurrent': 1,
+            'documents.assessmentStatus': 1,
+            offers: { $elemMatch: { _id: id } },
+          },
+        )
+        .lean();
+      const offer = doc?.offers?.[0];
+      if (!doc || !offer) return null;
+      return {
+        offer: toDomain(offer, {
+          animalId: doc._id,
+          ownerUserId: doc.ownerUserId,
+        }),
+        animal: {
+          name: doc.name,
+          species: doc.species,
+          breedId: doc.breedId,
+          sex: doc.sex,
+          birthDate: doc.birthDate ?? null,
+          coatColor: doc.coatColor ?? null,
+          weightKg: doc.weightKg ?? null,
+          city: doc.city ?? null,
+          pedigreeNumber: doc.pedigreeNumber ?? null,
+          microchipNumber: doc.microchipNumber ?? null,
+          description: doc.description ?? null,
+          photos: (doc.photos ?? []).map((photo) => ({
+            id: photo._id.toString(),
+            isPrimary: photo.isPrimary,
+          })),
+          documents: (doc.documents ?? []).map((document) => ({
+            documentType: document.documentType,
+            isCurrent: document.isCurrent,
+            assessmentStatus: document.assessmentStatus,
+          })),
+        },
+        viewerInquiries: (offer.inquiries ?? [])
+          .filter((inquiry) => inquiry.senderBreederId === viewerUserId)
+          .map((inquiry) => ({ status: inquiry.status })),
+      };
+    },
+
+    async findPhoto(offerId, photoId) {
+      if (!isValidObjectId(offerId)) return null;
+      const id = new Types.ObjectId(offerId);
+      // neplatné ID fotografie se do projekce nedostane: nabídka se vrátí s `photo: null`
+      const doc = await model
+        .findOne(
+          { 'offers._id': id },
+          {
+            ownerUserId: 1,
+            offers: { $elemMatch: { _id: id } },
+            ...(isValidObjectId(photoId) && {
+              photos: { $elemMatch: { _id: new Types.ObjectId(photoId) } },
+            }),
+          },
+        )
+        .lean();
+      const offer = doc?.offers?.[0];
+      if (!doc || !offer) return null;
+      const photo = doc.photos?.[0];
+      return {
+        offer: toDomain(offer, {
+          animalId: doc._id,
+          ownerUserId: doc.ownerUserId,
+        }),
+        photo: photo ? toAnimalPhoto(photo) : null,
+      };
     },
 
     async appendInquiry(target, inquiry, senderBreederId, now) {

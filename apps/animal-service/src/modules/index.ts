@@ -19,13 +19,15 @@ export function createModules(
 ) {
   const router = Router();
   const documentFiles = gridFsFileStorage(connection, 'animalDocuments');
+  const photos = gridFsFileStorage(connection, 'animalPhotos');
+  const photoVariants = gridFsFileStorage(connection, 'animalPhotoVariants');
   const newId = () => new Types.ObjectId().toString();
   router.use(
     '/',
     AnimalRouter({
       repository: mongooseAnimalRepository(connection),
-      photos: gridFsFileStorage(connection, 'animalPhotos'),
-      photoVariants: gridFsFileStorage(connection, 'animalPhotoVariants'),
+      photos,
+      photoVariants,
       resizer: sharpPhotoResizer(),
       documentFiles,
       verification: dependencies.verification,
@@ -47,6 +49,8 @@ export function createModules(
     '/',
     OffersRouter({
       repository: mongooseOffersRepository(connection),
+      photos,
+      photoVariants,
       verification: dependencies.verification,
       newId,
     }),

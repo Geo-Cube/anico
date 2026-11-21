@@ -51,8 +51,9 @@ používá vstřikované `now`; UC04-CRE-1 a UC04-CON-4 běží se skutečnými 
 
 ## 2. Nepokryto automaticky
 
-- **Poptávky (US-05):** neexistují; stažení jen nastaví `withdrawnAt`. Chování nevyřízených poptávek („Vypršela –
-  Nabídka byla stažena“) je `TODO(US-05)` a otestuje se v US-05.
+- **Poptávky:** v době US-04 neexistovaly; stažení jen nastaví `withdrawnAt`. Odeslání poptávky přidalo UC-07
+  (PR #56). Chování nevyřízených poptávek stažené nabídky („Vypršela – Nabídka byla stažena“) je `TODO(UC-07)`
+  a zatím se netestuje.
 - **Nasazení a ověření na devu:** nabídky nejsou nasazené. Testerské scénáře UC-04-01 až UC-04-03
   proběhnou ručně až po nasazení podle [dev-testovani.md](dev-testovani.md).
 - **Frontend:** není napojen (existuje jen mock stránky nabídky); formulář, seznam „Moje nabídky“ a stažení

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import regionCatalog from '../catalogs/regions.json' with { type: 'json' };
 import {
   CreateOfferSchema,
+  InquiryUnavailableReasonSchema,
   MAX_OFFER_MESSAGE_LENGTH,
   MyOfferListSchema,
+  OfferDetailSchema,
   OfferSchema,
   OfferStatusSchema,
   RegionIdSchema,
@@ -260,5 +262,254 @@ describe('response schemas', () => {
     expect(
       MyOfferListSchema.safeParse({ items: [item], nextCursor: 'abc' }).success,
     ).toBe(false);
+  });
+});
+
+describe('UC06-SEC-2 InquiryUnavailableReasonSchema', () => {
+  it('is exactly the three reasons in priority order', () => {
+    expect(InquiryUnavailableReasonSchema.options).toEqual([
+      'OWN_OFFER',
+      'NOT_ACTIVE',
+      'INQUIRY_PENDING',
+    ]);
+  });
+
+  it.each(['', 'own_offer', 'OWN OFFER', 'EXPIRED', null, 1])(
+    'rejects %j',
+    (reason) => {
+      expect(InquiryUnavailableReasonSchema.safeParse(reason).success).toBe(
+        false,
+      );
+    },
+  );
+});
+
+describe('UC06-SEC-2 OfferDetailSchema', () => {
+  const photoId = 'c'.repeat(24);
+  const detail = {
+    id: 'b'.repeat(24),
+    animalId,
+    regionId: 'praha',
+    validFrom: '2026-11-19T10:00:00.000Z',
+    validTo: null,
+    message: null,
+    status: 'ACTIVE',
+    animal: {
+      name: 'Luna',
+      species: 'dog',
+      breedId: 'aljassky-malamut',
+      sex: 'female',
+      birthDate: '2022-03-01',
+      coatColor: 'šedá',
+      weightKg: 24.5,
+      city: 'Brno',
+      pedigreeNumber: 'CMKU/123',
+      microchipNumber: '  000123  ',
+      description: 'Klidná fena',
+      photos: [
+        { id: photoId, isPrimary: true },
+        { id: 'd'.repeat(24), isPrimary: false },
+      ],
+    },
+    verification: { verified: true, documentTypes: ['PEDIGREE'] },
+    canSendInquiry: true,
+    inquiryUnavailableReason: null,
+  };
+  const withAnimal = (patch: object) => ({
+    ...detail,
+    animal: { ...detail.animal, ...patch },
+  });
+  const parses = (value: unknown) => OfferDetailSchema.safeParse(value).success;
+
+  it('accepts a complete detail and returns it unchanged', () => {
+    expect(OfferDetailSchema.parse(detail)).toEqual(detail);
+  });
+
+  it('accepts nulls in every optional animal field, no photos and no verification', () => {
+    const minimal = {
+      ...detail,
+      validTo: null,
+      message: null,
+      animal: {
+        ...detail.animal,
+        birthDate: null,
+        coatColor: null,
+        weightKg: null,
+        city: null,
+        pedigreeNumber: null,
+        microchipNumber: null,
+        description: null,
+        photos: [],
+      },
+      verification: { verified: false, documentTypes: [] },
+    };
+    expect(OfferDetailSchema.parse(minimal)).toEqual(minimal);
+  });
+
+  it('accepts validTo as an ISO instant and every offer status', () => {
+    expect(parses({ ...detail, validTo: '2026-12-01T00:00:00.000Z' })).toBe(
+      true,
+    );
+    for (const status of OfferStatusSchema.options)
+      expect(parses({ ...detail, status })).toBe(true);
+  });
+
+  it.each([
+    ['top level', (d: typeof detail) => ({ ...d, ownerUserId: 'u1' })],
+    [
+      'top level createdAt',
+      (d: typeof detail) => ({ ...d, createdAt: d.validFrom }),
+    ],
+    ['top level inquiries', (d: typeof detail) => ({ ...d, inquiries: [] })],
+    [
+      'animal',
+      (d: typeof detail) => ({
+        ...d,
+        animal: { ...d.animal, ownerUserId: 'u1' },
+      }),
+    ],
+    [
+      'animal documents',
+      (d: typeof detail) => ({ ...d, animal: { ...d.animal, documents: [] } }),
+    ],
+    [
+      'photo fileName',
+      (d: typeof detail) => ({
+        ...d,
+        animal: {
+          ...d.animal,
+          photos: [{ id: photoId, isPrimary: true, fileName: 'a.png' }],
+        },
+      }),
+    ],
+    [
+      'photo url',
+      (d: typeof detail) => ({
+        ...d,
+        animal: {
+          ...d.animal,
+          photos: [{ id: photoId, isPrimary: true, url: '/x' }],
+        },
+      }),
+    ],
+    [
+      'verification',
+      (d: typeof detail) => ({
+        ...d,
+        verification: { ...d.verification, reviewedBy: 'u1' },
+      }),
+    ],
+  ])('rejects an unknown field in %s (strict)', (_where, mutate) => {
+    expect(parses(detail)).toBe(true);
+    expect(parses(mutate(detail))).toBe(false);
+  });
+
+  it.each([
+    'id',
+    'animalId',
+    'regionId',
+    'validFrom',
+    'validTo',
+    'message',
+    'status',
+    'animal',
+    'verification',
+    'canSendInquiry',
+    'inquiryUnavailableReason',
+  ])('requires %s', (key) => {
+    const { [key]: _omitted, ...rest } = detail as Record<string, unknown>;
+    expect(parses(rest)).toBe(false);
+  });
+
+  it.each([
+    'name',
+    'species',
+    'breedId',
+    'sex',
+    'birthDate',
+    'coatColor',
+    'weightKg',
+    'city',
+    'pedigreeNumber',
+    'microchipNumber',
+    'description',
+    'photos',
+  ])('requires animal.%s (nullable fields are present, not omitted)', (key) => {
+    const { [key]: _omitted, ...animal } = detail.animal as Record<
+      string,
+      unknown
+    >;
+    expect(parses({ ...detail, animal })).toBe(false);
+  });
+
+  it('rejects malformed values', () => {
+    expect(parses({ ...detail, id: 'xyz' })).toBe(false);
+    expect(parses({ ...detail, animalId: 'xyz' })).toBe(false);
+    expect(parses({ ...detail, regionId: 'moravia' })).toBe(false);
+    expect(parses({ ...detail, status: 'DRAFT' })).toBe(false);
+    expect(parses({ ...detail, validFrom: '2026-11-19' })).toBe(false);
+    expect(parses({ ...detail, validTo: 'soon' })).toBe(false);
+    expect(parses(withAnimal({ species: 'cat' }))).toBe(false);
+    expect(parses(withAnimal({ sex: 'unknown' }))).toBe(false);
+    expect(parses(withAnimal({ name: '' }))).toBe(false);
+    expect(parses(withAnimal({ weightKg: 0 }))).toBe(false);
+    expect(parses(withAnimal({ birthDate: '01.03.2022' }))).toBe(false);
+    expect(
+      parses(withAnimal({ photos: [{ id: 'nope', isPrimary: true }] })),
+    ).toBe(false);
+    expect(parses(withAnimal({ photos: [{ id: photoId }] }))).toBe(false);
+    expect(
+      parses({
+        ...detail,
+        verification: { verified: true, documentTypes: ['PASSPORT'] },
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects canSendInquiry that contradicts inquiryUnavailableReason', () => {
+    expect(
+      parses({
+        ...detail,
+        canSendInquiry: false,
+        inquiryUnavailableReason: null,
+      }),
+    ).toBe(false);
+    for (const reason of InquiryUnavailableReasonSchema.options) {
+      expect(
+        parses({
+          ...detail,
+          canSendInquiry: true,
+          inquiryUnavailableReason: reason,
+        }),
+      ).toBe(false);
+      expect(
+        parses({
+          ...detail,
+          canSendInquiry: false,
+          inquiryUnavailableReason: reason,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it('rejects verified that contradicts documentTypes', () => {
+    expect(
+      parses({
+        ...detail,
+        verification: { verified: false, documentTypes: ['PEDIGREE'] },
+      }),
+    ).toBe(false);
+    expect(
+      parses({
+        ...detail,
+        verification: { verified: true, documentTypes: [] },
+      }),
+    ).toBe(false);
+    expect(
+      parses({
+        ...detail,
+        verification: { verified: false, documentTypes: [] },
+      }),
+    ).toBe(true);
   });
 });

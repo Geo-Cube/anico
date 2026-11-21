@@ -43,6 +43,8 @@ ověřených chovatelů jsou v `animal-service`.
 9. **Poptávky (R6):** neexistují, stažení jen nastaví `withdrawnAt` a v kódu je `TODO(US-05)`. Doporučení pro
    US-05: držet poptávky v `animal-service` a stav „Vypršela – Nabídka byla stažena“ nevyřízené poptávky
    **odvozovat** z `withdrawnAt` nabídky; stažení pak nezapisuje do další kolekce, odpadá transakce i outbox.
+   _Aktualizace 21. 11. 2026:_ poptávky přidalo UC-07 (PR #56, vnořené `offers[].inquiries[]`); přechod
+   nevyřízených poptávek při stažení stále chybí a marker je nyní `TODO(UC-07)`.
 10. **Ověřený chovatel:** každá operace používá guard `verifiedBreeder` (projekce `verifiedBreeders`, ADR-0007):
     401 / 403 / 503. Jde o ověření chovatele (UC-01); ověření dokladů zvířete podmínkou není.
 11. **Odpovědi:** `{ error }`, validace `400 { error: 'Validation failed', issues }` (i časová pravidla),
