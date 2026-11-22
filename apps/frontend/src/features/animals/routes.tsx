@@ -2,6 +2,8 @@ import type { RouteObject } from 'react-router';
 import { DocumentHistoryPage } from '@/features/documents/DocumentHistoryPage';
 import { DocumentReplacePage } from '@/features/documents/DocumentReplacePage';
 import { DocumentUploadPage } from '@/features/documents/DocumentUploadPage';
+import { InquiryFormPage } from '@/features/inquiries/InquiryFormPage';
+import { InquirySentPage } from '@/features/inquiries/InquirySentPage';
 import { AnimalDetailPage } from './AnimalDetailPage';
 import { AnimalFormPage } from './AnimalForm';
 import { AnimalOfferPage } from './AnimalOfferPage';
@@ -31,6 +33,10 @@ export const animalsRoutes: RouteObject[] = [
   {
     path: 'nabidky',
     element: <VerifiedBreederGate />,
-    children: [{ path: ':offerId', element: <AnimalOfferPage /> }],
+    children: [
+      { path: ':offerId', element: <AnimalOfferPage /> },
+      { path: ':offerId/poptavka', element: <InquiryFormPage /> },
+      { path: ':offerId/poptavka/odeslano', element: <InquirySentPage /> },
+    ],
   },
 ];
