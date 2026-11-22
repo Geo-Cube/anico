@@ -24,10 +24,12 @@ import {
   DecideAnimalDocumentSchema,
   DocumentReviewListSchema,
   DocumentReviewSchema,
+  InquiryUnavailableReasonSchema,
   MAX_DOCUMENTS_PER_SUBMISSION,
   MAX_PHOTOS_PER_ANIMAL,
   MyOfferListSchema,
   MyOfferSchema,
+  OfferDetailSchema,
   OfferIdSchema,
   OfferSchema,
   OfferStatusSchema,
@@ -161,6 +163,8 @@ const components = [
   ['Offer', OfferSchema],
   ['MyOffer', MyOfferSchema],
   ['MyOfferList', MyOfferListSchema],
+  ['InquiryUnavailableReason', InquiryUnavailableReasonSchema],
+  ['OfferDetail', OfferDetailSchema],
   ['OfferConflict', OfferConflictSchema],
   ['CreateInquiry', CreateInquirySchema],
   ['SubmitInquiryResponse', SubmitInquiryResponseSchema],
@@ -226,6 +230,12 @@ const responses = {
   ),
   OfferNotFound: errorResponse(
     'Nabídka neexistuje, nebo patří jinému chovateli – `{"error":"Offer not found"}`.',
+  ),
+  OfferVisibilityNotFound: errorResponse(
+    'Nabídka neexistuje, nebo ji čtenář nesmí vidět (cizí nabídka, která není `ACTIVE`) – `{"error":"Offer not found"}`.',
+  ),
+  OfferPhotoNotFound: errorResponse(
+    'Nabídka neexistuje, nebo ji čtenář nesmí vidět (`{"error":"Offer not found"}`), případně nabídnuté zvíře takovou fotografii nemá (`{"error":"Photo not found"}`).',
   ),
   PayloadTooLarge: errorResponse(
     `Soubor je větší než ${MAX_MIB} MiB, nebo JSON tělo překračuje limit – \`{"error":"Payload too large"}\`. Nic se neuloží.`,
@@ -316,7 +326,7 @@ export function openApiDocument(): JsonObject {
     openapi: '3.1.0',
     info: {
       title: 'AniCo animal-service – zvířata, doklady a nabídky',
-      version: '0.3.0',
+      version: '0.4.0',
       description: [
         'Profily zvířat s fotografiemi (UC-02) a doklady zvířat (UC-03, ADR-0005). Chovatel spravuje jen svá zvířata; administrátor posuzuje doklady.',
         '',
@@ -326,7 +336,7 @@ export function openApiDocument(): JsonObject {
         '',
         'Operace chovatele vyžadují ověřený účet z breeder-service (`isVerified`), ověřuje se při každém požadavku. Cizí i neexistující zvíře je 404. Identitu doplňuje gateway do hlavičky `x-anico-identity`.',
         '',
-        'Nabídky (US-04) jsou zvířecí `offers[]` ve stejném dokumentu. Stav (`SCHEDULED`, `ACTIVE`, `WITHDRAWN`, `EXPIRED`) se odvozuje z časů a stažení, neukládá se. Zvíře má nejvýše jednu blokující nabídku a stažení je nevratné.',
+        'Nabídky (US-04) jsou zvířecí `offers[]` ve stejném dokumentu. Stav (`SCHEDULED`, `ACTIVE`, `WITHDRAWN`, `EXPIRED`) se odvozuje z časů a stažení, neukládá se. Zvíře má nejvýše jednu blokující nabídku a stažení je nevratné. Detail nabídky (UC-06) čte každý ověřený chovatel: vlastník v každém stavu, ostatní jen `ACTIVE`.',
       ].join('\n'),
     },
     servers: [
@@ -348,7 +358,8 @@ export function openApiDocument(): JsonObject {
       },
       {
         name: 'offers',
-        description: 'Nabídky vlastních zvířat (US-04).',
+        description:
+          'Nabídky vlastních zvířat (US-04) a jejich detail (UC-06).',
       },
       { name: 'health', description: 'Stav služby (veřejné).' },
     ],
@@ -538,7 +549,8 @@ export function openApiDocument(): JsonObject {
           tags: ['animals'],
           operationId: 'getAnimalPhoto',
           summary: 'Soubor fotografie',
-          description: `${photoReadAccess} Bez \`size\` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin vrací originál i se \`size\`.`,
+          description:
+            'Jen vlastník zvířete s ověřeným účtem. Bez `size` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin dostanou se `size` zmenšeninu vytvořenou z originálu, nikdy originál.',
           parameters: [
             queryParameter(
               'size',
@@ -780,6 +792,62 @@ export function openApiDocument(): JsonObject {
             },
             '401': responseRef('Unauthorized'),
             '403': responseRef('BreederForbidden'),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
+          },
+        },
+      },
+      '/offers/{offerId}': {
+        parameters: [offerIdParameter],
+        get: {
+          tags: ['offers'],
+          operationId: 'getOfferDetail',
+          summary: 'Detail nabídky',
+          description:
+            'Ověřený chovatel (UC-06). Vlastník vidí svou nabídku v každém stavu, ostatní jen `ACTIVE`; jinak je odpověď `404` stejná jako u neexistující nabídky. Údaje zvířete jsou aktuální (ne snapshot) včetně čipu a čísla průkazu původu. `verification` říká, zda má zvíře alespoň jednu aktuální schválenou verzi dokladu, a uvádí jejich typy; soubory dokladů, poptávky, vlastník ani kontakty se nevracejí. Fotografie nesou jen `id` a `isPrimary` v pořadí zvířete; URL skládá klient jako `/offers/{offerId}/photos/{photoId}/file` (s `?size=thumbnail|preview`). `canSendInquiry` je pravda u `ACTIVE` cizí nabídky, ke které čtenář nemá `PENDING` poptávku; jinak `inquiryUnavailableReason` říká proč (priorita `OWN_OFFER`, `NOT_ACTIVE`, `INQUIRY_PENDING`).',
+          responses: {
+            '200': {
+              description: 'Detail nabídky.',
+              content: json(ref('OfferDetail')),
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '404': responseRef('OfferVisibilityNotFound'),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
+          },
+        },
+      },
+      '/offers/{offerId}/photos/{photoId}/file': {
+        parameters: [offerIdParameter, photoIdParameter],
+        get: {
+          tags: ['offers'],
+          operationId: 'getOfferPhotoFile',
+          summary: 'Soubor fotografie nabídky',
+          description:
+            'Ověřený chovatel; viditelnost stejná jako u detailu nabídky (vlastník vždy, ostatní jen `ACTIVE`) a ověřuje se při každém požadavku. Vždy JPEG zmenšenina bez metadat (EXIF, poloha GPS), bez `size` `preview`; originál ani jeho rozlišení se nevrací (vlastník ho čte přes `GET /animals/{animalId}/photos/{photoId}/file`). Název souboru v `Content-Disposition` je neutrální (`{photoId}.jpg`), původní název vlastníka se neprozrazuje.',
+          parameters: [
+            queryParameter(
+              'size',
+              '`thumbnail` (delší strana nejvýše 800 px) pro karty a náhledy, `preview` (nejvýše 1920 px, výchozí) pro detail.',
+              { type: 'string', enum: [...AnimalPhotoSizeSchema.options] },
+            ),
+          ],
+          responses: {
+            '200': {
+              description:
+                'Fotografie k zobrazení (`inline`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`).',
+              content: {
+                'image/jpeg': {
+                  schema: { type: 'string', contentMediaType: 'image/jpeg' },
+                },
+              },
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '404': responseRef('OfferPhotoNotFound'),
             '500': responseRef('InternalError'),
             '503': responseRef('VerificationUnavailable'),
           },

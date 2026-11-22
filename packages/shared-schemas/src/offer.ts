@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import regionCatalog from '@anico/shared-schemas/catalogs/regions.json' with { type: 'json' };
-import { AnimalIdSchema, AnimalSpeciesSchema } from './animal.js';
+import {
+  AnimalIdSchema,
+  AnimalPhotoIdSchema,
+  AnimalSchema,
+  AnimalSpeciesSchema,
+} from './animal.js';
+import { AnimalDocumentTypeSchema } from './animal-document.js';
 
 const regionIds = regionCatalog.regions.map((region) => region.id) as [
   string,
@@ -124,3 +130,65 @@ export const MyOfferListSchema = z.strictObject({
   nextCursor: z.null(),
 });
 export type MyOfferList = z.infer<typeof MyOfferListSchema>;
+
+/** Proč čtenář nemůže poslat poptávku; priorita `OWN_OFFER` > `NOT_ACTIVE` > `INQUIRY_PENDING` (UC-06). */
+export const InquiryUnavailableReasonSchema = z.enum([
+  'OWN_OFFER',
+  'NOT_ACTIVE',
+  'INQUIRY_PENDING',
+]);
+export type InquiryUnavailableReason = z.infer<
+  typeof InquiryUnavailableReasonSchema
+>;
+
+/**
+ * Detail nabídky pro ověřeného chovatele (US-06). Údaje zvířete jsou aktuální (žádný snapshot);
+ * typy a omezení jednotlivých polí se přebírají z `AnimalSchema` (pravidla celého profilu, např.
+ * plemeno podle druhu nebo právě jedna hlavní fotka, hlídá zápis zvířete). Fotky nesou jen `id`
+ * a `isPrimary` v pořadí zvířete, URL souboru skládá klient z `/offers/{id}/photos/{photoId}/file`.
+ * Nevrací vlastníka, poptávky ani kontakty.
+ */
+export const OfferDetailSchema = z
+  .strictObject({
+    id: OfferIdSchema,
+    animalId: AnimalIdSchema,
+    regionId: RegionIdSchema,
+    validFrom: z.iso.datetime(),
+    validTo: z.iso.datetime().nullable(),
+    message: z.string().nullable(),
+    status: OfferStatusSchema,
+    animal: z.strictObject({
+      name: AnimalSchema.shape.name,
+      species: AnimalSpeciesSchema,
+      breedId: AnimalSchema.shape.breedId,
+      sex: AnimalSchema.shape.sex,
+      birthDate: AnimalSchema.shape.birthDate,
+      coatColor: AnimalSchema.shape.coatColor,
+      weightKg: AnimalSchema.shape.weightKg,
+      city: AnimalSchema.shape.city,
+      pedigreeNumber: AnimalSchema.shape.pedigreeNumber,
+      microchipNumber: AnimalSchema.shape.microchipNumber,
+      description: AnimalSchema.shape.description,
+      photos: z.array(
+        z.strictObject({ id: AnimalPhotoIdSchema, isPrimary: z.boolean() }),
+      ),
+    }),
+    verification: z.strictObject({
+      verified: z.boolean(),
+      documentTypes: z.array(AnimalDocumentTypeSchema),
+    }),
+    canSendInquiry: z.boolean(),
+    inquiryUnavailableReason: InquiryUnavailableReasonSchema.nullable(),
+  })
+  .refine(
+    (value) =>
+      value.canSendInquiry === (value.inquiryUnavailableReason === null),
+    'Inquiry can be sent exactly when there is no unavailable reason',
+  )
+  .refine(
+    (value) =>
+      value.verification.verified ===
+      value.verification.documentTypes.length > 0,
+    'Verified exactly when at least one approved document type exists',
+  );
+export type OfferDetail = z.infer<typeof OfferDetailSchema>;

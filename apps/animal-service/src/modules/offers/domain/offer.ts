@@ -1,5 +1,6 @@
 import type {
   InquiryStatus,
+  InquiryUnavailableReason,
   OfferStatus,
   RegionId,
 } from '@anico/shared-schemas';
@@ -52,6 +53,41 @@ export function offerStatus(
 /** SCHEDULED | ACTIVE – „blokující“ nabídka i možnost stažení. */
 export function canWithdraw(status: OfferStatus): boolean {
   return status === 'SCHEDULED' || status === 'ACTIVE';
+}
+
+/**
+ * Viditelnost detailu (UC-06): vlastník vidí svou nabídku v každém stavu, ostatní jen `ACTIVE`.
+ * Neviditelná nabídka se navenek tváří jako neexistující (404).
+ */
+export function offerVisibleTo(status: OfferStatus, isOwner: boolean): boolean {
+  return isOwner || status === 'ACTIVE';
+}
+
+/** Má čtenář k nabídce neodpovězenou (`PENDING`) poptávku? Vstupem jsou jen jeho vlastní poptávky. */
+export function hasPendingInquiry(
+  inquiries: readonly Pick<InquiryRecord, 'status'>[],
+): boolean {
+  return inquiries.some((inquiry) => inquiry.status === 'PENDING');
+}
+
+/**
+ * Může čtenář poslat poptávku (UC-06, products.md): jen u `ACTIVE` nabídky cizího chovatele,
+ * který k ní nemá `PENDING` poptávku. Důvod nedostupnosti podle priority
+ * `OWN_OFFER` > `NOT_ACTIVE` > `INQUIRY_PENDING`; je-li poptávku možné poslat, je `null`.
+ */
+export function inquiryAvailability(input: {
+  isOwner: boolean;
+  status: OfferStatus;
+  pendingInquiry: boolean;
+}): { canSendInquiry: boolean; reason: InquiryUnavailableReason | null } {
+  const reason: InquiryUnavailableReason | null = input.isOwner
+    ? 'OWN_OFFER'
+    : input.status !== 'ACTIVE'
+      ? 'NOT_ACTIVE'
+      : input.pendingInquiry
+        ? 'INQUIRY_PENDING'
+        : null;
+  return { canSendInquiry: reason === null, reason };
 }
 
 /** Tolerance pro začátek platnosti v minulosti (hodiny klienta a prodlevy požadavku). */

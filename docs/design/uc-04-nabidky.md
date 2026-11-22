@@ -150,6 +150,10 @@ Poptávky neexistují. Stažení nabídky jen nastaví `withdrawnAt`; v use case
 poptávky **odvozovat** z `withdrawnAt` nabídky (stejný princip jako stav nabídky), místo zápisu do druhé
 kolekce při stažení. Odpadá tím transakce i event/outbox.
 
+_Aktualizace 21. 11. 2026:_ poptávky přidalo UC-07 (PR #56, `POST /offers/:offerId/inquiries`, vnořené
+`offers[].inquiries[]`). Přechod nevyřízených poptávek stažené nabídky stále není implementován, marker
+v kódu je nyní `TODO(UC-07)`. Detail nabídky (US-06) viz [návrh UC-06](uc-06-detail-nabidky.md).
+
 ## 9. Co má znovu použít US-06 a další
 
 - `offerStatus` a `canWithdraw` v `apps/animal-service/src/modules/offers/domain/offer.ts` – jediná definice stavu;

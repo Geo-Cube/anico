@@ -847,7 +847,10 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
         response.on('end', () => done(null, Buffer.concat(chunks)));
       })
       .expect(200);
-    expect(thumbnail.body).toEqual(JPEG);
+    // zmenšenina vzniká z originálu, originál se místo ní nevrací
+    expect(thumbnail.headers['content-type']).toBe('image/jpeg');
+    const meta = await sharp(thumbnail.body as Buffer).metadata();
+    expect(Math.max(meta.width, meta.height)).toBe(800);
 
     await request(app)
       .patch(`/animals/${animal.id}`)

@@ -1,4 +1,6 @@
 import type { AnimalSpecies } from '@anico/shared-schemas';
+import type { DocumentVersion } from '../../documents/domain/animal-documents.js';
+import type { AnimalPhoto, ProfileValues } from '../../animal/domain/entity.js';
 import type {
   InquiryRecord,
   OfferInquiryTarget,
@@ -18,6 +20,26 @@ export interface AnimalOffers {
   animalId: string;
   ownerUserId: string;
   offers: OfferRecord[];
+}
+
+/**
+ * Zvíře v detailu nabídky (UC-06): profil, fotografie jen s ID a pořadím a minimum z dokladů
+ * pro odvození „ověřeno“. Soubory, důvody ani posouzení dokladů repozitář nečte.
+ */
+export interface OfferDetailAnimal extends ProfileValues {
+  photos: { id: string; isPrimary: boolean }[];
+  documents: Pick<
+    DocumentVersion,
+    'documentType' | 'isCurrent' | 'assessmentStatus'
+  >[];
+}
+
+/** Data detailu nabídky; viditelnost a pohled skládá use case. */
+export interface OfferDetailSource {
+  offer: OfferRecord;
+  animal: OfferDetailAnimal;
+  /** Jen poptávky čtenáře (filtr podle odesílatele v repozitáři), jen `status`. */
+  viewerInquiries: Pick<InquiryRecord, 'status'>[];
 }
 
 export interface OfferRepository {
@@ -44,6 +66,22 @@ export interface OfferRepository {
   ): Promise<OfferRecord | null>;
   /** Nabídka, základní údaje zvířete a vlastník potřební pro UC-07. */
   findForInquiry(offerId: string): Promise<OfferInquiryTarget | null>;
+  /**
+   * Nabídka, zvíře a poptávky čtenáře k detailu (UC-06) – jeden dotaz do DB; `null`, když
+   * nabídka neexistuje. Stav ani viditelnost nerozhoduje.
+   */
+  findDetail(
+    offerId: string,
+    viewerUserId: string,
+  ): Promise<OfferDetailSource | null>;
+  /**
+   * Nabídka a jedna její fotografie k souboru (UC-06) – jeden dotaz do DB; `null`, když
+   * nabídka neexistuje, `photo: null`, když zvíře takovou fotografii nemá.
+   */
+  findPhoto(
+    offerId: string,
+    photoId: string,
+  ): Promise<{ offer: OfferRecord; photo: AnimalPhoto | null } | null>;
   /**
    * Jeden podmíněný zápis: aktivní cizí nabídka, bez PENDING poptávky stejného odesílatele.
    * `false` znamená duplicitní/inaktivní stav nebo změnu vlastníka/nabídky.

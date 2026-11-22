@@ -1,4 +1,4 @@
-# AniCo – doménový kontext pro agenty (MVP: US-01 až US-04)
+# AniCo – doménový kontext pro agenty (MVP: US-01 až US-04, US-06, UC-07)
 
 Kompaktní výtah z business analýzy (BPMI DL Business Model – Tým 5). Je to **jediný zdroj pravdy pro agenty**.
 Při rozporu s původní analýzou vyhrává analýza – rozpor nahlas ohlas a oprav tento soubor.
@@ -7,8 +7,8 @@ Odkazuj se na ID: `UC-01`, `UC-03/A3`, `WF 05`, `US-02`.
 ## 1. Rozsah
 
 - AniCo: platforma pro bezpečné propojování ověřených chovatelů (psi, koně) za účelem krytí.
-- **V MVP zpracováno:** UC-01 Ověřit chovatele, UC-02 Přidat zvíře (+ zobrazit/upravit/odstranit, fotografie), UC-03 Doložit údaje o zvířeti (doklady, posouzení, nové verze). Od 19. 11. 2026 též US-04 Vytvořit nabídku (jen backend, [ADR-0008](adr/0008-nabidky-vnorene-ve-zvireti.md)).
-- **Nezpracováno (US-05 až US-10):** vyhledávání, poptávky, sdílení kontaktů, detail nabídky. Nenavrhuj ani neimplementuj je. Neblokuj je ale zbytečně (např. nevymýšlej vazby, které by se musely rušit).
+- **V MVP zpracováno:** UC-01 Ověřit chovatele, UC-02 Přidat zvíře (+ zobrazit/upravit/odstranit, fotografie), UC-03 Doložit údaje o zvířeti (doklady, posouzení, nové verze). Od 19. 11. 2026 též US-04 Vytvořit nabídku (jen backend, [ADR-0008](adr/0008-nabidky-vnorene-ve-zvireti.md)), od 20. 11. 2026 UC-07 Odeslat poptávku (jen backend, bez vyřízení) a od 21. 11. 2026 US-06 Detail nabídky (jen backend).
+- **Nezpracováno (US-05, US-08 až US-10):** vyhledávání nabídek (US-05), vyřízení poptávek a sdílení kontaktů (US-08 až US-10). Číslování UC-05 až UC-07 podle `apps/animal-service/docs/business-use-cases.md`. Nenavrhuj ani neimplementuj je. Neblokuj je ale zbytečně (např. nevymýšlej vazby, které by se musely rušit).
 - Registraci a přihlášení zajišťuje **základní správa uživatelů** (externí vůči AniCo). AniCo si po registraci „převezme účet“ (identifikátor účtu = `breeder_id`).
 
 ## 2. Aktéři a oprávnění
@@ -112,7 +112,19 @@ Přesná adresa se neeviduje.
 5. Nabídku **nelze upravit, znovu aktivovat ani smazat.** Stáhnout lze jen `SCHEDULED` a `ACTIVE`; stažená a skončená je konečná. Po stažení nebo skončení lze vytvořit novou.
 6. Smazání zvířete (UC-02/6) smaže i jeho nabídky.
 7. Cizí i neexistující zvíře/nabídka → 404, neověřený chovatel → 403.
-8. Poptávky (US-05) zatím neexistují. Doporučení: stav poptávky „Vypršela – Nabídka byla stažena“ odvodit z `withdrawn_at` nabídky.
+8. Poptávky: UC-07 (odeslání, `POST /offers/:offerId/inquiries`) existuje – poptávky jsou vnořené v nabídce (`animals.offers[].inquiries[]`), stav `PENDING`/`EXPIRED`, kontakty se nezpřístupňují. Vyřízení poptávek a sdílení kontaktů (US-08 až US-10) neexistuje. Doporučení: stav poptávky „Vypršela – Nabídka byla stažena“ odvodit z `withdrawn_at` nabídky; přechod při stažení zatím není implementován (komentář `TODO` ve stažení nabídky).
+
+### US-06 – Detail nabídky
+
+> **Rozhodnutí uživatele (21. 11. 2026):** detail čte `animal-service` (modul `offers`) jedním dotazem; podrobnosti:
+> [návrh UC-06](design/uc-06-detail-nabidky.md). Jen backend, nenasazeno.
+
+1. Detail smí číst **jen ověřený chovatel (UC-01)**; ověřuje se na serveru při každém čtení i při čtení souboru fotky (neověřený → 403).
+2. **Viditelnost:** vlastník vidí svou nabídku ve **všech** stavech (`SCHEDULED`, `ACTIVE`, `WITHDRAWN`, `EXPIRED`). Cizí chovatel vidí jen `ACTIVE`; ostatní stavy i neexistující nabídka → stejné 404 `Offer not found`.
+3. Údaje zvířete jsou **aktuální** (žádný snapshot), včetně čipu a čísla průkazu původu. Fotky v pořadí pole `photos` s příznakem `is_primary`; soubory jen přes nabídku se stejnou viditelností.
+4. **Ověřeno:** `verified` = alespoň jedna aktuální verze dokladu ve stavu `APPROVED`; `documentTypes` = unikátní typy takových verzí v pořadí `PEDIGREE`, `HEALTH_RESULTS`, `BREEDING_APPROVAL`. Stav `PENDING`/`REJECTED` se nezveřejňuje.
+5. **`canSendInquiry`** (počítá server) = nabídka je `ACTIVE` ∧ čtenář není vlastník ∧ čtenář nemá k nabídce `PENDING` poptávku (`EXPIRED` poptávka neblokuje). Jinak `inquiryUnavailableReason` (priorita): `OWN_OFFER` > `NOT_ACTIVE` > `INQUIRY_PENDING`; je-li `canSendInquiry` pravda, je důvod `null`.
+6. V odpovědi **nikdy**: identita vlastníka, audit nabídky (`created_*`, `withdrawn_*`), poptávky (cizí odesílatelé, zprávy), reference na soubory a názvy souborů, detaily verzí dokladů (důvody zamítnutí, posuzovatel), kontakty.
 
 ### Soubory (průřezově)
 

@@ -1,21 +1,37 @@
 import type { Identity } from '@anico/auth';
 import type {
+  AnimalDocumentType,
+  AnimalPhotoSize,
   CreateInquiryInput,
   CreateOfferInput,
+  InquiryUnavailableReason,
   OfferStatus,
 } from '@anico/shared-schemas';
+import type { FileStorage } from '../../../files/file-storage.js';
+import { openStoredPhoto } from '../../animal/application/photo-files.js';
 import { verifiedBreeder } from '../../animal/application/verified-breeder.js';
-import type { BreederVerification } from '../../animal/domain/entity.js';
+import type {
+  BreederVerification,
+  PhotoResizer,
+} from '../../animal/domain/entity.js';
+import { approvedDocumentTypes } from '../../documents/domain/animal-documents.js';
 import {
   OfferError,
   canWithdraw,
+  hasPendingInquiry,
+  inquiryAvailability,
   offerNotFound,
   offerStatus,
+  offerVisibleTo,
   planValidity,
   type InquiryRecord,
   type OfferRecord,
 } from '../domain/offer.js';
-import type { OfferAnimal, OfferRepository } from '../domain/ports.js';
+import type {
+  OfferAnimal,
+  OfferDetailAnimal,
+  OfferRepository,
+} from '../domain/ports.js';
 
 const APPEND_ATTEMPTS = 3;
 
@@ -36,6 +52,16 @@ export interface SubmittedInquiryView {
   regionId: OfferRecord['regionId'];
 }
 
+/** Detail cizí nebo vlastní nabídky (UC-06); bez dokladů, poptávek a údajů o vlastníkovi mimo `offer`. */
+export interface OfferDetailView {
+  offer: OfferRecord;
+  status: OfferStatus;
+  animal: Omit<OfferDetailAnimal, 'documents'>;
+  verification: { verified: boolean; documentTypes: AnimalDocumentType[] };
+  canSendInquiry: boolean;
+  inquiryUnavailableReason: InquiryUnavailableReason | null;
+}
+
 function viewOf(offer: OfferRecord, now: Date): OfferView {
   const status = offerStatus(offer, now);
   return { offer, status, canWithdraw: canWithdraw(status) };
@@ -45,9 +71,12 @@ export function offerUseCases(dependencies: {
   repository: OfferRepository;
   verification: BreederVerification;
   newId: () => string;
+  photos: FileStorage;
+  photoVariants: FileStorage;
+  resizer: PhotoResizer;
   now?: () => Date;
 }) {
-  const { repository, newId } = dependencies;
+  const { repository, newId, photos, photoVariants, resizer } = dependencies;
   const clock = dependencies.now ?? (() => new Date());
   const breeder = verifiedBreeder(dependencies.verification);
 
@@ -134,7 +163,7 @@ export function offerUseCases(dependencies: {
     ): Promise<OfferView> {
       const identity = await breeder(actor);
       const now = clock();
-      // TODO(US-05): nevyřízené poptávky stažené nabídky → „Vypršela“ s poznámkou „Nabídka byla stažena“ (odvozením z withdrawnAt).
+      // TODO(UC-07): nevyřízené (PENDING) poptávky stažené nabídky přejdou do „Vypršela“ s důvodem „Nabídka byla stažena“ – odvozením z withdrawnAt, bez zápisu (products.md:277).
       const withdrawn = await repository.withdraw(offerId, identity.userId, {
         at: now,
         by: identity.userId,
@@ -145,6 +174,69 @@ export function offerUseCases(dependencies: {
       throw new OfferError(409, 'Offer cannot be withdrawn', {
         current: { id: existing.id, status: offerStatus(existing, now) },
       });
+    },
+
+    /**
+     * Detail nabídky pro ověřeného chovatele: vlastník vidí svou nabídku v každém stavu,
+     * ostatní jen `ACTIVE`; jinak 404 jako u neexistující nabídky.
+     */
+    async detail(
+      actor: Identity | undefined,
+      offerId: string,
+    ): Promise<OfferDetailView> {
+      const identity = await breeder(actor);
+      const now = clock();
+      const source = await repository.findDetail(offerId, identity.userId);
+      if (!source) throw offerNotFound();
+      const status = offerStatus(source.offer, now);
+      const isOwner = source.offer.ownerUserId === identity.userId;
+      if (!offerVisibleTo(status, isOwner)) throw offerNotFound();
+
+      const { documents, ...animal } = source.animal;
+      const documentTypes = approvedDocumentTypes(documents);
+      const availability = inquiryAvailability({
+        isOwner,
+        status,
+        pendingInquiry: hasPendingInquiry(source.viewerInquiries),
+      });
+      return {
+        offer: source.offer,
+        status,
+        animal,
+        verification: { verified: documentTypes.length > 0, documentTypes },
+        canSendInquiry: availability.canSendInquiry,
+        inquiryUnavailableReason: availability.reason,
+      };
+    },
+
+    /**
+     * Soubor fotografie zvířete u nabídky se stejnou viditelností jako detail; ověřuje se při každém
+     * čtení. Vždy zmenšenina (výchozí `preview`): originál nese původní rozlišení a metadata EXIF
+     * (např. polohu GPS), která ostatním chovatelům nepatří.
+     */
+    async openPhoto(
+      actor: Identity | undefined,
+      offerId: string,
+      photoId: string,
+      size: AnimalPhotoSize = 'preview',
+    ) {
+      const identity = await breeder(actor);
+      const now = clock();
+      const found = await repository.findPhoto(offerId, photoId);
+      if (
+        !found ||
+        !offerVisibleTo(
+          offerStatus(found.offer, now),
+          found.offer.ownerUserId === identity.userId,
+        )
+      )
+        throw offerNotFound();
+      if (!found.photo) throw new OfferError(404, 'Photo not found');
+      return openStoredPhoto(
+        { photos, photoVariants, resizer },
+        found.photo,
+        size,
+      );
     },
 
     /** Odeslání poptávky ověřeným chovatelem k aktivní cizí nabídce (UC-07). */

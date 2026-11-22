@@ -29,6 +29,7 @@ import {
   planPhotos,
   type PhotoChange,
 } from '../domain/photos.js';
+import { openStoredPhoto } from './photo-files.js';
 import {
   isReviewer,
   verifiedBreeder,
@@ -415,8 +416,8 @@ export function animalUseCases(dependencies: {
     },
 
     /**
-     * Soubor fotografie pro ověřeného vlastníka, nebo posuzovatele dokladů. Zmenšenina
-     * (`size`) je JPEG; fotografie bez zmenšenin (nahrané dřív) vrací originál.
+     * Soubor fotografie jen pro ověřeného vlastníka zvířete. Bez `size` originál, se `size`
+     * JPEG zmenšenina bez metadat (u fotografií nahraných před zmenšeninami vytvořená z originálu).
      */
     async openPhoto(
       actor: Identity | undefined,
@@ -429,21 +430,11 @@ export function animalUseCases(dependencies: {
         (candidate) => candidate.id === photoId.toLowerCase(),
       );
       if (!photo) throw photoNotFound();
-      const variant = size ? photo.variants?.[size] : undefined;
-      if (variant) {
-        const opened = await photoVariants.open(variant.fileReference);
-        if (!opened) throw new Error('Stored photo variant file is missing');
-        return {
-          ...opened,
-          file: {
-            fileName: photo.file.fileName.replace(/\.[^.]*$/, '') + '.jpg',
-            contentType: 'image/jpeg' as const,
-          },
-        };
-      }
-      const opened = await photos.open(photo.file.fileReference);
-      if (!opened) throw new Error('Stored photo file is missing');
-      return { ...opened, file: photo.file };
+      return openStoredPhoto(
+        { photos, photoVariants, resizer: dependencies.resizer },
+        photo,
+        size,
+      );
     },
   };
 }

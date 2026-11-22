@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AniCo animal-service – zvířata, doklady a nabídky",
-    "version": "0.3.0",
-    "description": "Profily zvířat s fotografiemi (UC-02) a doklady zvířat (UC-03, ADR-0005). Chovatel spravuje jen svá zvířata; administrátor posuzuje doklady.\n\nProfil a fotografie se vytvářejí i mění jedním požadavkem a jedním zápisem: buď se uloží vše, nebo nic. Jméno je povinné, oříznuté, 1–120 znaků a nelze je vymazat při PATCH. Nevyplněné volitelné údaje (vynechané, `null`, prázdný nebo jen mezerový text) se ukládají jako `null`. Neprázdný seznam fotografií má právě jednu hlavní: zvolenou, jinak dosavadní, jinak první. Odebrání hlavní udělá hlavní první zbývající.\n\nKaždá příloha zakládá samostatnou řadu verzí: `versionNumber: 1`, `previousDocumentId: null`, `PENDING`. Více řad stejného typu je povoleno i v jednom podání. Nová verze vzniká jen explicitní náhradou aktuální zamítnuté verze; původní soubor a rozhodnutí zůstávají v historii. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.\n\nOperace chovatele vyžadují ověřený účet z breeder-service (`isVerified`), ověřuje se při každém požadavku. Cizí i neexistující zvíře je 404. Identitu doplňuje gateway do hlavičky `x-anico-identity`.\n\nNabídky (US-04) jsou zvířecí `offers[]` ve stejném dokumentu. Stav (`SCHEDULED`, `ACTIVE`, `WITHDRAWN`, `EXPIRED`) se odvozuje z časů a stažení, neukládá se. Zvíře má nejvýše jednu blokující nabídku a stažení je nevratné."
+    "version": "0.4.0",
+    "description": "Profily zvířat s fotografiemi (UC-02) a doklady zvířat (UC-03, ADR-0005). Chovatel spravuje jen svá zvířata; administrátor posuzuje doklady.\n\nProfil a fotografie se vytvářejí i mění jedním požadavkem a jedním zápisem: buď se uloží vše, nebo nic. Jméno je povinné, oříznuté, 1–120 znaků a nelze je vymazat při PATCH. Nevyplněné volitelné údaje (vynechané, `null`, prázdný nebo jen mezerový text) se ukládají jako `null`. Neprázdný seznam fotografií má právě jednu hlavní: zvolenou, jinak dosavadní, jinak první. Odebrání hlavní udělá hlavní první zbývající.\n\nKaždá příloha zakládá samostatnou řadu verzí: `versionNumber: 1`, `previousDocumentId: null`, `PENDING`. Více řad stejného typu je povoleno i v jednom podání. Nová verze vzniká jen explicitní náhradou aktuální zamítnuté verze; původní soubor a rozhodnutí zůstávají v historii. Rozhodnout lze jen o aktuální verzi ve stavu `PENDING`; rozhodnutí je konečné.\n\nOperace chovatele vyžadují ověřený účet z breeder-service (`isVerified`), ověřuje se při každém požadavku. Cizí i neexistující zvíře je 404. Identitu doplňuje gateway do hlavičky `x-anico-identity`.\n\nNabídky (US-04) jsou zvířecí `offers[]` ve stejném dokumentu. Stav (`SCHEDULED`, `ACTIVE`, `WITHDRAWN`, `EXPIRED`) se odvozuje z časů a stažení, neukládá se. Zvíře má nejvýše jednu blokující nabídku a stažení je nevratné. Detail nabídky (UC-06) čte každý ověřený chovatel: vlastník v každém stavu, ostatní jen `ACTIVE`."
   },
   "servers": [
     {
@@ -21,7 +21,10 @@
       "name": "document-review",
       "description": "Posuzování dokladů (role `admin` | `owner`)."
     },
-    { "name": "offers", "description": "Nabídky vlastních zvířat (US-04)." },
+    {
+      "name": "offers",
+      "description": "Nabídky vlastních zvířat (US-04) a jejich detail (UC-06)."
+    },
     { "name": "health", "description": "Stav služby (veřejné)." }
   ],
   "paths": {
@@ -354,7 +357,7 @@
         "tags": ["animals"],
         "operationId": "getAnimalPhoto",
         "summary": "Soubor fotografie",
-        "description": "Vlastník zvířete s ověřeným účtem, nebo posuzovatel (role `admin` | `owner`) bez ověření a vlastnictví, ale jen u zvířete s aspoň jedním dokladem (jinak 404, ADR-0008). Bez `size` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin vrací originál i se `size`.",
+        "description": "Jen vlastník zvířete s ověřeným účtem. Bez `size` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin dostanou se `size` zmenšeninu vytvořenou z originálu, nikdy originál.",
         "parameters": [
           {
             "name": "size",
@@ -785,6 +788,88 @@
           },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
+    "/offers/{offerId}": {
+      "parameters": [
+        {
+          "name": "offerId",
+          "in": "path",
+          "required": true,
+          "description": "ID nabídky.",
+          "schema": { "$ref": "#/components/schemas/OfferId" }
+        }
+      ],
+      "get": {
+        "tags": ["offers"],
+        "operationId": "getOfferDetail",
+        "summary": "Detail nabídky",
+        "description": "Ověřený chovatel (UC-06). Vlastník vidí svou nabídku v každém stavu, ostatní jen `ACTIVE`; jinak je odpověď `404` stejná jako u neexistující nabídky. Údaje zvířete jsou aktuální (ne snapshot) včetně čipu a čísla průkazu původu. `verification` říká, zda má zvíře alespoň jednu aktuální schválenou verzi dokladu, a uvádí jejich typy; soubory dokladů, poptávky, vlastník ani kontakty se nevracejí. Fotografie nesou jen `id` a `isPrimary` v pořadí zvířete; URL skládá klient jako `/offers/{offerId}/photos/{photoId}/file` (s `?size=thumbnail|preview`). `canSendInquiry` je pravda u `ACTIVE` cizí nabídky, ke které čtenář nemá `PENDING` poptávku; jinak `inquiryUnavailableReason` říká proč (priorita `OWN_OFFER`, `NOT_ACTIVE`, `INQUIRY_PENDING`).",
+        "responses": {
+          "200": {
+            "description": "Detail nabídky.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OfferDetail" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/OfferVisibilityNotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
+    "/offers/{offerId}/photos/{photoId}/file": {
+      "parameters": [
+        {
+          "name": "offerId",
+          "in": "path",
+          "required": true,
+          "description": "ID nabídky.",
+          "schema": { "$ref": "#/components/schemas/OfferId" }
+        },
+        {
+          "name": "photoId",
+          "in": "path",
+          "required": true,
+          "description": "ID fotografie.",
+          "schema": { "$ref": "#/components/schemas/AnimalPhotoId" }
+        }
+      ],
+      "get": {
+        "tags": ["offers"],
+        "operationId": "getOfferPhotoFile",
+        "summary": "Soubor fotografie nabídky",
+        "description": "Ověřený chovatel; viditelnost stejná jako u detailu nabídky (vlastník vždy, ostatní jen `ACTIVE`) a ověřuje se při každém požadavku. Vždy JPEG zmenšenina bez metadat (EXIF, poloha GPS), bez `size` `preview`; originál ani jeho rozlišení se nevrací (vlastník ho čte přes `GET /animals/{animalId}/photos/{photoId}/file`). Název souboru v `Content-Disposition` je neutrální (`{photoId}.jpg`), původní název vlastníka se neprozrazuje.",
+        "parameters": [
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "`thumbnail` (delší strana nejvýše 800 px) pro karty a náhledy, `preview` (nejvýše 1920 px, výchozí) pro detail.",
+            "schema": { "type": "string", "enum": ["thumbnail", "preview"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fotografie k zobrazení (`inline`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`).",
+            "content": {
+              "image/jpeg": {
+                "schema": { "type": "string", "contentMediaType": "image/jpeg" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/OfferPhotoNotFound" },
           "500": { "$ref": "#/components/responses/InternalError" },
           "503": { "$ref": "#/components/responses/VerificationUnavailable" }
         }
@@ -1602,6 +1687,142 @@
         "required": ["items", "nextCursor"],
         "additionalProperties": false
       },
+      "InquiryUnavailableReason": {
+        "type": "string",
+        "enum": ["OWN_OFFER", "NOT_ACTIVE", "INQUIRY_PENDING"]
+      },
+      "OfferDetail": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/OfferId" },
+          "animalId": { "$ref": "#/components/schemas/AnimalId" },
+          "regionId": { "$ref": "#/components/schemas/RegionId" },
+          "validFrom": { "type": "string", "format": "date-time" },
+          "validTo": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "message": { "type": ["string", "null"] },
+          "status": { "$ref": "#/components/schemas/OfferStatus" },
+          "animal": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "species": { "$ref": "#/components/schemas/AnimalSpecies" },
+              "breedId": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "sex": { "$ref": "#/components/schemas/AnimalSex" },
+              "birthDate": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  { "type": "null" }
+                ]
+              },
+              "coatColor": {
+                "anyOf": [
+                  { "type": "string", "minLength": 1, "maxLength": 60 },
+                  { "type": "null" }
+                ]
+              },
+              "weightKg": {
+                "anyOf": [
+                  { "type": "number", "exclusiveMinimum": 0, "maximum": 2000 },
+                  { "type": "null" }
+                ]
+              },
+              "city": {
+                "anyOf": [
+                  { "type": "string", "minLength": 1, "maxLength": 120 },
+                  { "type": "null" }
+                ]
+              },
+              "pedigreeNumber": {
+                "anyOf": [
+                  { "type": "string", "minLength": 1, "maxLength": 60 },
+                  { "type": "null" }
+                ]
+              },
+              "microchipNumber": {
+                "anyOf": [
+                  { "type": "string", "minLength": 1, "maxLength": 64 },
+                  { "type": "null" }
+                ]
+              },
+              "description": {
+                "anyOf": [
+                  { "type": "string", "minLength": 1, "maxLength": 2000 },
+                  { "type": "null" }
+                ]
+              },
+              "photos": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "$ref": "#/components/schemas/AnimalPhotoId" },
+                    "isPrimary": { "type": "boolean" }
+                  },
+                  "required": ["id", "isPrimary"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "name",
+              "species",
+              "breedId",
+              "sex",
+              "birthDate",
+              "coatColor",
+              "weightKg",
+              "city",
+              "pedigreeNumber",
+              "microchipNumber",
+              "description",
+              "photos"
+            ],
+            "additionalProperties": false
+          },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "verified": { "type": "boolean" },
+              "documentTypes": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AnimalDocumentType" }
+              }
+            },
+            "required": ["verified", "documentTypes"],
+            "additionalProperties": false
+          },
+          "canSendInquiry": { "type": "boolean" },
+          "inquiryUnavailableReason": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/InquiryUnavailableReason" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "animalId",
+          "regionId",
+          "validFrom",
+          "validTo",
+          "message",
+          "status",
+          "animal",
+          "verification",
+          "canSendInquiry",
+          "inquiryUnavailableReason"
+        ],
+        "additionalProperties": false
+      },
       "OfferConflict": {
         "type": "object",
         "properties": {
@@ -1755,6 +1976,22 @@
       },
       "OfferNotFound": {
         "description": "Nabídka neexistuje, nebo patří jinému chovateli – `{\"error\":\"Offer not found\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "OfferVisibilityNotFound": {
+        "description": "Nabídka neexistuje, nebo ji čtenář nesmí vidět (cizí nabídka, která není `ACTIVE`) – `{\"error\":\"Offer not found\"}`.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "OfferPhotoNotFound": {
+        "description": "Nabídka neexistuje, nebo ji čtenář nesmí vidět (`{\"error\":\"Offer not found\"}`), případně nabídnuté zvíře takovou fotografii nemá (`{\"error\":\"Photo not found\"}`).",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/Error" }

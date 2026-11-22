@@ -161,6 +161,34 @@ export function documentsState(
   return 'NOT_SUBMITTED';
 }
 
+/** Pořadí typů dokladů v odvozených výstupech (shodné s katalogem `AnimalDocumentTypeSchema`). */
+const DOCUMENT_TYPE_ORDER: readonly AnimalDocumentType[] = [
+  'PEDIGREE',
+  'HEALTH_RESULTS',
+  'BREEDING_APPROVAL',
+];
+
+/**
+ * Unikátní typy dokladů s aktuální schválenou (`APPROVED`) verzí v pořadí katalogu (UC-06,
+ * „ověřeno“ = alespoň jeden takový typ); neschválené a nahrazené verze se nepočítají.
+ */
+export function approvedDocumentTypes(
+  versions: readonly Pick<
+    DocumentVersion,
+    'documentType' | 'isCurrent' | 'assessmentStatus'
+  >[],
+): AnimalDocumentType[] {
+  const approved = new Set(
+    versions
+      .filter(
+        (version) =>
+          version.isCurrent && version.assessmentStatus === 'APPROVED',
+      )
+      .map((version) => version.documentType),
+  );
+  return DOCUMENT_TYPE_ORDER.filter((type) => approved.has(type));
+}
+
 /** Všechny verze řady, do které patří `documentId`, nejstarší první. */
 export function historyOf(
   versions: readonly DocumentVersion[],

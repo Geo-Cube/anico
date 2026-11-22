@@ -153,11 +153,14 @@ všech řad; odvozený stav má prioritu `PENDING` > `APPROVED` > `REJECTED`, be
 
 Modul [`offers`](src/modules/offers/README.md); nabídky jsou pole `offers[]` v dokumentu zvířete.
 
-| Metoda a cesta ve službě         | Co dělá                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------- |
-| `POST /offers`                   | JSON `animalId`, `regionId`, volitelně `validFrom`, `validTo`, `message`; 201   |
-| `GET /offers/mine`               | Všechny nabídky chovatele se zvířetem; aktivní a naplánované nahoře             |
-| `POST /offers/:offerId/withdraw` | Stáhne blokující nabídku (bez těla, nevratné), vrací 200 s `WITHDRAWN` nabídkou |
+| Metoda a cesta ve službě                    | Co dělá                                                                                                                                                                 |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /offers`                              | JSON `animalId`, `regionId`, volitelně `validFrom`, `validTo`, `message`; 201                                                                                           |
+| `GET /offers/mine`                          | Všechny nabídky chovatele se zvířetem; aktivní a naplánované nahoře                                                                                                     |
+| `GET /offers/:offerId`                      | Detail nabídky (UC-06) pro ověřeného chovatele: vlastník vidí každý stav, cizí jen `ACTIVE`, jinak 404; nese `canSendInquiry`                                           |
+| `GET /offers/:offerId/photos/:photoId/file` | JPEG zmenšenina fotografie nabídky bez metadat (`?size=thumbnail\|preview`, výchozí `preview`, nikdy originál), stejná viditelnost jako detail, neutrální název souboru |
+| `POST /offers/:offerId/withdraw`            | Stáhne blokující nabídku (bez těla, nevratné), vrací 200 s `WITHDRAWN` nabídkou                                                                                         |
+| `POST /offers/:offerId/inquiries`           | JSON `message`; poptávka ověřeného chovatele k aktivní cizí nabídce, 201 (UC-07)                                                                                        |
 
 Zvíře má nejvýše jednu blokující (`SCHEDULED` / `ACTIVE`) nabídku, jinak 409 s `current`.
 Stav se odvozuje z časů a stažení. Stažení neblokující nabídky je 409, cizí nebo neexistující

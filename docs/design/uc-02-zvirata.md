@@ -70,8 +70,8 @@ Při nahrání vznikají přes `sharp` (libvips) dvě JPEG zmenšeniny: `thumbna
 náhledy) a `preview` (nejvýše 1920 px, hlavní fotografie v detailu). Otáčí se podle EXIF, metadata včetně polohy
 GPS se nepřenáší, průhlednost PNG je na bílém pozadí, malé obrázky se nezvětšují, vstup nad 100 Mpx se odmítne.
 `GET /animals/:id/photos/:photoId/file?size=thumbnail|preview` vrací zmenšeninu, bez `size` originál. Fotografie
-nahrané před zavedením zmenšenin (`variants: null`) vracejí originál i se `size`; nové zmenšeniny dostanou až po
-opětovném nahrání.
+nahrané před zavedením zmenšenin (`variants: null`) dostanou se `size` zmenšeninu vytvořenou z originálu při každém
+čtení (neukládá se), originál se místo zmenšeniny nikdy nevrací.
 
 ## 5. Limity a odchylky
 
