@@ -27,9 +27,10 @@ dokladů (`approvedDocumentTypes`), soubory dokladů, poptávky ostatních, vlas
 nevracejí (DTO se skládá po polích, `toDetailDto`). `canSendInquiry` = `ACTIVE` ∧ cizí nabídka ∧
 čtenář nemá `PENDING` poptávku, jinak `inquiryUnavailableReason` (`OWN_OFFER`, `NOT_ACTIVE`,
 `INQUIRY_PENDING`). Fotografie jsou v detailu jen `{ id, isPrimary }`; soubor se čte přes
-`/offers/:offerId/photos/:photoId/file` (bez `size` originál, jinak `thumbnail`/`preview`),
-viditelnost se ověřuje při každém požadavku a `Content-Disposition` nese neutrální název
-`<photoId>.<přípona>`, ne původní název souboru vlastníka.
+`/offers/:offerId/photos/:photoId/file`, vždy jako JPEG zmenšenina bez metadat (`thumbnail`/`preview`,
+bez `size` `preview`; originál s EXIF a plným rozlišením se nevrací ani u fotek bez uložených
+zmenšenin), viditelnost se ověřuje při každém požadavku a `Content-Disposition` nese neutrální
+název `<photoId>.jpg`, ne původní název souboru vlastníka.
 
 Vlastník a audit (`createdBy`, `withdrawnBy`) se berou z `req.auth`, nikdy z těla; v odpovědích
 se nevracejí. Událost vzniku a stažení se loguje (`offer.created`, `offer.withdrawn`) bez osobních

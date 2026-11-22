@@ -530,7 +530,7 @@ export function openApiDocument(): JsonObject {
           operationId: 'getAnimalPhoto',
           summary: 'Soubor fotografie',
           description:
-            'Jen vlastník zvířete s ověřeným účtem. Bez `size` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin vrací originál i se `size`.',
+            'Jen vlastník zvířete s ověřeným účtem. Bez `size` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin dostanou se `size` zmenšeninu vytvořenou z originálu, nikdy originál.',
           parameters: [
             queryParameter(
               'size',
@@ -806,11 +806,11 @@ export function openApiDocument(): JsonObject {
           operationId: 'getOfferPhotoFile',
           summary: 'Soubor fotografie nabídky',
           description:
-            'Ověřený chovatel; viditelnost stejná jako u detailu nabídky (vlastník vždy, ostatní jen `ACTIVE`) a ověřuje se při každém požadavku. Bez `size` originál; zmenšenina je JPEG. Název souboru v `Content-Disposition` je neutrální (`{photoId}.jpg|png`), původní název vlastníka se neprozrazuje.',
+            'Ověřený chovatel; viditelnost stejná jako u detailu nabídky (vlastník vždy, ostatní jen `ACTIVE`) a ověřuje se při každém požadavku. Vždy JPEG zmenšenina bez metadat (EXIF, poloha GPS), bez `size` `preview`; originál ani jeho rozlišení se nevrací (vlastník ho čte přes `GET /animals/{animalId}/photos/{photoId}/file`). Název souboru v `Content-Disposition` je neutrální (`{photoId}.jpg`), původní název vlastníka se neprozrazuje.',
           parameters: [
             queryParameter(
               'size',
-              '`thumbnail` (delší strana nejvýše 800 px) pro karty a náhledy, `preview` (nejvýše 1920 px) pro detail.',
+              '`thumbnail` (delší strana nejvýše 800 px) pro karty a náhledy, `preview` (nejvýše 1920 px, výchozí) pro detail.',
               { type: 'string', enum: [...AnimalPhotoSizeSchema.options] },
             ),
           ],
@@ -818,12 +818,11 @@ export function openApiDocument(): JsonObject {
             '200': {
               description:
                 'Fotografie k zobrazení (`inline`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`).',
-              content: Object.fromEntries(
-                PHOTO_TYPES.map((type) => [
-                  type,
-                  { schema: { type: 'string', contentMediaType: type } },
-                ]),
-              ),
+              content: {
+                'image/jpeg': {
+                  schema: { type: 'string', contentMediaType: 'image/jpeg' },
+                },
+              },
             },
             '400': responseRef('BadRequest'),
             '401': responseRef('Unauthorized'),

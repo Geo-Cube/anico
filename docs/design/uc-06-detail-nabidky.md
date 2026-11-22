@@ -55,9 +55,11 @@ Port `OfferRepository` (`offers/domain/ports.ts`) dostává dvě metody:
 | Detail nabídky       | `GET /offers/:offerId` → 200 `OfferDetail`                                       |
 | Soubor fotky nabídky | `GET /offers/:offerId/photos/:photoId/file?size=thumbnail\|preview` → 200 stream |
 
-Routy jsou registrované za `GET /offers/mine`. `size` chybí = originál, jinak stejné chování a hlavičky
-(`storedFileHeaders(..., 'inline')`) jako `GET /animals/:animalId/photos/:photoId/file`. Frontend skládá URL souboru
-sám: `/api/animal/offers/{offerId}/photos/{photoId}/file?size=thumbnail|preview`.
+Routy jsou registrované za `GET /offers/mine`. Soubor fotky nabídky je vždy JPEG zmenšenina bez metadat, `size` chybí =
+`preview`: originál nese původní rozlišení a EXIF (např. polohu GPS), který cizím chovatelům nepatří; vlastník čte
+originál jen přes `GET /animals/:animalId/photos/:photoId/file`. Fotky bez uložených zmenšenin dostanou zmenšeninu
+vytvořenou z originálu. Hlavičky `storedFileHeaders(..., 'inline')` jako u route vlastníka. Frontend skládá URL
+souboru sám: `/api/animal/offers/{offerId}/photos/{photoId}/file?size=thumbnail|preview`.
 
 `OfferDetail` (`OfferDetailSchema` v `@anico/shared-schemas`, `strictObject`, vnořené objekty také strict):
 

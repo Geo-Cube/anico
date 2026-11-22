@@ -65,7 +65,10 @@ export function storedFileHeaders(
   };
 }
 
-/** Dotaz na soubor fotografie (vlastník i nabídka): bez `size` originál, jinak zmenšenina. */
+/**
+ * Dotaz na soubor fotografie: zmenšenina `thumbnail`/`preview`. Bez `size` vrací originál
+ * jen route vlastníka; route nabídky použije `preview`.
+ */
 export const PhotoFileQuerySchema = z.strictObject({
   size: AnimalPhotoSizeSchema.optional(),
 });

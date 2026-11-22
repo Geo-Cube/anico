@@ -391,8 +391,8 @@ export function animalUseCases(dependencies: {
     },
 
     /**
-     * Soubor fotografie jen pro ověřeného vlastníka zvířete. Zmenšenina (`size`) je JPEG;
-     * fotografie bez zmenšenin (nahrané dřív) vrací originál.
+     * Soubor fotografie jen pro ověřeného vlastníka zvířete. Bez `size` originál, se `size`
+     * JPEG zmenšenina bez metadat (u fotografií nahraných před zmenšeninami vytvořená z originálu).
      */
     async openPhoto(
       actor: Identity | undefined,
@@ -405,7 +405,11 @@ export function animalUseCases(dependencies: {
         (candidate) => candidate.id === photoId.toLowerCase(),
       );
       if (!photo) throw photoNotFound();
-      return openStoredPhoto({ photos, photoVariants }, photo, size);
+      return openStoredPhoto(
+        { photos, photoVariants, resizer: dependencies.resizer },
+        photo,
+        size,
+      );
     },
   };
 }

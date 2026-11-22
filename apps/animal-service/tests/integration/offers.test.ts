@@ -25,6 +25,7 @@ import {
 import { createApp } from '../../src/app.js';
 import { gridFsFileStorage } from '../../src/files/gridfs-file-storage.js';
 import { createModules } from '../../src/modules/index.js';
+import { sharpPhotoResizer } from '../../src/modules/animal/infrastructure/sharp-photo-resizer.js';
 import { migrateDatabase } from '../../src/database/engine.js';
 import { loadMigrations } from '../../src/database/registry.js';
 import { OffersRouter } from '../../src/modules/offers/http/offers-router.js';
@@ -54,7 +55,7 @@ const FAR_FUTURE = new Date('2999-01-01T00:00:00.000Z');
 const dogBreed = animalBreeds('dog')[0]!.id;
 const horseBreed = animalBreeds('horse')[0]!.id;
 
-// skutečné obrázky: služba je dekóduje do zmenšenin (JPEG větší než náhled, PNG s průhledností)
+// skutečné obrázky: služba je dekóduje do zmenšenin (JPEG větší než náhled a s EXIF, PNG s průhledností)
 const PNG = await sharp({
   create: {
     width: 40,
@@ -68,6 +69,7 @@ const PNG = await sharp({
 const JPEG = await sharp({
   create: { width: 2400, height: 1600, channels: 3, background: '#3f8c5b' },
 })
+  .withExif({ IFD0: { Copyright: 'SENTINEL-EXIF-MAJITEL' } })
   .jpeg()
   .toBuffer();
 
@@ -241,6 +243,7 @@ describe('US-04 offers over HTTP with MongoDB', () => {
         repository: mongooseOffersRepository(connection),
         photos: gridFsFileStorage(connection, 'animalPhotos'),
         photoVariants: gridFsFileStorage(connection, 'animalPhotoVariants'),
+        resizer: sharpPhotoResizer(),
         verification,
         newId,
         now: () => now,
@@ -2264,41 +2267,31 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       };
     }
 
-    it('UC06-FIL-1/3 serves a foreign reader the original, thumbnail and preview of an ACTIVE offer with safe inline headers', async () => {
+    it('UC06-FIL-1/3 serves a foreign reader only metadata-free JPEG variants of an ACTIVE offer, never the original', async () => {
       const { offerId, pngId, jpegId } = await offerWithPhotos();
+      expect((await sharp(JPEG).metadata()).exif).toBeDefined();
 
-      const png = await fileOf(offerId, pngId).expect(200);
-      expect(png.headers['content-type']).toBe('image/png');
-      expect(png.headers['content-length']).toBe(String(PNG.length));
-      expect(png.body).toEqual(PNG);
-      expect(png.headers['x-content-type-options']).toBe('nosniff');
-      expect(png.headers['content-disposition']).toMatch(/^inline;/);
-
-      const original = await fileOf(offerId, jpegId).expect(200);
-      expect(original.headers['content-type']).toBe('image/jpeg');
-      expect(original.body).toEqual(JPEG);
-
-      for (const [size, edge] of [
-        ['thumbnail', 800],
-        ['preview', 1920],
+      for (const [query, edge] of [
+        [{}, 1920],
+        [{ size: 'thumbnail' }, 800],
+        [{ size: 'preview' }, 1920],
       ] as const) {
-        const res = await fileOf(offerId, jpegId, stranger, { size }).expect(
-          200,
-        );
+        const res = await fileOf(offerId, jpegId, stranger, query).expect(200);
         expect(res.headers['content-type']).toBe('image/jpeg');
         expect(res.headers['content-disposition']).toMatch(/^inline;/);
+        expect(res.headers['x-content-type-options']).toBe('nosniff');
         const meta = await sharp(res.body as Buffer).metadata();
         expect(Math.max(meta.width, meta.height)).toBe(edge);
+        expect(meta.exif).toBeUndefined();
+        expect((res.body as Buffer).includes('SENTINEL-EXIF')).toBe(false);
         expect((res.body as Buffer).length).toBeLessThan(JPEG.length);
         expect(res.headers['content-length']).toBe(
           String((res.body as Buffer).length),
         );
       }
-      const thumbnail = await fileOf(offerId, pngId, stranger, {
-        size: 'thumbnail',
-      }).expect(200);
-      expect(thumbnail.headers['content-type']).toBe('image/jpeg');
-      expect(thumbnail.body).not.toEqual(PNG);
+      const png = await fileOf(offerId, pngId).expect(200);
+      expect(png.headers['content-type']).toBe('image/jpeg');
+      expect(png.body).not.toEqual(PNG);
     });
 
     it('UC06-FIL-1 names the file neutrally and never reveals the original file name', async () => {
@@ -2309,10 +2302,7 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       const names = stored.map((photo) => photo.file.fileName);
       expect(names.every((name) => name.length > 0)).toBe(true);
 
-      for (const [photoId, extension] of [
-        [pngId, 'png'],
-        [jpegId, 'jpe?g'],
-      ] as const)
+      for (const photoId of [pngId, jpegId])
         for (const query of [{}, { size: 'thumbnail' }, { size: 'preview' }]) {
           const res = await fileOf(offerId, photoId, stranger, query).expect(
             200,
@@ -2320,21 +2310,20 @@ describe('US-04 offers over HTTP with MongoDB', () => {
           const disposition = String(res.headers['content-disposition']);
           for (const name of names)
             expect(disposition).not.toContain(name.replace(/\.[^.]*$/, ''));
-          expect(disposition).toContain(photoId);
           expect(disposition).toMatch(
-            'size' in query
-              ? new RegExp(`^inline; filename="${photoId}\\.jpe?g"`)
-              : new RegExp(`^inline; filename="${photoId}\\.${extension}"`),
+            new RegExp(`^inline; filename="${photoId}\\.jpg"`),
           );
         }
     });
 
     it.each(['SCHEDULED', 'ACTIVE', 'WITHDRAWN', 'EXPIRED'] as const)(
-      'UC06-FIL-1 serves the owner the photo of their %s offer',
+      'UC06-FIL-1 serves the owner the preview of the photo of their %s offer',
       async (status) => {
-        const { offerId, pngId } = await offerWithPhotos(status);
-        const res = await fileOf(offerId, pngId, owner).expect(200);
-        expect(res.body).toEqual(PNG);
+        const { offerId, jpegId } = await offerWithPhotos(status);
+        const res = await fileOf(offerId, jpegId, owner).expect(200);
+        const meta = await sharp(res.body as Buffer).metadata();
+        expect(Math.max(meta.width, meta.height)).toBe(1920);
+        expect(meta.exif).toBeUndefined();
       },
     );
 
@@ -2453,7 +2442,8 @@ describe('US-04 offers over HTTP with MongoDB', () => {
         .buffer(true)
         .parse(binaryBody)
         .expect(200);
-      expect(file.body).toEqual(PNG);
+      expect(file.headers['content-type']).toBe('image/jpeg');
+      expect(file.body).not.toEqual(PNG);
       await request(app)
         .get(`/offers/${missingId}`)
         .set(auth(stranger))

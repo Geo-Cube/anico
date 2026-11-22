@@ -18,7 +18,10 @@ import {
   type OfferView,
 } from '../application/offers.js';
 import type { FileStorage } from '../../../files/file-storage.js';
-import type { BreederVerification } from '../../animal/domain/entity.js';
+import type {
+  BreederVerification,
+  PhotoResizer,
+} from '../../animal/domain/entity.js';
 import type { OfferRepository } from '../domain/ports.js';
 import {
   PhotoFileQuerySchema,
@@ -100,6 +103,7 @@ export function OffersRouter(dependencies: {
   repository: OfferRepository;
   photos: FileStorage;
   photoVariants: FileStorage;
+  resizer: PhotoResizer;
   verification: BreederVerification;
   newId: () => string;
   now?: () => Date;

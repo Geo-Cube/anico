@@ -484,15 +484,24 @@ function useCases(
   };
   const photos = fakeStorage();
   const photoVariants = fakeStorage();
+  /** Fake zmenšování: obsah zmenšeniny prozradí velikost i zdroj (`<size>-of-<originál>`). */
+  const resizer = {
+    variants: vi.fn(async (content: Buffer) => ({
+      thumbnail: Buffer.from(`thumbnail-of-${content.toString()}`),
+      preview: Buffer.from(`preview-of-${content.toString()}`),
+    })),
+  };
   return {
     verification,
     photos,
     photoVariants,
+    resizer,
     offers: offerUseCases({
       repository,
       verification,
       photos,
       photoVariants,
+      resizer,
       newId: () => `f${String(++id).padStart(23, '0')}`,
       now: options.now ?? (() => NOW),
     }),
@@ -1480,14 +1489,12 @@ describe('UC06 openPhoto use case', () => {
     return { ...memory, ...useCases(memory.repository) };
   };
 
-  it('UC06-FIL-1/3: opens the original, and a JPEG variant for a size, of an ACTIVE foreign offer', async () => {
-    const { offers, photos, photoVariants, repository } = setup();
+  it('UC06-FIL-1/3: never opens the original; without size serves the preview JPEG of an ACTIVE foreign offer', async () => {
+    const { offers, photos, photoVariants, resizer, repository } = setup();
 
-    const original = await offers.openPhoto(stranger, OFFER_ID, PHOTO_ID);
-    expect(await readAll(original.stream)).toBe(`original-${PHOTO_ID}`);
-    expect(original.file).toMatchObject({ contentType: 'image/png' });
-    expect(photos.open).toHaveBeenCalledWith(`original-${PHOTO_ID}`);
-    expect(photoVariants.open).not.toHaveBeenCalled();
+    const preview = await offers.openPhoto(stranger, OFFER_ID, PHOTO_ID);
+    expect(await readAll(preview.stream)).toBe(`preview-${PHOTO_ID}`);
+    expect(preview.file.contentType).toBe('image/jpeg');
 
     const thumbnail = await offers.openPhoto(
       stranger,
@@ -1498,38 +1505,44 @@ describe('UC06 openPhoto use case', () => {
     expect(await readAll(thumbnail.stream)).toBe(`thumbnail-${PHOTO_ID}`);
     expect(thumbnail.file.contentType).toBe('image/jpeg');
     expect(photoVariants.open).toHaveBeenCalledWith(`thumbnail-${PHOTO_ID}`);
-
-    const preview = await offers.openPhoto(
-      stranger,
-      OFFER_ID,
-      PHOTO_ID,
-      'preview',
-    );
-    expect(await readAll(preview.stream)).toBe(`preview-${PHOTO_ID}`);
+    expect(photos.open).not.toHaveBeenCalled();
+    expect(resizer.variants).not.toHaveBeenCalled();
     expect(repository.findPhoto).toHaveBeenCalledWith(OFFER_ID, PHOTO_ID);
   });
 
-  it('falls back to the original for a photo without variants', async () => {
-    const { offers, photoVariants } = setup(
+  it('resizes the original of a photo without variants instead of serving it', async () => {
+    const { offers, photoVariants, resizer } = setup(
       'ACTIVE',
       storedPhoto(PHOTO_ID, { variants: null }),
     );
-    const opened = await offers.openPhoto(
-      stranger,
-      OFFER_ID,
-      PHOTO_ID,
-      'thumbnail',
-    );
-    expect(await readAll(opened.stream)).toBe(`original-${PHOTO_ID}`);
+    for (const size of [undefined, 'thumbnail', 'preview'] as const) {
+      const opened = await offers.openPhoto(stranger, OFFER_ID, PHOTO_ID, size);
+      const expected = `${size ?? 'preview'}-of-original-${PHOTO_ID}`;
+      expect(await readAll(opened.stream)).toBe(expected);
+      expect(opened.size).toBe(expected.length);
+      expect(opened.file.contentType).toBe('image/jpeg');
+    }
+    expect(resizer.variants).toHaveBeenCalledTimes(3);
     expect(photoVariants.open).not.toHaveBeenCalled();
   });
 
+  it('fails instead of serving an original that cannot be resized', async () => {
+    const { offers, resizer } = setup(
+      'ACTIVE',
+      storedPhoto(PHOTO_ID, { variants: null }),
+    );
+    resizer.variants.mockResolvedValueOnce(null as never);
+    await expect(
+      offers.openPhoto(stranger, OFFER_ID, PHOTO_ID),
+    ).rejects.toThrow('Stored photo cannot be resized');
+  });
+
   it.each(STATUSES)(
-    'UC06-FIL-1: the owner opens a photo of their %s offer',
+    'UC06-FIL-1: the owner opens the preview of a photo of their %s offer',
     async (status) => {
       const { offers } = setup(status);
       const opened = await offers.openPhoto(owner, OFFER_ID, PHOTO_ID);
-      expect(await readAll(opened.stream)).toBe(`original-${PHOTO_ID}`);
+      expect(await readAll(opened.stream)).toBe(`preview-${PHOTO_ID}`);
     },
   );
 

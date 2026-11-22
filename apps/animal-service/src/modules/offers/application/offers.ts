@@ -10,7 +10,10 @@ import type {
 import type { FileStorage } from '../../../files/file-storage.js';
 import { openStoredPhoto } from '../../animal/application/photo-files.js';
 import { verifiedBreeder } from '../../animal/application/verified-breeder.js';
-import type { BreederVerification } from '../../animal/domain/entity.js';
+import type {
+  BreederVerification,
+  PhotoResizer,
+} from '../../animal/domain/entity.js';
 import { approvedDocumentTypes } from '../../documents/domain/animal-documents.js';
 import {
   OfferError,
@@ -70,9 +73,10 @@ export function offerUseCases(dependencies: {
   newId: () => string;
   photos: FileStorage;
   photoVariants: FileStorage;
+  resizer: PhotoResizer;
   now?: () => Date;
 }) {
-  const { repository, newId, photos, photoVariants } = dependencies;
+  const { repository, newId, photos, photoVariants, resizer } = dependencies;
   const clock = dependencies.now ?? (() => new Date());
   const breeder = verifiedBreeder(dependencies.verification);
 
@@ -205,12 +209,16 @@ export function offerUseCases(dependencies: {
       };
     },
 
-    /** Soubor fotografie zvířete u nabídky se stejnou viditelností jako detail; ověřuje se při každém čtení. */
+    /**
+     * Soubor fotografie zvířete u nabídky se stejnou viditelností jako detail; ověřuje se při každém
+     * čtení. Vždy zmenšenina (výchozí `preview`): originál nese původní rozlišení a metadata EXIF
+     * (např. polohu GPS), která ostatním chovatelům nepatří.
+     */
     async openPhoto(
       actor: Identity | undefined,
       offerId: string,
       photoId: string,
-      size?: AnimalPhotoSize,
+      size: AnimalPhotoSize = 'preview',
     ) {
       const identity = await breeder(actor);
       const now = clock();
@@ -224,7 +232,11 @@ export function offerUseCases(dependencies: {
       )
         throw offerNotFound();
       if (!found.photo) throw new OfferError(404, 'Photo not found');
-      return openStoredPhoto({ photos, photoVariants }, found.photo, size);
+      return openStoredPhoto(
+        { photos, photoVariants, resizer },
+        found.photo,
+        size,
+      );
     },
 
     /** Odeslání poptávky ověřeným chovatelem k aktivní cizí nabídce (UC-07). */

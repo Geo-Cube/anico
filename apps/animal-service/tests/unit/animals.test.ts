@@ -291,19 +291,24 @@ describe('animal profile write consistency', () => {
     expect(s.files.size).toBe(0);
   });
 
-  it('falls back to the original for photos uploaded before variants existed', async () => {
+  it('resizes the original of a photo uploaded before variants existed instead of serving it for a size', async () => {
     const s = setup();
     const animal = await s.create([upload]);
     const legacy = { ...animal.photos[0]!, variants: null };
     s.records.set(animal.id, { ...animal, photos: [legacy] });
+    s.resizer.variants.mockClear();
     const opened = await s.use.openPhoto(
       actor,
       animal.id,
       legacy.id,
       'preview',
     );
-    expect(opened.file).toEqual(legacy.file);
-    expect(opened.size).toBe(upload.content.length);
+    expect(s.resizer.variants).toHaveBeenCalledWith(upload.content);
+    expect(opened.file.contentType).toBe('image/jpeg');
+    expect(opened.size).toBe('preview'.length);
+    const original = await s.use.openPhoto(actor, animal.id, legacy.id);
+    expect(original.file).toEqual(legacy.file);
+    expect(original.size).toBe(upload.content.length);
   });
 
   it('deletes the animal and keeps cleaning remaining files when one file cleanup fails', async () => {
