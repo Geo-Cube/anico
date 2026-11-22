@@ -170,6 +170,15 @@ export const AnimalPhotoSchema = z.strictObject({
   size: z.number().int().min(1),
   isPrimary: z.boolean(),
 });
+const animalPhotos = z
+  .array(AnimalPhotoSchema)
+  .max(MAX_PHOTOS_PER_ANIMAL)
+  .refine(
+    (photos) =>
+      photos.length === 0 ||
+      photos.filter((photo) => photo.isPrimary).length === 1,
+    'A non-empty photo list has exactly one primary photo',
+  );
 
 export const AnimalSchema = z
   .strictObject({
@@ -186,15 +195,7 @@ export const AnimalSchema = z
     pedigreeNumber: optionalValues.pedigreeNumber.nullable(),
     microchipNumber: optionalValues.microchipNumber.nullable(),
     description: optionalValues.description.nullable(),
-    photos: z
-      .array(AnimalPhotoSchema)
-      .max(MAX_PHOTOS_PER_ANIMAL)
-      .refine(
-        (photos) =>
-          photos.length === 0 ||
-          photos.filter((photo) => photo.isPrimary).length === 1,
-        'A non-empty photo list has exactly one primary photo',
-      ),
+    photos: animalPhotos,
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     documentsState: AnimalDocumentsStateSchema,
@@ -222,10 +223,13 @@ export const AnimalListSchema = z.strictObject({
   items: z.array(AnimalSchema),
   nextCursor: AnimalIdSchema.nullable(),
 });
+/** Fotografie zvířete v pořadí galerie (vlastník, nebo posuzovatel dokladů). */
+export const AnimalPhotoListSchema = z.strictObject({ items: animalPhotos });
 export type AnimalProfile = z.infer<typeof AnimalProfileSchema>;
 export type CreateAnimalInput = z.infer<typeof CreateAnimalSchema>;
 export type UpdateAnimalInput = z.infer<typeof UpdateAnimalSchema>;
 export type AnimalPhoto = z.infer<typeof AnimalPhotoSchema>;
+export type AnimalPhotoList = z.infer<typeof AnimalPhotoListSchema>;
 export type Animal = z.infer<typeof AnimalSchema>;
 export type ListAnimalsQuery = z.infer<typeof ListAnimalsQuerySchema>;
 export type AnimalList = z.infer<typeof AnimalListSchema>;

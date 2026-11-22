@@ -4,12 +4,14 @@ import {
   type AnimalDocument,
   type AnimalDocumentHistory,
   type AnimalDocumentList,
+  type AnimalPhoto,
   type DocumentAnimal,
   type DocumentReview,
   type Role,
 } from '@anico/shared-schemas';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -1272,5 +1274,298 @@ describe('doklady zvířete – administrátor', () => {
         screen.queryByRole('button', { name: 'Zamítnout' }),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  describe('náhled fotografií (UC-03-10)', () => {
+    const detailPath = `/administrace/chovatele/doklady/${animal.id}/${pendingV3.id}`;
+    const previewPath = `${detailPath}/fotografie`;
+    const photo = (n: number, isPrimary = false): AnimalPhoto => ({
+      id: `dddddddddddddddddddd000${n}`,
+      fileName: `luna-${n}.jpg`,
+      contentType: 'image/jpeg',
+      size: 1024,
+      isPrimary,
+    });
+    // Hlavní fotografie je záměrně druhá v pořadí galerie.
+    const photos = [photo(1), photo(2, true), photo(3)];
+    const respondWith = (items: AnimalPhoto[]) =>
+      server.use(
+        http.get(`${api}/animals/:id/photos`, () =>
+          HttpResponse.json({ items }),
+        ),
+      );
+    const thumbnails = () =>
+      within(screen.getByRole('list', { name: 'Miniatury fotografií' }));
+    const bigImage = (index: number, total = 3) =>
+      screen.findByRole('img', {
+        name: `Fotografie ${index} ze ${total} – Luna`,
+      });
+
+    beforeEach(() => respondWith(photos));
+
+    it('z detailu otevře náhled, zaostří nadpis a předvybere hlavní fotografii', async () => {
+      const router = renderApp(detailPath);
+      await userEvent.click(
+        await screen.findByRole('link', { name: 'Zobrazit fotografie' }),
+      );
+
+      const heading = await screen.findByRole('heading', {
+        name: 'Fotografie zvířete',
+        level: 1,
+      });
+      expect(router.state.location.pathname).toBe(previewPath);
+      await waitFor(() => expect(heading).toHaveFocus());
+      expect(
+        screen.queryByRole('heading', { name: 'Posoudit doklad' }),
+      ).not.toBeInTheDocument();
+      const image = await bigImage(2);
+      expect(image.getAttribute('src')).toContain(
+        `/photos/${photos[1]!.id}/file?size=preview`,
+      );
+      expect(screen.getByText('Fotografie 2 ze 3')).toBeInTheDocument();
+      expect(screen.getByText('Hlavní fotografie')).toBeInTheDocument();
+      expect(
+        thumbnails().getByRole('button', {
+          name: 'Fotografie 2 ze 3 (hlavní)',
+        }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      expect(
+        thumbnails().getByRole('button', { name: 'Fotografie 1 ze 3' }),
+      ).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('kliknutí na miniaturu přepne fotografii, skryje štítek hlavní a uloží výběr do ?foto', async () => {
+      const router = renderApp(previewPath);
+      await bigImage(2);
+      await userEvent.click(
+        thumbnails().getByRole('button', { name: 'Fotografie 1 ze 3' }),
+      );
+
+      const image = await bigImage(1);
+      expect(image.getAttribute('src')).toContain(
+        `/photos/${photos[0]!.id}/file?size=preview`,
+      );
+      expect(screen.getByText('Fotografie 1 ze 3')).toBeInTheDocument();
+      expect(screen.queryByText('Hlavní fotografie')).not.toBeInTheDocument();
+      expect(router.state.location.search).toBe('?foto=1');
+      expect(
+        thumbnails().getByRole('button', { name: 'Fotografie 1 ze 3' }),
+      ).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('miniaturu lze vybrat klávesnicí (Tab + Enter)', async () => {
+      const user = userEvent.setup();
+      renderApp(previewPath);
+      await bigImage(2);
+      const target = thumbnails().getByRole('button', {
+        name: 'Fotografie 3 ze 3',
+      });
+      for (let i = 0; i < 40 && document.activeElement !== target; i++) {
+        await user.tab();
+      }
+      expect(target).toHaveFocus();
+      await user.keyboard('{Enter}');
+
+      await bigImage(3);
+      expect(screen.getByText('Fotografie 3 ze 3')).toBeInTheDocument();
+      expect(target).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it.each([
+      ['?foto=3', 3],
+      ['?foto=9', 2],
+    ])(
+      'přímý odkaz %s vybere fotografii č. %i (neplatná hodnota → hlavní)',
+      async (search, selected) => {
+        renderApp(`${previewPath}${search}`);
+        expect(await bigImage(selected)).toBeInTheDocument();
+        expect(
+          screen.getByText(`Fotografie ${selected} ze 3`),
+        ).toBeInTheDocument();
+      },
+    );
+
+    it('jedna fotografie ukáže počítadlo „Fotografie 1 ze 1“', async () => {
+      respondWith([photo(1, true)]);
+      renderApp(previewPath);
+      expect(await bigImage(1, 1)).toBeInTheDocument();
+      expect(screen.getByText('Fotografie 1 ze 1')).toBeInTheDocument();
+    });
+
+    it('zvíře bez fotografií ukáže prázdný stav bez galerie', async () => {
+      respondWith([]);
+      renderApp(previewPath);
+      expect(
+        await screen.findByText('Zvíře nemá žádné fotografie.'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('list', { name: 'Miniatury fotografií' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('výpadek načtení nabídne opakování, které galerii načte', async () => {
+      // Výpadek dotaz jednou sám zopakuje; až ruční opakování uspěje.
+      let failures = 2;
+      server.use(
+        http.get(`${api}/animals/:id/photos`, () =>
+          failures-- > 0
+            ? HttpResponse.json({ error: 'Unavailable' }, { status: 500 })
+            : HttpResponse.json({ items: photos }),
+        ),
+      );
+      renderApp(previewPath);
+      expect(
+        await screen.findByText('Fotografie se nepodařilo načíst.'),
+      ).toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Zkusit znovu' }),
+      );
+      expect(await bigImage(2)).toBeInTheDocument();
+      expect(
+        screen.queryByText('Fotografie se nepodařilo načíst.'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('chybějící oprávnění (403) ukáže hlášku bez opakování', async () => {
+      server.use(
+        http.get(`${api}/animals/:id/photos`, () =>
+          HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
+        ),
+      );
+      renderApp(previewPath);
+      expect(
+        await screen.findByText('K fotografiím zvířete nemáte oprávnění.'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Zkusit znovu' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('nezobrazitelný obrázek ukáže náhradní text jen u dané fotografie', async () => {
+      renderApp(previewPath);
+      fireEvent.error(await bigImage(2));
+      expect(
+        await screen.findByText('Fotografii se nepodařilo zobrazit.'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('img', { name: 'Fotografie 2 ze 3 – Luna' }),
+      ).not.toBeInTheDocument();
+
+      await userEvent.click(
+        thumbnails().getByRole('button', { name: 'Fotografie 3 ze 3' }),
+      );
+      expect(await bigImage(3)).toBeInTheDocument();
+      expect(
+        screen.queryByText('Fotografii se nepodařilo zobrazit.'),
+      ).not.toBeInTheDocument();
+    });
+
+    it.each([0, 1])(
+      'odkaz „Zavřít náhled“ č. %i vrátí k posouzení dokladu a zaostří „Zobrazit fotografie“',
+      async (index) => {
+        const router = renderApp(previewPath);
+        await bigImage(2);
+        const closers = screen.getAllByRole('link', { name: 'Zavřít náhled' });
+        expect(closers).toHaveLength(2);
+        await userEvent.click(closers[index]!);
+
+        expect(router.state.location.pathname).toBe(detailPath);
+        expect(
+          screen.getByRole('heading', { name: 'Posoudit doklad', level: 1 }),
+        ).toBeVisible();
+        const link = await screen.findByRole('link', {
+          name: 'Zobrazit fotografie',
+        });
+        await waitFor(() => expect(link).toHaveFocus());
+      },
+    );
+
+    it('rozepsaný důvod zamítnutí přežije otevření náhledu a návrat', async () => {
+      renderApp(detailPath);
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Zamítnout' }),
+      );
+      const dialog = await screen.findByRole('dialog');
+      await userEvent.type(
+        within(dialog).getByRole('textbox', { name: /Důvod zamítnutí/ }),
+        'Razítko chybí.',
+      );
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Zrušit' }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      );
+
+      await userEvent.click(
+        screen.getByRole('link', { name: 'Zobrazit fotografie' }),
+      );
+      await bigImage(2);
+      await userEvent.click(
+        screen.getAllByRole('link', { name: 'Zavřít náhled' })[0]!,
+      );
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Zamítnout' }),
+      );
+
+      expect(
+        within(await screen.findByRole('dialog')).getByRole('textbox', {
+          name: /Důvod zamítnutí/,
+        }),
+      ).toHaveValue('Razítko chybí.');
+    });
+
+    it('otevřený dialog rozhodnutí se při přechodu na náhled (Vpřed) skryje a po návratu vrátí i s textem', async () => {
+      const router = renderApp(detailPath);
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Zamítnout' }),
+      );
+      await userEvent.type(
+        within(await screen.findByRole('dialog')).getByRole('textbox', {
+          name: /Důvod zamítnutí/,
+        }),
+        'Razítko chybí.',
+      );
+
+      await act(() => router.navigate(previewPath));
+      await bigImage(2);
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      );
+
+      await act(() => router.navigate(-1));
+      expect(
+        within(await screen.findByRole('dialog')).getByRole('textbox', {
+          name: /Důvod zamítnutí/,
+        }),
+      ).toHaveValue('Razítko chybí.');
+    });
+
+    it('neexistující historie dokladu na adrese náhledu ukáže „Doklad nebyl nalezen“', async () => {
+      server.use(
+        http.get(`${api}/animals/:id/documents/:documentId/history`, () =>
+          HttpResponse.json({ error: 'Document not found' }, { status: 404 }),
+        ),
+      );
+      renderApp(previewPath);
+      expect(
+        await screen.findByRole('heading', { name: 'Doklad nebyl nalezen' }),
+      ).toBeInTheDocument();
+    });
+
+    it('uživatel bez role administrátora na adrese náhledu uvidí nedostatečné oprávnění', async () => {
+      server.use(
+        http.get('/api/auth/session', () =>
+          HttpResponse.json(sessionFor(['breeder'])),
+        ),
+      );
+      renderApp(previewPath);
+      expect(
+        await screen.findByRole('heading', { name: 'Nedostatečné oprávnění' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: 'Fotografie zvířete' }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

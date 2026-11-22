@@ -11,6 +11,7 @@ import {
   AnimalIdSchema,
   AnimalListSchema,
   AnimalPhotoIdSchema,
+  AnimalPhotoListSchema,
   AnimalPhotoSchema,
   AnimalPhotoSizeSchema,
   AnimalSchema,
@@ -130,6 +131,7 @@ const components = [
   ['AnimalSex', AnimalSexSchema],
   ['AnimalPhotoId', AnimalPhotoIdSchema],
   ['AnimalPhoto', AnimalPhotoSchema],
+  ['AnimalPhotoList', AnimalPhotoListSchema],
   ['Animal', AnimalSchema],
   ['AnimalList', AnimalListSchema],
   ['CreateAnimal', CreateAnimalSchema],
@@ -301,6 +303,8 @@ const breederRead = {
 };
 const readAccess =
   'Vlastník zvířete s ověřeným účtem, nebo posuzovatel (role `admin` | `owner`), který ověření ani vlastnictví nepotřebuje.';
+const photoReadAccess =
+  'Vlastník zvířete s ověřeným účtem, nebo posuzovatel (role `admin` | `owner`) bez ověření a vlastnictví, ale jen u zvířete s aspoň jedním dokladem (jinak 404, ADR-0008).';
 const conflict = (description: string) =>
   errorResponse(description, ref('AnimalDocumentConflict'));
 const offerConflict = (description: string) =>
@@ -512,14 +516,29 @@ export function openApiDocument(): JsonObject {
           },
         },
       },
+      '/animals/{animalId}/photos': {
+        parameters: [animalIdParameter],
+        get: {
+          tags: ['animals'],
+          operationId: 'listAnimalPhotos',
+          summary: 'Fotografie zvířete',
+          description: `${photoReadAccess} Fotografie jsou volitelné, zvíře bez nich vrací prázdný seznam. Profil zvířete posuzovateli zůstává nepřístupný. Pořadí odpovídá galerii; neprázdný seznam má právě jednu hlavní fotografii.`,
+          responses: {
+            '200': {
+              description: 'Fotografie zvířete (může být prázdný seznam).',
+              content: json(ref('AnimalPhotoList')),
+            },
+            ...breederRead,
+          },
+        },
+      },
       '/animals/{animalId}/photos/{photoId}/file': {
         parameters: [animalIdParameter, photoIdParameter],
         get: {
           tags: ['animals'],
           operationId: 'getAnimalPhoto',
           summary: 'Soubor fotografie',
-          description:
-            'Jen vlastník zvířete s ověřeným účtem. Bez `size` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin vrací originál i se `size`.',
+          description: `${photoReadAccess} Bez \`size\` originál; zmenšenina je JPEG (otočená podle EXIF, bez metadat). Fotografie nahrané před zavedením zmenšenin vrací originál i se \`size\`.`,
           parameters: [
             queryParameter(
               'size',

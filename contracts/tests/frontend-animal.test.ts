@@ -18,6 +18,7 @@ import {
 } from '@/features/animals/api';
 import { isUnverifiedBreeder } from '@/features/animals/AnimalError';
 import {
+  animalPhotosQuery,
   decideDocument,
   documentConflict,
   documentsQuery,
@@ -104,7 +105,7 @@ describe('zvířata (AnimalSchema, AnimalListSchema, katalog plemen)', () => {
     }
   });
 
-  it('založení bez fotografií i s nimi, úprava fotografií, detail, soubor fotografie a smazání', async () => {
+  it('založení bez fotografií i s nimi, úprava fotografií, detail, soubor fotografie, náhled posuzovatele a smazání', async () => {
     await stack.animal.verification.project({
       eventId: randomUUID(),
       type: 'breeder.verified',
@@ -179,6 +180,41 @@ describe('zvířata (AnimalSchema, AnimalListSchema, katalog plemen)', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toMatch(/^image\//);
     }
+
+    // náhled při posouzení dokladu (ADR-0008): posuzovatel čte fotografie jen zvířete
+    // s doklady, profil ne
+    await asAdmin();
+    expect((await failure(run(animalPhotosQuery(changed.id)))).status).toBe(
+      404,
+    );
+    await asBreeder();
+    const {
+      documents: [pedigree],
+    } = await submitDocuments(
+      changed.id,
+      [{ file: pdf('prukaz.pdf'), documentType: 'PEDIGREE' }],
+      csrf,
+    );
+    const adminCsrf = await asAdmin();
+    expect(await run(animalPhotosQuery(changed.id))).toEqual({
+      items: jsonEdit.photos,
+    });
+    for (const size of ['thumbnail', 'preview'] as const) {
+      const response = await fetch(photoUrl(changed.id, first!.id, size));
+      expect(response.status).toBe(200);
+    }
+    // profil dál jen pro ověřeného vlastníka: posuzovatel bez ověření dostane 403
+    expect((await failure(run(animalQuery(changed.id)))).kind).toBe(
+      'forbidden',
+    );
+    // posouzení odebere doklad z fronty (test dokladů čte její začátek)
+    await decideDocument(
+      changed.id,
+      pedigree!.id,
+      { decision: 'APPROVED' },
+      adminCsrf,
+    );
+    await asBreeder();
 
     await deleteAnimal(bare.id, csrf);
     const gone = await failure(run(animalQuery(bare.id)));
