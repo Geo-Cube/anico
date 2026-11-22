@@ -6,6 +6,7 @@ import {
   AnimalIdSchema,
   AnimalListSchema,
   AnimalPhotoIdSchema,
+  AnimalPhotoListSchema,
   AnimalSchema,
   AnimalSpeciesSchema,
   CreateAnimalSchema,

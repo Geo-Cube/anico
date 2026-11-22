@@ -30,7 +30,11 @@ import {
   type PhotoChange,
 } from '../domain/photos.js';
 import { openStoredPhoto } from './photo-files.js';
-import { verifiedBreeder, type WarnLogger } from './verified-breeder.js';
+import {
+  isReviewer,
+  verifiedBreeder,
+  type WarnLogger,
+} from './verified-breeder.js';
 
 const WRITE_ATTEMPTS = 3;
 const PROFILE_KEYS = [
