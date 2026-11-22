@@ -303,6 +303,39 @@
         }
       }
     },
+    "/animals/{animalId}/photos": {
+      "parameters": [
+        {
+          "name": "animalId",
+          "in": "path",
+          "required": true,
+          "description": "ID zvířete.",
+          "schema": { "$ref": "#/components/schemas/AnimalId" }
+        }
+      ],
+      "get": {
+        "tags": ["animals"],
+        "operationId": "listAnimalPhotos",
+        "summary": "Fotografie zvířete",
+        "description": "Vlastník zvířete s ověřeným účtem, nebo posuzovatel (role `admin` | `owner`) bez ověření a vlastnictví, ale jen u zvířete s aspoň jedním dokladem (jinak 404, ADR-0008). Fotografie jsou volitelné, zvíře bez nich vrací prázdný seznam. Profil zvířete posuzovateli zůstává nepřístupný. Pořadí odpovídá galerii; neprázdný seznam má právě jednu hlavní fotografii.",
+        "responses": {
+          "200": {
+            "description": "Fotografie zvířete (může být prázdný seznam).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnimalPhotoList" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      }
+    },
     "/animals/{animalId}/photos/{photoId}/file": {
       "parameters": [
         {
@@ -966,6 +999,18 @@
           "isPrimary": { "type": "boolean" }
         },
         "required": ["id", "fileName", "contentType", "size", "isPrimary"],
+        "additionalProperties": false
+      },
+      "AnimalPhotoList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 10,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AnimalPhoto" }
+          }
+        },
+        "required": ["items"],
         "additionalProperties": false
       },
       "Animal": {

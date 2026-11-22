@@ -8,15 +8,16 @@ Stav: implementováno v modulu `apps/animal-service/src/modules/animal`. Závazn
 
 ## 1. Mapování analýzy na API
 
-| Analýza                                      | Endpoint (ve službě; gateway prefix `/api/animal`) |
-| -------------------------------------------- | -------------------------------------------------- |
-| Seznam vlastních zvířat                      | `GET /animals`                                     |
-| Detail                                       | `GET /animals/:animalId`                           |
-| Přidání (profil + fotografie, UC-02/1, 3, 4) | `POST /animals` (JSON, nebo multipart)             |
-| Úprava (profil + fotografie, UC-02/4, 5)     | `PATCH /animals/:animalId` (JSON, nebo multipart)  |
-| Odstranění (UC-02/6)                         | `DELETE /animals/:animalId`                        |
-| Otevření fotografie po kontrole oprávnění    | `GET /animals/:animalId/photos/:photoId/file`      |
-| Číselník druhů a plemen                      | `GET /breeds/:species`                             |
+| Analýza                                           | Endpoint (ve službě; gateway prefix `/api/animal`) |
+| ------------------------------------------------- | -------------------------------------------------- |
+| Seznam vlastních zvířat                           | `GET /animals`                                     |
+| Detail                                            | `GET /animals/:animalId`                           |
+| Přidání (profil + fotografie, UC-02/1, 3, 4)      | `POST /animals` (JSON, nebo multipart)             |
+| Úprava (profil + fotografie, UC-02/4, 5)          | `PATCH /animals/:animalId` (JSON, nebo multipart)  |
+| Odstranění (UC-02/6)                              | `DELETE /animals/:animalId`                        |
+| Otevření fotografie po kontrole oprávnění         | `GET /animals/:animalId/photos/:photoId/file`      |
+| Fotografie zvířete (i pro posuzovatele, ADR-0008) | `GET /animals/:animalId/photos`                    |
+| Číselník druhů a plemen                           | `GET /breeds/:species`                             |
 
 ## 2. Datový model
 
@@ -53,7 +54,8 @@ jako `GET /animals/:id/documents`) pro kartu WF 01; čtení projektuje z doklad�
    formát souborů podle obsahu (415) a pravidla fotografií; pak se fotografie dekódují do zmenšenin (obrázek,
    který nejde dekódovat, je také 415). Až pak se ukládají soubory a zapisuje dokument.
 
-Role `admin` | `owner` nemá u správy zvířat výjimku z vlastnictví.
+Role `admin` | `owner` nemá u správy zvířat výjimku z vlastnictví. Výjimkou je jen čtení fotografií
+(seznam a soubory) pro posouzení dokladů ([ADR-0008](../adr/0008-posuzovatel-cte-fotografie-zvirete.md)).
 
 ## 4. Pravidla hlavní fotografie
 

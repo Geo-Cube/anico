@@ -110,6 +110,22 @@ export function animalUseCases(dependencies: {
     return animal;
   }
 
+  /**
+   * Čtení fotografií: posuzovatel dokladů (UC-03, ADR-0008) bez ověření a vlastnictví, ale jen
+   * u zvířete s doklady (posuzuje jeho doklady), jinak ověřený vlastník – i když je zároveň
+   * posuzovatelem. Profil ani změny posuzovateli zůstávají nepřístupné.
+   */
+  async function photoReadableAnimal(actor: Identity | undefined, id: string) {
+    if (!actor || !isReviewer(actor))
+      return (await ownedAnimal(actor, id)).animal;
+    const animal = await repository.find(id);
+    if (!animal) throw animalNotFound();
+    if (animal.documentsState !== 'NOT_SUBMITTED') return animal;
+    if (animal.ownerUserId !== actor.userId) throw animalNotFound();
+    await breeder(actor);
+    return animal;
+  }
+
   /** Formát podle obsahu; nic se neuloží, dokud neprojdou všechny fotografie (UC-02/3). */
   function checkUploads(uploads: readonly PhotoUpload[]): CheckedUpload[] {
     return uploads.map((upload) => {
@@ -274,6 +290,11 @@ export function animalUseCases(dependencies: {
       return (await ownedAnimal(actor, id)).animal;
     },
 
+    /** Fotografie v pořadí galerie (náhled při posouzení dokladu). */
+    async listPhotos(actor: Identity | undefined, id: string) {
+      return (await photoReadableAnimal(actor, id)).photos;
+    },
+
     /** UC-02/4: profil a fotografie se uloží jedním zápisem, nebo vůbec. */
     async create(
       actor: Identity | undefined,
@@ -400,7 +421,7 @@ export function animalUseCases(dependencies: {
       photoId: string,
       size?: AnimalPhotoSize,
     ) {
-      const { animal } = await ownedAnimal(actor, id);
+      const animal = await photoReadableAnimal(actor, id);
       const photo = animal.photos.find(
         (candidate) => candidate.id === photoId.toLowerCase(),
       );

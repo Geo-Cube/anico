@@ -2,6 +2,7 @@ import {
   AnimalDocumentHistorySchema,
   AnimalDocumentListSchema,
   AnimalDocumentSchema,
+  AnimalPhotoListSchema,
   DocumentReviewListSchema,
   type AnimalDocument,
   type AnimalDocumentFile,
@@ -12,6 +13,9 @@ import {
 import { animalKey } from '@/features/animals/api';
 import { isUnverifiedBreeder } from '@/features/animals/AnimalError';
 import { apiBlob, apiRequest, isApiError } from '@/shared/lib/http';
+
+/** Absolutní cesta fronty; detail leží o dvě úrovně níž (`:animalId/:documentId`). */
+export const QUEUE_PATH = '/administrace/chovatele/doklady';
 
 const base = '/api/animal';
 const documentsPath = (animalId: string) =>
@@ -41,6 +45,16 @@ export const historyQuery = (animalId: string, documentId: string) => ({
     apiRequest(`${documentPath(animalId, documentId)}/history`, {
       signal,
       schema: AnimalDocumentHistorySchema,
+    }),
+});
+
+/** Fotografie zvířete pro náhled při posouzení dokladu; čte je i posuzovatel (ADR-0008). */
+export const animalPhotosQuery = (animalId: string) => ({
+  queryKey: [...animalKey, animalId, 'photos'] as const,
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    apiRequest(`${base}/animals/${encodeURIComponent(animalId)}/photos`, {
+      signal,
+      schema: AnimalPhotoListSchema,
     }),
 });
 

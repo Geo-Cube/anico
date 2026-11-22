@@ -16,6 +16,7 @@ import {
 import { testIdentity } from '@anico/auth/testing';
 import {
   animalBreeds,
+  AnimalPhotoListSchema,
   AnimalSchema,
   MAX_PHOTOS_PER_ANIMAL,
 } from '@anico/shared-schemas';
@@ -337,6 +338,7 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
         request(app).get(
           `/animals/${animal.id}/photos/${animal.photos[0]!.id}/file`,
         ),
+        request(app).get(`/animals/${animal.id}/photos`),
       ])
         await req.set(headers).expect(status);
       expect(await raw(animal.id)).toEqual(before);
@@ -390,6 +392,7 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
         request(app).patch(`/animals/${id}`).send({ name: 'Denied' }),
         request(app).delete(`/animals/${id}`),
         request(app).get(`/animals/${id}/photos/${animal.photos[0]!.id}/file`),
+        request(app).get(`/animals/${id}/photos`),
       ])
         await req.set(auth(stranger)).expect(404);
     }
@@ -402,6 +405,88 @@ describe('UC-02 animal profiles and photographs over HTTP', () => {
     ]);
     expect(await raw(animal.id)).toEqual(before);
     expect(await files()).toEqual(stored);
+  });
+
+  it('lists photos in gallery order for the owner and lets reviewers read photos of animals with documents without verification, but not the profile or writes (ADR-0008)', async () => {
+    const animal = await create({ ...dog, primaryUploadIndex: 1 }, [PNG, JPEG]);
+    const empty = await create();
+    const undocumented = await create(dog, [PNG]);
+    // posuzovatel vidí jen zvířata v UC-03; fotografie jsou volitelné (`empty` má doklad bez fotek)
+    for (const { id } of [animal, empty])
+      await request(app)
+        .post(`/animals/${id}/documents`)
+        .set(auth())
+        .field('documentTypes', 'PEDIGREE')
+        .attach('files', Buffer.from('%PDF-1.7 pedigree'), 'pedigree.pdf')
+        .expect(201);
+    const before = await raw(animal.id);
+    const stored = await files();
+    const reviewer = testIdentity({ roles: ['owner'] });
+    tokens.set(reviewer.userId, await sign(reviewer));
+    const photosOf = (id: string, identity = admin) =>
+      request(app).get(`/animals/${id}/photos`).set(auth(identity));
+
+    expect(
+      AnimalPhotoListSchema.parse((await photosOf(animal.id, owner)).body),
+    ).toEqual({ items: animal.photos });
+    await photosOf(empty.id, owner).expect(200, { items: [] });
+
+    // posuzovatel ověření chovatele nepotřebuje: projekce nedostupná, čtení fotografií projde
+    verificationDown = true;
+    for (const identity of [admin, reviewer]) {
+      await photosOf(animal.id.toUpperCase(), identity).expect(200, {
+        items: animal.photos,
+      });
+      const preview = await request(app)
+        .get(`/animals/${animal.id}/photos/${animal.photos[1]!.id}/file`)
+        .query({ size: 'preview' })
+        .set(auth(identity))
+        .expect(200);
+      expect(preview.headers['content-type']).toBe('image/jpeg');
+    }
+    await photosOf(empty.id).expect(200, { items: [] });
+    for (const id of [undocumented.id, '000000000000000000000099'])
+      await photosOf(id).expect(404);
+    await photosOf('not-an-id').expect(400);
+    for (const [animalId, photoId] of [
+      [undocumented.id, undocumented.photos[0]!.id],
+      [animal.id, '000000000000000000000099'],
+    ])
+      await request(app)
+        .get(`/animals/${animalId}/photos/${photoId}/file`)
+        .set(auth(admin))
+        .expect(404);
+
+    // profil a zápisy zůstávají jen ověřenému vlastníkovi
+    verificationDown = false;
+    for (const req of [
+      request(app).get(`/animals/${animal.id}`),
+      request(app).patch(`/animals/${animal.id}`).send({ name: 'Denied' }),
+      request(app).delete(`/animals/${animal.id}`),
+    ])
+      await req.set(auth(admin)).expect(404);
+    expect(await raw(animal.id)).toEqual(before);
+    expect(await files()).toEqual(stored);
+  });
+
+  it('lets a reviewer who owns the animal read its photos before documents are submitted, still only as a verified owner', async () => {
+    const res = await multipart('post', '/animals', dog, [PNG], admin).expect(
+      201,
+    );
+    const own = AnimalSchema.parse(res.body);
+    const photo = own.photos[0]!;
+    const list = () =>
+      request(app).get(`/animals/${own.id}/photos`).set(auth(admin));
+    const file = () =>
+      request(app)
+        .get(`/animals/${own.id}/photos/${photo.id}/file`)
+        .set(auth(admin));
+
+    await list().expect(200, { items: own.photos });
+    await file().expect(200);
+    verificationDown = true;
+    await list().expect(503);
+    await file().expect(503);
   });
 
   it('stores JPEG/PNG metadata and serves the original bytes with safe inline headers', async () => {
