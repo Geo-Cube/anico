@@ -1,4 +1,4 @@
-import { Compass, LoaderCircle } from 'lucide-react';
+import { Compass } from 'lucide-react';
 import { Link, type RouteObject } from 'react-router';
 import {
   AccountPage,
@@ -9,22 +9,19 @@ import {
 import { breedersRoutes } from '@/features/breeders';
 import { animalsRoutes } from '@/features/animals/routes';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
+import { offersRoutes } from '@/features/offers/routes';
 import { ProfileGate } from '@/features/profile/ProfileGate';
 import { TestAccountsPage } from '@/features/test-accounts';
 import { VerificationRequestPage } from '@/features/verification/VerificationRequestPage';
 import { buttonVariants } from '@/shared/ui/button';
-import { StatePanel } from '@/shared/ui/state-panel';
+import { LoadingText, StatePanel } from '@/shared/ui/state-panel';
 import { AppLayout } from './AppLayout';
 import { RouteError } from './RouteError';
 
 const loading = (
-  <div
-    role="status"
-    className="flex min-h-screen items-center justify-center gap-2 text-sm text-muted-foreground"
-  >
-    <LoaderCircle className="size-4 animate-spin" aria-hidden />
+  <LoadingText spinner className="min-h-screen justify-center">
     Načítám AniCo…
-  </div>
+  </LoadingText>
 );
 
 export const routes: RouteObject[] = [
@@ -48,6 +45,7 @@ export const routes: RouteObject[] = [
                     element: <VerificationRequestPage />,
                   },
                   ...animalsRoutes,
+                  ...offersRoutes,
                   {
                     path: 'administrace/chovatele',
                     element: <RequireRole roles={['admin', 'owner']} />,

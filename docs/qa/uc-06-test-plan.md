@@ -51,8 +51,8 @@ vstřikované `now`. Stavy nabídek se zakládají přímým zápisem (`storeOff
 
 - **Nasazení a ověření na devu:** detail není nasazený. Ruční scénáře proběhnou po nasazení podle
   [dev-testovani.md](dev-testovani.md).
-- **Frontend:** není napojen (`AnimalOfferPage.tsx` je mock se snake_case poli); zobrazení detailu, hlášky pro 404
-  a skládání URL fotek se netestují.
+- **Frontend:** detail pokrývá `apps/frontend/tests/offers.test.tsx` (zobrazení kontraktu, URL fotek bez originálu,
+  důvody nedostupnosti poptávky, 404, výpadek, odmítnutí pole mimo kontrakt). Vizuální podoba se ručně ověří na devu.
 - **Výkon:** index `animals_offer_id` se ověřuje existencí a počtem dotazů, ne dobou odezvy nad velkým objemem.
 - **Skutečné plynutí času:** přechody `SCHEDULED → ACTIVE → EXPIRED` se testují vstřikovaným `now`.
 - **Přechod poptávek stažené nabídky na `EXPIRED`:** UC-07 jej zatím neprovádí (komentář `TODO` ve stažení nabídky);

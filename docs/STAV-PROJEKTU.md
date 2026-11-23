@@ -84,9 +84,11 @@ Scénáře a protokol: [testování na devu](qa/dev-testovani.md).
   `POST /offers/:offerId/inquiries`, vnořené `animals.offers[].inquiries[]`, stavy `PENDING`/`EXPIRED`, PR #56) je
   v `dev`, viz [UC-07 pro frontend](../apps/animal-service/docs/UC-07-FRONTEND.md); vyřízení poptávek a kontakty
   (US-08–US-10) nejsou. Přechod poptávek stažené nabídky na `EXPIRED` zatím není implementován (komentář `TODO` ve stažení).
-- **US-06 Detail nabídky (backend)** – implementováno na větvi `feature/us06-offer-detail-api`, nenasazeno, frontend
-  nenapojen (stránka `apps/frontend/src/features/animals/AnimalOfferPage.tsx` je mock se snake_case poli a čeká na
-  napojení). `GET /offers/:offerId` a `GET /offers/:offerId/photos/:photoId/file` v modulu `offers`: jen ověřený
+- **US-06 Detail nabídky** – backend implementován na větvi `feature/us06-offer-detail-api`, nenasazeno. Frontend
+  napojen na větvi `feature/us06-offer-detail-frontend` (`/nabidky/:offerId`, `apps/frontend/src/features/offers/`,
+  testy `apps/frontend/tests/offers.test.tsx`); tlačítko poptávky (UC-07) zatím nenabízí. Na stejné větvi úklid
+  duplicit celého frontendu ([plán](design/frontend-dry-a-uc-06.md)).
+  `GET /offers/:offerId` a `GET /offers/:offerId/photos/:photoId/file` v modulu `offers`: jen ověřený
   chovatel (401/403/503), vlastník vidí nabídku v každém stavu, cizí jen `ACTIVE` (jinak 404), aktuální data zvířete,
   `verification` ze schválených dokladů, `canSendInquiry` s důvodem, jedno čtení dokumentu zvířete s inkluzní projekcí
   a whitelist DTO (`OfferDetailSchema` v `@anico/shared-schemas`), bez migrace
