@@ -6,5 +6,6 @@ export {
   useCurrentSession,
 } from './guards';
 export { LoginPage } from './LoginPage';
-export { displayName, UserMenu } from './UserMenu';
-export { sessionGeneration } from './session';
+export { displayName, roleName } from './messages';
+export { UserMenu } from './UserMenu';
+export { sessionGuard, type SessionGuard } from './session';

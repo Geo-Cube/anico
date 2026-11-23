@@ -1,8 +1,12 @@
-import { CloudOff, RotateCw, ShieldAlert } from 'lucide-react';
+import { CloudOff, LoaderCircle, RotateCw, ShieldAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { isApiError } from '@/shared/lib/http';
-import { Button } from './button';
+import { Link, type To } from 'react-router';
+import { cn } from '@/shared/lib/cn';
+import { isApiError, isNotFound } from '@/shared/lib/http';
+import { Alert } from './alert';
+import { Button, buttonVariants } from './button';
 import { Card } from './card';
+import { pageTitleClassName } from './page-header';
 
 export function StatePanel({
   icon,
@@ -26,6 +30,90 @@ export function StatePanel({
       )}
       {action}
     </Card>
+  );
+}
+
+/** Polite loading line, e.g. „Načítám doklady…“; `spinner` adds the rotating icon. */
+export function LoadingText({
+  children,
+  spinner = false,
+  className,
+}: {
+  children: ReactNode;
+  spinner?: boolean;
+  className?: string;
+}) {
+  return (
+    <p
+      role="status"
+      className={cn(
+        'text-sm text-muted-foreground',
+        spinner && 'flex items-center gap-2',
+        className,
+      )}
+    >
+      {spinner && <LoaderCircle className="size-4 animate-spin" aria-hidden />}
+      {children}
+    </p>
+  );
+}
+
+/** Failed load of one section inside a page: message and an optional retry. */
+export function InlineQueryError({
+  message,
+  onRetry,
+  retrying = false,
+}: {
+  message: ReactNode;
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
+  return (
+    <Alert variant="error">
+      <div className="space-y-2">
+        <p>{message}</p>
+        {onRetry && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            disabled={retrying}
+          >
+            Zkusit znovu
+          </Button>
+        )}
+      </div>
+    </Alert>
+  );
+}
+
+/** Missing (or hidden) record: title, explanation and a way back. */
+export function NotFoundPanel({
+  title,
+  children,
+  to,
+  backLabel,
+  titleId,
+}: {
+  title: string;
+  children: ReactNode;
+  to: To;
+  backLabel: string;
+  titleId?: string;
+}) {
+  return (
+    <section
+      className="flex flex-col items-start gap-4"
+      {...(titleId ? { 'aria-labelledby': titleId } : {})}
+    >
+      <h1 id={titleId} className={pageTitleClassName}>
+        {title}
+      </h1>
+      <p className="text-sm text-muted-foreground">{children}</p>
+      <Link to={to} className={buttonVariants({ variant: 'outline' })}>
+        {backLabel}
+      </Link>
+    </section>
   );
 }
 
@@ -63,18 +151,22 @@ export function UnavailableState({
 }
 
 /**
- * Renders a failed query: 403 in place, everything else as an outage with
- * retry. 401 never gets here; it ends the session globally.
+ * Renders a failed query: 404 as `notFound` when given, 403 in place,
+ * everything else as an outage with retry. 401 never gets here; it ends the
+ * session globally.
  */
 export function QueryErrorState({
   error,
   onRetry,
   retrying,
+  notFound,
 }: {
   error: unknown;
   onRetry: () => void;
   retrying: boolean;
+  notFound?: ReactNode;
 }) {
+  if (notFound !== undefined && isNotFound(error)) return notFound;
   return isApiError(error, 'forbidden') ? (
     <ForbiddenState />
   ) : (

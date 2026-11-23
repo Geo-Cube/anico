@@ -5,14 +5,18 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { animalKey } from '@/features/animals/api';
 import type { ResultState } from '@/features/animals/ResultMessage';
-import { sessionGeneration, useCurrentSession } from '@/features/auth';
+import { sessionGuard, useCurrentSession } from '@/features/auth';
 import { cn } from '@/shared/lib/cn';
-import { formatDateTime } from '@/shared/lib/format';
 import { Alert } from '@/shared/ui/alert';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
+import { DateTime } from '@/shared/ui/date-time';
 import { PageHeader } from '@/shared/ui/page-header';
-import { StatePanel } from '@/shared/ui/state-panel';
+import {
+  InlineQueryError,
+  LoadingText,
+  StatePanel,
+} from '@/shared/ui/state-panel';
 import {
   DOCUMENT_ACCEPT,
   DOCUMENT_TYPE_LABEL,
@@ -48,29 +52,15 @@ export function DocumentReplacePage() {
         />
       </div>
       {query.isPending ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Načítám doklad…
-        </p>
-      ) : query.isError || !target ? (
-        <Alert variant="error">
-          <div className="space-y-2">
-            <p>
-              {query.isError
-                ? documentErrorText(query.error)
-                : 'Doklad nebyl nalezen.'}
-            </p>
-            {query.isError && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void query.refetch()}
-                disabled={query.isFetching}
-              >
-                Zkusit znovu
-              </Button>
-            )}
-          </div>
-        </Alert>
+        <LoadingText>Načítám doklad…</LoadingText>
+      ) : query.isError ? (
+        <InlineQueryError
+          message={documentErrorText(query.error)}
+          onRetry={() => void query.refetch()}
+          retrying={query.isFetching}
+        />
+      ) : !target ? (
+        <InlineQueryError message="Doklad nebyl nalezen." />
       ) : target.isCurrent && target.assessmentStatus === 'REJECTED' ? (
         <ReplaceForm animalId={animalId} rejected={target} />
       ) : (
@@ -116,15 +106,14 @@ function ReplaceForm({
 
   const mutation = useMutation({
     mutationFn: async (selected: File) => {
-      const generation = sessionGeneration(client);
+      const guard = sessionGuard(client);
       await replaceDocument(animalId, rejected.id, selected, session.csrfToken);
-      return generation;
+      return guard;
     },
-    onSuccess: async (generation) => {
-      const current = () => generation === sessionGeneration(client);
-      if (!current()) return;
+    onSuccess: async (guard) => {
+      if (!guard.isCurrent()) return;
       await client.invalidateQueries({ queryKey: animalKey });
-      if (!current()) return;
+      if (!guard.isCurrent()) return;
       void navigate(detail, {
         state: {
           result: `Nová verze dokladu ${DOCUMENT_TYPE_LABEL[rejected.documentType]} byla odeslána k posouzení.`,
@@ -172,10 +161,7 @@ function ReplaceForm({
             {rejected.reviewedAt && (
               <span className="text-muted-foreground">
                 {' '}
-                · posouzeno{' '}
-                <time dateTime={rejected.reviewedAt}>
-                  {formatDateTime(rejected.reviewedAt)}
-                </time>
+                · posouzeno <DateTime value={rejected.reviewedAt} />
               </span>
             )}
           </p>

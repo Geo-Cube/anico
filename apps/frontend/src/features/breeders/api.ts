@@ -7,7 +7,13 @@ import {
   type VerificationStatus,
 } from '@anico/shared-schemas';
 import { DOCUMENT_QUEUE_LIMIT } from '@/features/documents/api';
-import { apiBlob, apiRequest, isApiError } from '@/shared/lib/http';
+import { plural } from '@/shared/lib/format';
+import {
+  apiBlob,
+  apiRequest,
+  conflictCurrent,
+  isApiError,
+} from '@/shared/lib/http';
 
 const base = '/api/breeder/verification-requests';
 export const verificationKey = ['verification-requests'] as const;
@@ -66,18 +72,14 @@ export function decisionConflict(error: unknown): {
   reason: 'already-decided' | 'stale';
   current: AdminVerificationRequest | null;
 } | null {
-  if (!isApiError(error) || error.status !== 409) return null;
-  const body = error.body;
-  const parsed =
-    body && typeof body === 'object' && 'current' in body
-      ? AdminVerificationRequestSchema.safeParse(body.current)
-      : null;
+  const conflict = conflictCurrent(error, AdminVerificationRequestSchema);
+  if (!conflict) return null;
   return {
     reason:
-      error.code === 'Verification revision mismatch'
+      isApiError(error) && error.code === 'Verification revision mismatch'
         ? 'stale'
         : 'already-decided',
-    current: parsed?.success ? parsed.data : null,
+    current: conflict.current,
   };
 }
 
@@ -93,22 +95,13 @@ export const STATUS_LABEL: Record<VerificationStatus, string> = {
   REJECTED: 'Zamítnuto',
 };
 
-export function formatPendingCountText(count: number): string {
-  if (count === 1) return '1 žádost čeká na posouzení';
-  if (count >= 2 && count <= 4) return `${count} žádosti čekají na posouzení`;
-  return `${count} žádostí čeká na posouzení`;
-}
+export const formatPendingCountText = (count: number) =>
+  `${count} ${plural(count, 'žádost čeká', 'žádosti čekají', 'žádostí čeká')} na posouzení`;
 
-export function formatReturnedCountText(count: number): string {
-  if (count === 1) return '1 žádost je vrácena k doplnění';
-  if (count >= 2 && count <= 4)
-    return `${count} žádosti jsou vráceny k doplnění`;
-  return `${count} žádostí je vráceno k doplnění`;
-}
+export const formatReturnedCountText = (count: number) =>
+  `${count} ${plural(count, 'žádost je vrácena', 'žádosti jsou vráceny', 'žádostí je vráceno')} k doplnění`;
 
 export function formatPendingDocumentsText(count: number): string {
   const shown = count >= DOCUMENT_QUEUE_LIMIT ? `${count}+` : String(count);
-  if (count === 1) return '1 doklad čeká na posouzení';
-  if (count >= 2 && count <= 4) return `${shown} doklady čekají na posouzení`;
-  return `${shown} dokladů čeká na posouzení`;
+  return `${shown} ${plural(count, 'doklad čeká', 'doklady čekají', 'dokladů čeká')} na posouzení`;
 }

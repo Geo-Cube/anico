@@ -1,7 +1,7 @@
 # US-06 Detail nabídky – technický návrh (`animal-service`)
 
 Stav: implementováno v modulu `apps/animal-service/src/modules/offers` na větvi `feature/us06-offer-detail-api`,
-nenasazeno, frontend nenapojen. Závazné vstupy: [`anico-domain.md`](../anico-domain.md) §5 US-06, [návrh UC-04](uc-04-nabidky.md),
+nenasazeno; frontend `apps/frontend/src/features/offers/` ([plán](frontend-dry-a-uc-06.md)). Závazné vstupy: [`anico-domain.md`](../anico-domain.md) §5 US-06, [návrh UC-04](uc-04-nabidky.md),
 [ADR-0008](../adr/0008-nabidky-vnorene-ve-zvireti.md) a rozhodnutí uživatele z 21. 11. 2026 (níže). Business
 specifikace: `apps/animal-service/docs/business-use-cases.md` (UC-06), `apps/animal-service/docs/products.md`. Kontrakt API:
 [`apps/animal-service/openapi.json`](../../apps/animal-service/openapi.json) (generuje `npm run openapi -w
@@ -153,8 +153,8 @@ Vlastník = `animals.ownerUserId === req.auth.userId`. Identita se nikdy nebere 
 
 ## 7. Co není implementováno
 
-- Frontend: `apps/frontend/src/features/animals/AnimalOfferPage.tsx` je mock se snake_case poli a není napojený;
-  po napojení pracuje s camelCase kontraktem výše. Nasazení na dev.
+- Frontend: odeslání poptávky (tlačítko „Odeslat poptávku“) a návrat na seznam nabídek; viz otevřená rozhodnutí R2 a
+  R3 v [plánu frontendu](frontend-dry-a-uc-06.md). Nasazení na dev.
 - Vyhledávání a tržiště nabídek (US-05), vyřízení poptávek a sdílení kontaktů (US-08–US-10).
 - Odeslání poptávky z detailu je UC-07 (`POST /offers/:offerId/inquiries`); detail jen sděluje `canSendInquiry`.
 - Notifikace.

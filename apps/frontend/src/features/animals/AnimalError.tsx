@@ -1,34 +1,28 @@
 import { Link } from 'react-router';
+import { apiErrorText } from '@/shared/lib/error-text';
 import { isApiError } from '@/shared/lib/http';
 import { Alert } from '@/shared/ui/alert';
 import { Button } from '@/shared/ui/button';
+import { isUnverifiedBreeder } from './api';
 import { FIELD_LABEL } from './fields';
 
-export const isUnverifiedBreeder = (error: unknown) =>
-  isApiError(error) &&
-  error.status === 403 &&
-  error.code === 'Breeder is not verified';
-
-function messageOf(error: unknown) {
-  if (!isApiError(error))
-    return 'Služba je dočasně nedostupná. Zkuste to prosím znovu.';
-  if (isUnverifiedBreeder(error))
-    return 'Nejdřív musí být ověřen váš chovatelský účet. Bez ověření nelze spravovat zvířata. Pokud vás administrátor právě schválil, zkuste to za chvíli znovu.';
-  if (error.status === 403) return 'K této operaci nemáte oprávnění.';
-  if (error.status === 404)
-    return 'Zvíře nebo fotografie nebyly nalezeny, nebo k nim nemáte přístup.';
-  if (error.status === 413)
-    return 'Fotografie jsou příliš velké. Každý soubor může mít nejvýše 10 MiB a zvíře nejvýše 10 fotografií.';
-  if (error.status === 415)
-    return 'Fotografie musí být ve formátu JPEG nebo PNG.';
-  if (error.status === 409)
-    return 'Zvíře mezitím změnil jiný požadavek. Načtěte aktuální údaje a zkuste to znovu.';
-  if (error.status === 400)
-    return 'Údaje nejsou platné. Zkontrolujte formulář.';
-  if (error.code === 'Breeder verification unavailable')
-    return 'Ověření chovatelského účtu je dočasně nedostupné. Zkuste to později.';
-  return 'Služba je dočasně nedostupná. Zkuste to prosím znovu.';
-}
+const messageOf = (error: unknown) =>
+  apiErrorText(error, {
+    codes: {
+      'Breeder is not verified':
+        'Nejdřív musí být ověřen váš chovatelský účet. Bez ověření nelze spravovat zvířata. Pokud vás administrátor právě schválil, zkuste to za chvíli znovu.',
+      'Breeder verification unavailable':
+        'Ověření chovatelského účtu je dočasně nedostupné. Zkuste to později.',
+    },
+    statuses: {
+      403: 'K této operaci nemáte oprávnění.',
+      404: 'Zvíře nebo fotografie nebyly nalezeny, nebo k nim nemáte přístup.',
+      413: 'Fotografie jsou příliš velké. Každý soubor může mít nejvýše 10 MiB a zvíře nejvýše 10 fotografií.',
+      415: 'Fotografie musí být ve formátu JPEG nebo PNG.',
+      409: 'Zvíře mezitím změnil jiný požadavek. Načtěte aktuální údaje a zkuste to znovu.',
+      400: 'Údaje nejsou platné. Zkontrolujte formulář.',
+    },
+  });
 
 /** Pole, která server odmítl (`issues[].path[0]`), česky a bez duplicit. */
 function rejectedFields(error: unknown) {
@@ -46,10 +40,13 @@ function rejectedFields(error: unknown) {
 export function AnimalError({
   error,
   onRetry,
+  retrying = false,
   onDismiss,
 }: {
   error: unknown;
   onRetry?: () => void;
+  /** Opakování právě běží; tlačítko je do té doby neaktivní. */
+  retrying?: boolean;
   onDismiss?: () => void;
 }) {
   const fields = rejectedFields(error);
@@ -61,7 +58,12 @@ export function AnimalError({
         {(isUnverifiedBreeder(error) || onRetry) && (
           <div className="flex flex-wrap items-center gap-3">
             {onRetry && (
-              <Button variant="outline" size="sm" onClick={onRetry}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRetry}
+                disabled={retrying}
+              >
                 Zkusit znovu
               </Button>
             )}

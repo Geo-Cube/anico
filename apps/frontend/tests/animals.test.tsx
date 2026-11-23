@@ -3,52 +3,35 @@ import {
   type Animal,
   type AnimalDocumentList,
 } from '@anico/shared-schemas';
-import { QueryClientProvider } from '@tanstack/react-query';
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQueryClient } from '@/app/query-client';
-import { routes } from '@/app/routes';
-import { server, sessionFor, unsubmittedAccount } from './server';
+import { animalFixture, dogBreed as breed, primaryPhotoId } from './fixtures';
+import { heldResponse, settle } from './helpers';
+import { renderApp } from './render-app';
+import {
+  server,
+  switchAccount,
+  unsubmittedAccount,
+  useApprovedBreeder,
+} from './server';
 import { ageLabel } from '@/features/animals/api';
 
-const breed = animalBreeds('dog')[0]!;
 const horseBreed = animalBreeds('horse')[0]!;
-const animal: Animal = {
-  id: '123456789012345678901234',
-  ownerUserId: sessionFor().identity.userId,
-  species: 'dog',
-  breedId: breed.id,
-  sex: 'male',
-  name: 'Argo',
-  birthDate: null,
-  coatColor: null,
-  weightKg: null,
+const animal = animalFixture({
   city: 'Praha',
-  pedigreeNumber: null,
-  microchipNumber: null,
-  description: null,
   photos: [
     {
-      id: '123456789012345678901235',
+      id: primaryPhotoId,
       fileName: 'argo.jpg',
       contentType: 'image/jpeg',
       size: 50,
       isPrimary: true,
     },
   ],
-  createdAt: '2026-01-01T00:00:00.000Z',
-  updatedAt: '2026-01-01T00:00:00.000Z',
-  documentsState: 'PENDING',
-};
+});
 /** Zvíře se dvěma fotografiemi; hlavní je první. */
 const withTwoPhotos: Animal = {
   ...animal,
@@ -64,49 +47,6 @@ const withTwoPhotos: Animal = {
     },
   ],
 };
-function renderApp(path: string, client = createQueryClient()) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(
-    <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return router;
-}
-
-/** Odpověď API čeká na `release`; `done` se splní, až ji MSW odešle. */
-function heldResponse(response: () => Response) {
-  let release!: () => void;
-  let sent!: () => void;
-  const gate = new Promise<void>((resolve) => (release = resolve));
-  const done = new Promise<void>((resolve) => (sent = resolve));
-  return {
-    release,
-    done,
-    handler: async () => {
-      await gate;
-      sent();
-      return response();
-    },
-  };
-}
-
-/** Mezitím se ve stejném prohlížeči přihlásí jiný účet (např. v jiné záložce). */
-async function switchAccount(client: ReturnType<typeof createQueryClient>) {
-  const other = sessionFor(['breeder'], {
-    identity: {
-      ...sessionFor().identity,
-      userId: '6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b',
-      email: 'petr@example.test',
-    },
-  });
-  server.use(http.get('/api/auth/session', () => HttpResponse.json(other)));
-  await client.invalidateQueries({ queryKey: ['session'] });
-  await waitFor(() => expect(client.getQueryData(['session'])).toEqual(other));
-}
-
-/** Doběhnutí zpožděné odpovědi včetně jejích callbacků. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
 
 const field = (name: string) => screen.getByRole('textbox', { name });
 const select = (name: string) => screen.getByRole('combobox', { name });
@@ -136,15 +76,8 @@ beforeEach(() => {
       revokeObjectURL: vi.fn(),
     }),
   );
+  useApprovedBreeder();
   server.use(
-    http.get('/api/auth/session', () => HttpResponse.json(sessionFor())),
-    http.get('/api/breeder/breeders/me', () =>
-      HttpResponse.json({
-        ...unsubmittedAccount,
-        accountState: 'APPROVED',
-        isVerified: true,
-      }),
-    ),
     http.get('/api/animal/breeds/:species', ({ params }) =>
       HttpResponse.json({
         species: params.species,
@@ -238,7 +171,7 @@ describe('Moje zvířata (WF 01)', () => {
         return HttpResponse.json({ items: [animal], nextCursor: null });
       }),
     );
-    const router = renderApp('/zvirata');
+    const { router } = renderApp('/zvirata');
     await screen.findByRole('heading', { name: 'Argo' });
     expect(select('Plemeno')).toBeDisabled();
 
@@ -325,7 +258,7 @@ describe('ověřený chovatel', () => {
         ),
       ),
     );
-    const router = renderApp('/zvirata');
+    const { router } = renderApp('/zvirata');
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
       'Nejdřív musí být ověřen váš chovatelský účet',
@@ -483,7 +416,7 @@ describe('Přidání zvířete (WF 02, 03)', () => {
         return HttpResponse.json(animal, { status: 201 });
       }),
     );
-    const router = renderApp('/zvirata/nove');
+    const { router } = renderApp('/zvirata/nove');
     await fillProfile();
     await userEvent.type(field('Hmotnost (kg)'), '12,5');
     await userEvent.click(screen.getByRole('radio', { name: 'Samice' }));
@@ -551,7 +484,7 @@ describe('Přidání zvířete (WF 02, 03)', () => {
   it('zrušení v kroku fotografií nic neuloží', async () => {
     const submit = vi.fn(() => HttpResponse.json(animal, { status: 201 }));
     server.use(http.post('/api/animal/animals', submit));
-    const router = renderApp('/zvirata/nove');
+    const { router } = renderApp('/zvirata/nove');
     await fillProfile();
     await userEvent.click(button('Pokračovat na fotografie'));
     await userEvent.click(button('Zrušit'));
@@ -585,7 +518,7 @@ describe('Přidání zvířete (WF 02, 03)', () => {
     const save = heldResponse(() => HttpResponse.json(animal, { status: 201 }));
     server.use(http.post('/api/animal/animals', save.handler));
     const client = createQueryClient();
-    const router = renderApp('/zvirata/nove', client);
+    const { router } = renderApp('/zvirata/nove', client);
     await fillProfile();
     await userEvent.click(button('Pokračovat na fotografie'));
     await userEvent.click(button('Uložit zvíře'));
@@ -779,7 +712,7 @@ describe('Přidání zvířete (WF 02, 03)', () => {
         ),
       ),
     );
-    const router = renderApp('/zvirata/nove');
+    const { router } = renderApp('/zvirata/nove');
     await fillProfile();
     await userEvent.click(button('Pokračovat na fotografie'));
     await userEvent.click(button('Uložit zvíře'));
@@ -876,7 +809,7 @@ describe('Úprava zvířete (WF 05, 06)', () => {
   it('bez změn se vrátí na detail bez PATCH požadavku', async () => {
     const patch = vi.fn(() => HttpResponse.json(animal));
     server.use(http.patch('/api/animal/animals/:id', patch));
-    const router = renderApp(`/zvirata/${animal.id}/upravit`);
+    const { router } = renderApp(`/zvirata/${animal.id}/upravit`);
     await screen.findByRole('option', { name: breed.name });
     await userEvent.click(button('Uložit změny'));
     await waitFor(() =>
@@ -889,7 +822,7 @@ describe('Úprava zvířete (WF 05, 06)', () => {
     const patch = vi.fn(() => HttpResponse.json(animal));
     server.use(http.patch('/api/animal/animals/:id', patch));
     const client = createQueryClient();
-    const router = renderApp(`/zvirata/${animal.id}/upravit`, client);
+    const { router } = renderApp(`/zvirata/${animal.id}/upravit`, client);
     await screen.findByRole('option', { name: breed.name });
     await userEvent.clear(field('Jméno'));
     await userEvent.type(field('Jméno'), 'Jiné jméno');
@@ -1003,7 +936,7 @@ describe('Úprava zvířete (WF 05, 06)', () => {
         HttpResponse.json({ error: 'Animal changed' }, { status: 409 }),
       ),
     );
-    const router = renderApp(`/zvirata/${animal.id}/upravit`);
+    const { router } = renderApp(`/zvirata/${animal.id}/upravit`);
     await screen.findByRole('option', { name: breed.name });
     await userEvent.clear(field('Obec'));
     await userEvent.type(field('Obec'), 'Brno');
@@ -1031,7 +964,7 @@ describe('Úprava zvířete (WF 05, 06)', () => {
       ),
     );
     const client = createQueryClient();
-    const router = renderApp(`/zvirata/${animal.id}/upravit`, client);
+    const { router } = renderApp(`/zvirata/${animal.id}/upravit`, client);
     await screen.findByRole('option', { name: breed.name });
     await userEvent.clear(field('Obec'));
     await userEvent.type(field('Obec'), 'Brno');
@@ -1061,7 +994,7 @@ describe('Odstranění zvířete (WF 07, 08)', () => {
         return new HttpResponse(null, { status: 204 });
       }),
     );
-    const router = renderApp(`/zvirata/${animal.id}`);
+    const { router } = renderApp(`/zvirata/${animal.id}`);
     await userEvent.click(
       await screen.findByRole('button', { name: 'Smazat zvíře' }),
     );
@@ -1087,7 +1020,7 @@ describe('Odstranění zvířete (WF 07, 08)', () => {
     const remove = heldResponse(() => new HttpResponse(null, { status: 204 }));
     server.use(http.delete('/api/animal/animals/:id', remove.handler));
     const client = createQueryClient();
-    const router = renderApp(`/zvirata/${animal.id}`, client);
+    const { router } = renderApp(`/zvirata/${animal.id}`, client);
     await userEvent.click(
       await screen.findByRole('button', { name: 'Smazat zvíře' }),
     );
@@ -1127,7 +1060,7 @@ describe('Odstranění zvířete (WF 07, 08)', () => {
         HttpResponse.json({ error: 'Internal error' }, { status: 500 }),
       ),
     );
-    const router = renderApp(`/zvirata/${animal.id}`);
+    const { router } = renderApp(`/zvirata/${animal.id}`);
     await userEvent.click(
       await screen.findByRole('button', { name: 'Smazat zvíře' }),
     );
@@ -1190,7 +1123,9 @@ describe('Detail zvířete (WF 04)', () => {
       ),
     );
     renderApp(`/zvirata/${animal.id}`);
-    const main = await screen.findByRole('img', { name: 'Argo – argo.jpg' });
+    const main = await screen.findByRole('img', {
+      name: 'Fotografie 1 ze 2 – Argo',
+    });
     expect(main).toHaveAttribute(
       'src',
       `/api/animal/animals/${animal.id}/photos/${withTwoPhotos.photos[0]!.id}/file?size=preview`,
@@ -1198,15 +1133,15 @@ describe('Detail zvířete (WF 04)', () => {
     expect(screen.getByText('Hlavní fotografie')).toBeVisible();
     expect(screen.getByText('12,5 kg')).toBeVisible();
 
-    const luna = button('Zobrazit luna.jpg');
+    const luna = button('Fotografie 2 ze 2');
     await userEvent.click(luna);
     expect(luna).toHaveAttribute('aria-pressed', 'true');
-    expect(button('Zobrazit argo.jpg (hlavní)')).toHaveAttribute(
+    expect(button('Fotografie 1 ze 2 (hlavní)')).toHaveAttribute(
       'aria-pressed',
       'false',
     );
     expect(
-      screen.getByRole('img', { name: 'Argo – luna.jpg' }),
+      screen.getByRole('img', { name: 'Fotografie 2 ze 2 – Argo' }),
     ).toHaveAttribute(
       'src',
       `/api/animal/animals/${animal.id}/photos/${withTwoPhotos.photos[1]!.id}/file?size=preview`,

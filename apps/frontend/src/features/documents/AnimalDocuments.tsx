@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { FilePlus2, FileText, History } from 'lucide-react';
 import { Link } from 'react-router';
 import { DocumentsStateChip } from '@/features/animals/DocumentsStateChip';
-import { formatDateTime } from '@/shared/lib/format';
-import { Alert } from '@/shared/ui/alert';
-import { Button, buttonVariants } from '@/shared/ui/button';
+import { buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
+import { DateTime } from '@/shared/ui/date-time';
+import { InlineQueryError, LoadingText } from '@/shared/ui/state-panel';
 import {
   DOCUMENT_TYPE_LABEL,
   documentErrorText,
@@ -55,23 +55,13 @@ export function AnimalDocuments({ animalId }: { animalId: string }) {
         </Link>
       </div>
       {query.isPending ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Načítám doklady…
-        </p>
+        <LoadingText>Načítám doklady…</LoadingText>
       ) : query.isError ? (
-        <Alert variant="error">
-          <div className="space-y-2">
-            <p>{documentErrorText(query.error)}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void query.refetch()}
-              disabled={query.isFetching}
-            >
-              Zkusit znovu
-            </Button>
-          </div>
-        </Alert>
+        <InlineQueryError
+          message={documentErrorText(query.error)}
+          onRetry={() => void query.refetch()}
+          retrying={query.isFetching}
+        />
       ) : query.data.documents.length === 0 ? null : (
         <ul className="divide-y divide-border rounded-xl border border-border">
           {query.data.documents.map((document) => (
@@ -95,16 +85,11 @@ export function AnimalDocuments({ animalId }: { animalId: string }) {
                     <p className="text-xs text-muted-foreground">
                       {fileSummary(document.file)} · verze{' '}
                       {document.versionNumber} · odesláno{' '}
-                      <time dateTime={document.submittedAt}>
-                        {formatDateTime(document.submittedAt)}
-                      </time>
+                      <DateTime value={document.submittedAt} />
                       {document.reviewedAt && (
                         <>
                           {' '}
-                          · posouzeno{' '}
-                          <time dateTime={document.reviewedAt}>
-                            {formatDateTime(document.reviewedAt)}
-                          </time>
+                          · posouzeno <DateTime value={document.reviewedAt} />
                         </>
                       )}
                     </p>

@@ -1,21 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { breedLabel, speciesLabel } from '@/features/animals/api';
-import { isDecisionNoticeState } from '@/features/breeders/queue-location';
-import { formatDateTime } from '@/shared/lib/format';
+import { isDecisionNoticeState } from '@/features/review/decision-notice';
 import { Alert } from '@/shared/ui/alert';
+import { Breadcrumb } from '@/shared/ui/breadcrumb';
 import { buttonVariants } from '@/shared/ui/button';
-import { Card } from '@/shared/ui/card';
-import { QueryErrorState } from '@/shared/ui/state-panel';
+import { DataTable, rowClassName, tdClassName } from '@/shared/ui/data-table';
+import { DateTime } from '@/shared/ui/date-time';
+import { pageTitleClassName } from '@/shared/ui/page-header';
+import { LoadingText, QueryErrorState } from '@/shared/ui/state-panel';
 import {
   DOCUMENT_QUEUE_LIMIT,
   DOCUMENT_TYPE_LABEL,
   reviewQueueQuery,
 } from './api';
 import { AssessmentChip } from './DocumentParts';
-
-const HEADER_CELL =
-  'px-4 py-3 text-left text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase';
 
 /** WF 04: aktuální čekající verze dokladů, nejdéle čekající první (UC-03/6). */
 export function DocumentReviewQueue() {
@@ -30,22 +29,10 @@ export function DocumentReviewQueue() {
       aria-labelledby="document-queue-title"
     >
       <div className="flex flex-col gap-1">
-        <nav
-          aria-label="Drobečková navigace"
-          className="text-sm text-muted-foreground"
-        >
-          <Link to=".." className="hover:text-foreground hover:underline">
-            Přehled
-          </Link>
-          <span aria-hidden="true" className="px-1.5">
-            /
-          </span>
-          <span>Doklady zvířat</span>
-        </nav>
-        <h1
-          id="document-queue-title"
-          className="text-[28px] font-semibold tracking-[-0.03em]"
-        >
+        <Breadcrumb
+          items={[{ label: 'Přehled', to: '..' }, { label: 'Doklady zvířat' }]}
+        />
+        <h1 id="document-queue-title" className={pageTitleClassName}>
           Doklady k posouzení
         </h1>
       </div>
@@ -61,9 +48,7 @@ export function DocumentReviewQueue() {
       )}
 
       {query.isPending ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Načítám doklady…
-        </p>
+        <LoadingText>Načítám doklady…</LoadingText>
       ) : query.isError ? (
         <QueryErrorState
           error={query.error}
@@ -78,93 +63,66 @@ export function DocumentReviewQueue() {
               jejich posouzení se zobrazí další.
             </Alert>
           )}
-          <Card className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead className="border-b border-border bg-muted/50">
-                <tr>
-                  <th scope="col" className={HEADER_CELL}>
-                    Zvíře
-                  </th>
-                  <th scope="col" className={HEADER_CELL}>
-                    Číslo čipu
-                  </th>
-                  <th scope="col" className={HEADER_CELL}>
-                    Typ dokladu
-                  </th>
-                  <th scope="col" className={HEADER_CELL}>
-                    Odesláno
-                  </th>
-                  <th scope="col" className={HEADER_CELL}>
-                    Stav
-                  </th>
-                  <th scope="col" className={HEADER_CELL}>
-                    <span className="sr-only">Akce</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {query.data.items.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-10 text-center text-muted-foreground"
-                    >
-                      Žádné doklady nečekají na posouzení.
-                    </td>
-                  </tr>
-                ) : (
-                  query.data.items.map(({ document, animal }) => (
-                    <tr
-                      key={document.id}
-                      className="border-b border-border last:border-b-0"
-                    >
-                      <th scope="row" className="px-4 py-3 text-left">
-                        <span className="block font-semibold">
-                          {animal.name}
-                        </span>
-                        <span className="text-xs font-normal text-muted-foreground">
-                          {speciesLabel(animal.species)} · {breedLabel(animal)}
-                        </span>
-                      </th>
-                      <td className="px-4 py-3">
-                        {animal.microchipNumber ?? (
-                          <span className="text-warning">Neuvedeno</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {DOCUMENT_TYPE_LABEL[document.documentType]}
-                        {document.versionNumber > 1 && (
-                          <span className="block text-xs text-muted-foreground">
-                            verze {document.versionNumber}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        <time dateTime={document.submittedAt}>
-                          {formatDateTime(document.submittedAt)}
-                        </time>
-                      </td>
-                      <td className="px-4 py-3">
-                        <AssessmentChip status={document.assessmentStatus} />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link
-                          to={`${animal.id}/${document.id}`}
-                          className={buttonVariants({
-                            variant: 'outline',
-                            size: 'sm',
-                          })}
-                          aria-label={`Posoudit doklad: ${animal.name}, ${DOCUMENT_TYPE_LABEL[document.documentType]}`}
-                        >
-                          Posoudit
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </Card>
+          <DataTable
+            columns={[
+              'Zvíře',
+              'Číslo čipu',
+              'Typ dokladu',
+              'Odesláno',
+              'Stav',
+              <span key="actions" className="sr-only">
+                Akce
+              </span>,
+            ]}
+            minWidthClassName="min-w-[820px]"
+            empty={
+              query.data.items.length === 0
+                ? 'Žádné doklady nečekají na posouzení.'
+                : null
+            }
+          >
+            {query.data.items.map(({ document, animal }) => (
+              <tr key={document.id} className={rowClassName}>
+                <th scope="row" className={`${tdClassName} text-left`}>
+                  <span className="block font-semibold">{animal.name}</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {speciesLabel(animal.species)} · {breedLabel(animal)}
+                  </span>
+                </th>
+                <td className={tdClassName}>
+                  {animal.microchipNumber ?? (
+                    <span className="text-warning">Neuvedeno</span>
+                  )}
+                </td>
+                <td className={tdClassName}>
+                  {DOCUMENT_TYPE_LABEL[document.documentType]}
+                  {document.versionNumber > 1 && (
+                    <span className="block text-xs text-muted-foreground">
+                      verze {document.versionNumber}
+                    </span>
+                  )}
+                </td>
+                <td className={`${tdClassName} text-muted-foreground`}>
+                  <DateTime value={document.submittedAt} />
+                </td>
+                <td className={tdClassName}>
+                  <AssessmentChip status={document.assessmentStatus} />
+                </td>
+                <td className={`${tdClassName} text-right`}>
+                  <Link
+                    to={`${animal.id}/${document.id}`}
+                    className={buttonVariants({
+                      variant: 'outline',
+                      size: 'sm',
+                    })}
+                    aria-label={`Posoudit doklad: ${animal.name}, ${DOCUMENT_TYPE_LABEL[document.documentType]}`}
+                  >
+                    Posoudit
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </DataTable>
         </>
       )}
     </section>

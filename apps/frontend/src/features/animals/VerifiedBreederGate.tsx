@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { LoaderCircle, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { Link, Outlet } from 'react-router';
 import {
   myAccountQuery,
@@ -7,25 +7,22 @@ import {
   VERIFICATION_REQUEST_PATH,
 } from '@/features/verification/api';
 import { buttonVariants } from '@/shared/ui/button';
-import { StatePanel } from '@/shared/ui/state-panel';
+import { LoadingText, StatePanel } from '@/shared/ui/state-panel';
 
 /**
- * Správa zvířat je jen pro ověřeného chovatele (UC-02). Rozhoduje animal-service (403);
- * tady jen předem vysvětlíme neověřený účet. Výpadek breeder-service správu neblokuje,
- * o přístupu pak rozhodne odpověď animal-service.
+ * Zvířata (UC-02) i nabídky (UC-06) jsou jen pro ověřeného chovatele. Rozhoduje
+ * animal-service (403); tady jen předem vysvětlíme neověřený účet. Výpadek
+ * breeder-service přístup neblokuje, rozhodne pak odpověď animal-service.
+ * `explanation` říká, co bude po ověření možné.
  */
-export function VerifiedBreederGate() {
+export function VerifiedBreederGate({
+  explanation = 'Zvířata můžete přidávat a spravovat, až administrátor schválí vaši žádost o ověření chovatele.',
+}: {
+  explanation?: string;
+}) {
   const account = useQuery(myAccountQuery);
   if (account.isPending)
-    return (
-      <p
-        role="status"
-        className="flex items-center gap-2 text-sm text-muted-foreground"
-      >
-        <LoaderCircle className="size-4 animate-spin" aria-hidden />
-        Ověřuji chovatelský účet…
-      </p>
-    );
+    return <LoadingText spinner>Ověřuji chovatelský účet…</LoadingText>;
   if (account.data && !account.data.isVerified) {
     const action = requestActionLabel(account.data.accountState);
     return (
@@ -41,8 +38,7 @@ export function VerifiedBreederGate() {
           </Link>
         }
       >
-        Zvířata můžete přidávat a spravovat, až administrátor schválí vaši
-        žádost o ověření chovatele.
+        {explanation}
       </StatePanel>
     );
   }

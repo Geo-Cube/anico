@@ -4,7 +4,14 @@ import {
   type MyAccount,
   type SubmitVerificationRequestInput,
 } from '@anico/shared-schemas';
-import { apiBlob, apiRequest, isApiError } from '@/shared/lib/http';
+import { useQuery } from '@tanstack/react-query';
+import { canAdminister, useCurrentSession } from '@/features/auth';
+import {
+  apiBlob,
+  apiRequest,
+  conflictCurrent,
+  isApiError,
+} from '@/shared/lib/http';
 
 const mePath = '/api/breeder/breeders/me';
 const requestPath = `${mePath}/verification-request`;
@@ -14,6 +21,18 @@ export const myAccountQuery = {
   queryFn: ({ signal }: { signal: AbortSignal }) =>
     apiRequest(mePath, { signal, schema: MyAccountSchema }),
 };
+
+/**
+ * Účet chovatele přihlášeného uživatele; dotaz běží jen pro chovatele, který
+ * není zároveň administrátor (`isBreeder`).
+ */
+export function useBreederAccount() {
+  const session = useCurrentSession();
+  const isBreeder =
+    session.identity.roles.includes('breeder') && !canAdminister(session);
+  const account = useQuery({ ...myAccountQuery, enabled: isBreeder });
+  return { isBreeder, account };
+}
 
 /** Stránka s formulářem žádosti o ověření (WF 02/03). */
 export const VERIFICATION_REQUEST_PATH = '/overeni-chovatele';
@@ -67,17 +86,8 @@ export const downloadMyCertificate = () =>
   apiBlob(`${requestPath}/certificate`);
 
 /** 409: žádost už existuje; `current` je aktuální účet, pokud odpovídá schématu. */
-export function accountConflict(
-  error: unknown,
-): { current: MyAccount | null } | null {
-  if (!isApiError(error) || error.status !== 409) return null;
-  const body = error.body;
-  const parsed =
-    body && typeof body === 'object' && 'current' in body
-      ? MyAccountSchema.safeParse(body.current)
-      : null;
-  return { current: parsed?.success ? parsed.data : null };
-}
+export const accountConflict = (error: unknown) =>
+  conflictCurrent<MyAccount>(error, MyAccountSchema);
 
 /** Názvy polí, která server odmítl (`issues[].path[0]`). */
 export function rejectedFields(error: unknown): string[] {

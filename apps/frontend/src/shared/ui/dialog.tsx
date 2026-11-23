@@ -1,26 +1,33 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button } from '@/shared/ui/button';
+import { cn } from '@/shared/lib/cn';
+import { Button } from './button';
 
-/** Approval is final, so it is confirmed before it is saved (requests and documents). */
-export function ApproveRequestDialog({
+/**
+ * Modal decision with Cancel and Confirm. While saving it cannot be closed and
+ * both buttons are disabled; the body (`children`) is up to the caller.
+ */
+export function ConfirmDialog({
   open,
   isSaving,
   title,
-  description,
-  error,
+  confirmLabel,
+  confirmVariant = 'default',
   onClose,
   onConfirm,
+  bodyClassName,
+  children,
 }: {
   open: boolean;
   isSaving: boolean;
   title: string;
-  description: ReactNode;
-  /** Failed save, shown inside the dialog. */
-  error: string | null;
+  confirmLabel: string;
+  confirmVariant?: 'default' | 'destructive';
   onClose: () => void;
   onConfirm: () => void;
+  bodyClassName?: string;
+  children: ReactNode;
 }) {
   return (
     <Dialog.Root
@@ -49,20 +56,19 @@ export function ApproveRequestDialog({
               <X aria-hidden="true" />
             </Dialog.Close>
           </div>
-          <div className="flex flex-col gap-2 px-6 py-5 text-sm">
-            <Dialog.Description>{description}</Dialog.Description>
-            {error && (
-              <p role="alert" className="text-destructive">
-                {error}
-              </p>
-            )}
+          <div className={cn('flex flex-col gap-2 px-6 py-5', bodyClassName)}>
+            {children}
           </div>
           <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
             <Button variant="outline" onClick={onClose} disabled={isSaving}>
               Zrušit
             </Button>
-            <Button onClick={onConfirm} disabled={isSaving}>
-              {isSaving ? 'Ukládám...' : 'Potvrdit schválení'}
+            <Button
+              variant={confirmVariant}
+              onClick={onConfirm}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Ukládám…' : confirmLabel}
             </Button>
           </div>
         </Dialog.Popup>

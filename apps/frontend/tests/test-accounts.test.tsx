@@ -1,12 +1,9 @@
 import type { Session, TestAccount } from '@anico/shared-schemas';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
-import { createQueryClient } from '@/app/query-client';
-import { routes } from '@/app/routes';
+import { renderApp } from './render-app';
 import { server, sessionFor } from './server';
 
 const tester: TestAccount = {
@@ -20,17 +17,6 @@ const tester: TestAccount = {
   createdAt: '2026-11-09T08:00:00.000Z',
   createdBy: '0b9a3c55-1f0e-4a43-9a51-2f4a8d8d1e01',
 };
-
-function renderApp(path: string) {
-  const client = createQueryClient();
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(
-    <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { router, client };
-}
 
 /** Server-side cookie swap: the session endpoint answers for whoever is "logged in". */
 function serverWithSwitching() {

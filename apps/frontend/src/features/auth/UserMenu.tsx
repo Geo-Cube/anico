@@ -10,19 +10,18 @@ import {
 import { useNavigate } from 'react-router';
 import { Alert } from '@/shared/ui/alert';
 import { useCurrentSession } from './guards';
+import { displayName, roleName } from './messages';
 import { useLogout } from './session';
 
-export const displayName = (identity: Identity) =>
-  [identity.givenName, identity.familyName].filter(Boolean).join(' ') ||
-  identity.email ||
-  'Uživatel AniCo';
-
+/** Highest role of the identity. */
 const roleLabel = (identity: Identity) =>
-  identity.roles.includes('owner')
-    ? 'Vlastník'
-    : identity.roles.includes('admin')
-      ? 'Administrátor'
-      : 'Chovatel';
+  roleName[
+    identity.roles.includes('owner')
+      ? 'owner'
+      : identity.roles.includes('admin')
+        ? 'admin'
+        : 'breeder'
+  ];
 
 const itemClass =
   'flex cursor-default items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-secondary-foreground outline-none select-none data-[highlighted]:bg-muted [&_svg]:size-4 [&_svg]:text-muted-foreground';

@@ -4,7 +4,6 @@ import { DocumentReplacePage } from '@/features/documents/DocumentReplacePage';
 import { DocumentUploadPage } from '@/features/documents/DocumentUploadPage';
 import { AnimalDetailPage } from './AnimalDetailPage';
 import { AnimalFormPage } from './AnimalForm';
-import { AnimalOfferPage } from './AnimalOfferPage';
 import { AnimalsPage } from './AnimalsPage';
 import { VerifiedBreederGate } from './VerifiedBreederGate';
 
@@ -27,10 +26,5 @@ export const animalsRoutes: RouteObject[] = [
         element: <DocumentReplacePage />,
       },
     ],
-  },
-  {
-    path: 'nabidky',
-    element: <VerifiedBreederGate />,
-    children: [{ path: ':offerId', element: <AnimalOfferPage /> }],
   },
 ];

@@ -3,16 +3,17 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { CheckCircle2, ExternalLink, Link2, TriangleAlert } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { VerificationStatusCard } from '@/features/verification/VerificationStatusCard';
+import { cn } from '@/shared/lib/cn';
 import { isApiError } from '@/shared/lib/http';
 import { Alert } from '@/shared/ui/alert';
 import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
+import { eyebrowClassName, pageTitleClassName } from '@/shared/ui/page-header';
 import { startConnection } from './api';
 import { useCurrentSession } from './guards';
-import { loginErrorMessages, providerNames } from './messages';
+import { displayName, loginErrorMessages, providerNames } from './messages';
 import { ProviderIcon } from './ProviderIcon';
 import { providersQuery } from './session';
-import { displayName } from './UserMenu';
 
 /** Account management needs the browser session of the deployed app. */
 const DEPLOYED_APP = 'https://dev.anico.online/ucet';
@@ -43,12 +44,8 @@ export function AccountPage() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div>
-        <p className="text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
-          Účet
-        </p>
-        <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.03em] text-brand">
-          Můj účet
-        </h1>
+        <p className={eyebrowClassName}>Účet</p>
+        <h1 className={cn('mt-1 text-brand', pageTitleClassName)}>Můj účet</h1>
       </div>
       <VerificationStatusCard />
 

@@ -1,14 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { canAdminister, useCurrentSession } from '@/features/auth';
 import { cn } from '@/shared/lib/cn';
 import { isApiError } from '@/shared/lib/http';
-import { Alert } from '@/shared/ui/alert';
-import { Button, buttonVariants } from '@/shared/ui/button';
+import { buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
+import { DateTime } from '@/shared/ui/date-time';
+import { InlineQueryError, LoadingText } from '@/shared/ui/state-panel';
 import {
-  myAccountQuery,
   requestActionLabel,
+  useBreederAccount,
   VERIFICATION_REQUEST_PATH,
 } from './api';
 
@@ -20,37 +19,26 @@ const unverifiedMessages = {
 };
 
 export function VerificationStatusCard() {
-  const session = useCurrentSession();
-  const enabled =
-    session.identity.roles.includes('breeder') && !canAdminister(session);
-  const account = useQuery({ ...myAccountQuery, enabled });
+  const { isBreeder, account } = useBreederAccount();
 
-  if (!enabled) return null;
+  if (!isBreeder) return null;
   if (account.isPending)
     return (
       <Card className="p-6">
-        <p role="status" className="text-sm text-muted-foreground">
-          Načítám stav ověření účtu…
-        </p>
+        <LoadingText>Načítám stav ověření účtu…</LoadingText>
       </Card>
     );
   if (account.isError)
     return (
-      <Alert variant="error" className="flex-wrap items-center">
-        <p>
-          {isApiError(account.error, 'forbidden')
+      <InlineQueryError
+        message={
+          isApiError(account.error, 'forbidden')
             ? 'K zobrazení stavu ověření účtu nemáte oprávnění.'
-            : 'Stav ověření účtu se nepodařilo načíst.'}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={account.isFetching}
-          onClick={() => void account.refetch()}
-        >
-          Zkusit znovu
-        </Button>
-      </Alert>
+            : 'Stav ověření účtu se nepodařilo načíst.'
+        }
+        onRetry={() => void account.refetch()}
+        retrying={account.isFetching}
+      />
     );
 
   const { accountState, verificationRequest } = account.data;
@@ -87,11 +75,7 @@ export function VerificationStatusCard() {
       {verificationRequest?.reviewedAt && (
         <p className="text-sm text-muted-foreground">
           Datum rozhodnutí:{' '}
-          <time dateTime={verificationRequest.reviewedAt}>
-            {new Date(verificationRequest.reviewedAt).toLocaleDateString(
-              'cs-CZ',
-            )}
-          </time>
+          <DateTime value={verificationRequest.reviewedAt} dateOnly />
         </p>
       )}
       {approved && (

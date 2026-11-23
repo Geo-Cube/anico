@@ -1,52 +1,38 @@
-import {
-  animalBreeds,
-  type Animal,
-  type AnimalDocument,
-  type AnimalDocumentHistory,
-  type AnimalDocumentList,
-  type AnimalPhoto,
-  type DocumentAnimal,
-  type DocumentReview,
-  type Role,
+import type {
+  AnimalDocument,
+  AnimalDocumentHistory,
+  AnimalDocumentList,
+  AnimalPhoto,
+  DocumentAnimal,
+  DocumentReview,
 } from '@anico/shared-schemas';
-import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
-  render,
   screen,
   waitFor,
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQueryClient } from '@/app/query-client';
-import { routes } from '@/app/routes';
-import { anonymous, server, sessionFor, unsubmittedAccount } from './server';
+import { animalFixture } from './fixtures';
+import { renderApp } from './render-app';
+import {
+  anonymous,
+  server,
+  sessionFor,
+  switchAccount,
+  useApprovedBreeder,
+} from './server';
 
 const api = '/api/animal';
-const breed = animalBreeds('dog')[0]!;
-const animal: Animal = {
-  id: '123456789012345678901234',
-  ownerUserId: sessionFor().identity.userId,
-  species: 'dog',
-  breedId: breed.id,
+const animal = animalFixture({
   sex: 'female',
   name: 'Luna',
-  birthDate: null,
-  coatColor: null,
-  weightKg: null,
-  city: null,
-  pedigreeNumber: null,
   microchipNumber: '203098100123456',
-  description: null,
-  photos: [],
-  createdAt: '2026-01-01T00:00:00.000Z',
-  updatedAt: '2026-01-01T00:00:00.000Z',
-  documentsState: 'PENDING',
-};
+});
 
 const version = (
   id: string,
@@ -121,16 +107,6 @@ const pedigreeHistory: AnimalDocumentHistory = {
   versions: [rejectedV1, rejectedV2],
 };
 
-function renderApp(path: string, client = createQueryClient()) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(
-    <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return router;
-}
-
 const pdf = (name: string) =>
   new File(['%PDF-1.7'], name, { type: 'application/pdf' });
 
@@ -146,17 +122,6 @@ function gate() {
     open = resolve;
   });
   return { open, opened };
-}
-
-/** Přihlášení jiného účtu (např. v jiné záložce) během rozpracovaného požadavku. */
-function switchAccount(client: QueryClient, roles: Role[]) {
-  const base = sessionFor(roles);
-  const other = {
-    ...base,
-    identity: { ...base.identity, userId: crypto.randomUUID() },
-  };
-  server.use(http.get('/api/auth/session', () => HttpResponse.json(other)));
-  client.setQueryData(['session'], other);
 }
 
 function stubObjectUrls() {
@@ -190,15 +155,8 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  useApprovedBreeder();
   server.use(
-    http.get('/api/auth/session', () => HttpResponse.json(sessionFor())),
-    http.get('/api/breeder/breeders/me', () =>
-      HttpResponse.json({
-        ...unsubmittedAccount,
-        accountState: 'APPROVED',
-        isVerified: true,
-      }),
-    ),
     http.get(`${api}/animals/:id`, () => HttpResponse.json(animal)),
     http.get(`${api}/animals/:id/documents`, () => HttpResponse.json(list)),
     http.get(`${api}/animals/:id/documents/:documentId/history`, () =>
@@ -293,7 +251,7 @@ describe('doklady zvířete – chovatel', () => {
       }),
     );
     const user = userEvent.setup({ applyAccept: false });
-    const router = renderApp(`/zvirata/${animal.id}/doklady/nahrat`);
+    const { router } = renderApp(`/zvirata/${animal.id}/doklady/nahrat`);
     await user.upload(await screen.findByLabelText('Soubory dokladů'), [
       pdf('pruk.pdf'),
       new File(['x'], 'scan.docx', { type: 'application/msword' }),
@@ -506,7 +464,7 @@ describe('doklady zvířete – chovatel', () => {
       ),
     );
     const { tab } = stubNewTab();
-    const router = renderApp(`/zvirata/${animal.id}`);
+    const { router } = renderApp(`/zvirata/${animal.id}`);
     await userEvent.click(
       await screen.findByRole('button', { name: 'Otevřít pruk-v2.pdf' }),
     );
@@ -596,7 +554,7 @@ describe('doklady zvířete – chovatel', () => {
     const submit = vi.fn();
     server.use(http.post(`${api}/animals/:id/documents`, submit));
     const user = userEvent.setup();
-    const router = renderApp(`/zvirata/${animal.id}/doklady/nahrat`);
+    const { router } = renderApp(`/zvirata/${animal.id}/doklady/nahrat`);
     await user.upload(
       await screen.findByLabelText('Soubory dokladů'),
       Array.from({ length: 11 }, (_, index) => pdf(`doklad-${index + 1}.pdf`)),
@@ -640,7 +598,7 @@ describe('doklady zvířete – chovatel', () => {
     );
     const user = userEvent.setup();
     const path = `/zvirata/${animal.id}/doklady/nahrat`;
-    const router = renderApp(path);
+    const { router } = renderApp(path);
     await user.upload(
       await screen.findByLabelText('Soubory dokladů'),
       pdf('pruk.pdf'),
@@ -708,7 +666,7 @@ describe('doklady zvířete – chovatel', () => {
     );
     const client = createQueryClient();
     const path = `/zvirata/${animal.id}/doklady/nahrat`;
-    const router = renderApp(path, client);
+    const { router } = renderApp(path, client);
     const user = userEvent.setup();
     await user.upload(
       await screen.findByLabelText('Soubory dokladů'),
@@ -722,7 +680,7 @@ describe('doklady zvířete – chovatel', () => {
       screen.getByRole('button', { name: 'Odeslat k posouzení' }),
     );
     await requested.opened;
-    switchAccount(client, ['breeder']);
+    await switchAccount(client, ['breeder']);
     response.open();
 
     // Formulář zůstal (výběr je v něm) a odeslání skončilo.
@@ -779,7 +737,7 @@ describe('doklady zvířete – chovatel', () => {
       http.post(`${api}/animals/:id/documents/:documentId/versions`, submit),
     );
     const user = userEvent.setup();
-    const router = renderApp(
+    const { router } = renderApp(
       `/zvirata/${animal.id}/doklady/${rejectedV2.id}/doplnit`,
     );
     const input = await screen.findByLabelText(/Opravený soubor/);
@@ -962,7 +920,7 @@ describe('doklady zvířete – administrátor', () => {
         },
       ),
     );
-    const router = renderApp('/administrace/chovatele');
+    const { router } = renderApp('/administrace/chovatele');
     await userEvent.click(
       await screen.findByRole('link', { name: 'Zobrazit doklady' }),
     );
@@ -1100,7 +1058,7 @@ describe('doklady zvířete – administrátor', () => {
       server.use(
         http.get(`${api}/animals/:id/documents/:documentId/history`, respond),
       );
-      const router = renderApp(
+      const { router } = renderApp(
         `/administrace/chovatele/doklady/${animal.id}/${pendingV3.id}`,
       );
       expect(
@@ -1128,7 +1086,7 @@ describe('doklady zvířete – administrátor', () => {
           : HttpResponse.json(history),
       ),
     );
-    const router = renderApp(
+    const { router } = renderApp(
       `/administrace/chovatele/doklady/${animal.id}/${pendingV3.id}`,
     );
     expect(
@@ -1304,7 +1262,7 @@ describe('doklady zvířete – administrátor', () => {
     beforeEach(() => respondWith(photos));
 
     it('z detailu otevře náhled, zaostří nadpis a předvybere hlavní fotografii', async () => {
-      const router = renderApp(detailPath);
+      const { router } = renderApp(detailPath);
       await userEvent.click(
         await screen.findByRole('link', { name: 'Zobrazit fotografie' }),
       );
@@ -1335,7 +1293,7 @@ describe('doklady zvířete – administrátor', () => {
     });
 
     it('kliknutí na miniaturu přepne fotografii, skryje štítek hlavní a uloží výběr do ?foto', async () => {
-      const router = renderApp(previewPath);
+      const { router } = renderApp(previewPath);
       await bigImage(2);
       await userEvent.click(
         thumbnails().getByRole('button', { name: 'Fotografie 1 ze 3' }),
@@ -1463,7 +1421,7 @@ describe('doklady zvířete – administrátor', () => {
     it.each([0, 1])(
       'odkaz „Zavřít náhled“ č. %i vrátí k posouzení dokladu a zaostří „Zobrazit fotografie“',
       async (index) => {
-        const router = renderApp(previewPath);
+        const { router } = renderApp(previewPath);
         await bigImage(2);
         const closers = screen.getAllByRole('link', { name: 'Zavřít náhled' });
         expect(closers).toHaveLength(2);
@@ -1516,7 +1474,7 @@ describe('doklady zvířete – administrátor', () => {
     });
 
     it('otevřený dialog rozhodnutí se při přechodu na náhled (Vpřed) skryje a po návratu vrátí i s textem', async () => {
-      const router = renderApp(detailPath);
+      const { router } = renderApp(detailPath);
       await userEvent.click(
         await screen.findByRole('button', { name: 'Zamítnout' }),
       );

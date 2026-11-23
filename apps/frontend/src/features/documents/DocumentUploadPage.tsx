@@ -8,8 +8,9 @@ import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { animalKey, animalQuery } from '@/features/animals/api';
 import type { ResultState } from '@/features/animals/ResultMessage';
-import { sessionGeneration, useCurrentSession } from '@/features/auth';
+import { sessionGuard, useCurrentSession } from '@/features/auth';
 import { cn } from '@/shared/lib/cn';
+import { plural } from '@/shared/lib/format';
 import { Alert } from '@/shared/ui/alert';
 import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
@@ -32,11 +33,7 @@ type Row = {
 };
 
 const countText = (count: number) =>
-  count === 1
-    ? '1 doklad byl odeslán'
-    : count >= 2 && count <= 4
-      ? `${count} doklady byly odeslány`
-      : `${count} dokladů bylo odesláno`;
+  `${count} ${plural(count, 'doklad byl odeslán', 'doklady byly odeslány', 'dokladů bylo odesláno')}`;
 
 /**
  * WF 02/03: výběr jednoho či více souborů, ke každému povinný typ. Nepodporovaný formát
@@ -58,16 +55,15 @@ export function DocumentUploadPage() {
     mutationFn: async (
       items: { file: File; documentType: AnimalDocumentType }[],
     ) => {
-      const generation = sessionGeneration(client);
+      const guard = sessionGuard(client);
       const saved = await submitDocuments(animalId, items, session.csrfToken);
-      return { generation, count: saved.documents.length };
+      return { guard, count: saved.documents.length };
     },
-    onSuccess: async ({ generation, count }) => {
+    onSuccess: async ({ guard, count }) => {
       // Odpověď z relace jiného účtu nesmí měnit cache ani přesměrovat.
-      const current = () => generation === sessionGeneration(client);
-      if (!current()) return;
+      if (!guard.isCurrent()) return;
       await client.invalidateQueries({ queryKey: animalKey });
-      if (!current()) return;
+      if (!guard.isCurrent()) return;
       void navigate(detail, {
         state: {
           result: `${countText(count)} k posouzení. Výsledek uvidíte u dokladů.`,

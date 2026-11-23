@@ -12,11 +12,11 @@ import {
   animalQuery,
   breedsQuery,
   deleteAnimal,
+  isUnverifiedBreeder,
   listAnimals,
   photoUrl,
   saveAnimal,
 } from '@/features/animals/api';
-import { isUnverifiedBreeder } from '@/features/animals/AnimalError';
 import {
   animalPhotosQuery,
   decideDocument,
