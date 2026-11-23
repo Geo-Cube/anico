@@ -1,4 +1,20 @@
-import type { AuthProvider, LoginErrorCode } from '@anico/shared-schemas';
+import type {
+  AuthProvider,
+  Identity,
+  LoginErrorCode,
+  Role,
+} from '@anico/shared-schemas';
+
+export const displayName = (identity: Identity) =>
+  [identity.givenName, identity.familyName].filter(Boolean).join(' ') ||
+  identity.email ||
+  'Uživatel AniCo';
+
+export const roleName: Record<Role, string> = {
+  breeder: 'Chovatel',
+  admin: 'Administrátor',
+  owner: 'Vlastník',
+};
 
 export const providerNames: Record<AuthProvider, string> = {
   google: 'Google',

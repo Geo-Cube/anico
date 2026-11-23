@@ -1,11 +1,11 @@
 import type { AnimalDocument, AssessmentStatus } from '@anico/shared-schemas';
-import { Check, Clock, Download, ExternalLink, X } from 'lucide-react';
+import { Check, Clock, X, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { cn } from '@/shared/lib/cn';
-import { useFileDownload } from '@/shared/lib/file-download';
-import { formatDateTime } from '@/shared/lib/format';
-import { isApiError } from '@/shared/lib/http';
-import { Button, buttonVariants } from '@/shared/ui/button';
+import { buttonVariants } from '@/shared/ui/button';
+import { chipClassName, chipTone, type ChipTone } from '@/shared/ui/chip';
+import { DateTime } from '@/shared/ui/date-time';
+import { FileActions as StoredFileActions } from '@/shared/ui/file-actions';
 import {
   ASSESSMENT_LABEL,
   DOCUMENT_TYPE_LABEL,
@@ -15,11 +15,11 @@ import {
 
 const STATUS_STYLE: Record<
   AssessmentStatus,
-  { icon: typeof Check; tone: string }
+  { icon: LucideIcon; tone: ChipTone }
 > = {
-  PENDING: { icon: Clock, tone: 'bg-warning-soft text-warning' },
-  APPROVED: { icon: Check, tone: 'bg-accent text-accent-foreground' },
-  REJECTED: { icon: X, tone: 'bg-destructive-soft text-destructive' },
+  PENDING: { icon: Clock, tone: 'pending' },
+  APPROVED: { icon: Check, tone: 'ok' },
+  REJECTED: { icon: X, tone: 'bad' },
 };
 
 /** Výsledek posouzení jedné verze dokladu. */
@@ -27,10 +27,7 @@ export function AssessmentChip({ status }: { status: AssessmentStatus }) {
   const { icon: Icon, tone } = STATUS_STYLE[status];
   return (
     <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium',
-        tone,
-      )}
+      className={cn(chipClassName, 'gap-1 text-xs font-medium', chipTone[tone])}
     >
       <Icon className="size-3.5" aria-hidden />
       {ASSESSMENT_LABEL[status]}
@@ -38,47 +35,14 @@ export function AssessmentChip({ status }: { status: AssessmentStatus }) {
   );
 }
 
-function fileErrorText(error: unknown) {
-  if (isApiError(error, 'forbidden')) return 'K souboru nemáte oprávnění.';
-  if (isApiError(error) && error.status === 404) return 'Soubor nebyl nalezen.';
-  return 'Soubor se nepodařilo načíst. Zkuste to znovu.';
-}
-
 /** Otevření a stažení verze pod uloženým názvem, až po kontrole oprávnění na serveru. */
 export function FileActions({ document }: { document: AnimalDocument }) {
-  const file = useFileDownload({
-    load: () => downloadDocument(document.animalId, document.id),
-    fileName: document.file.fileName,
-    contentType: document.file.contentType,
-  });
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={file.open}
-        disabled={file.isPending}
-        aria-label={`Otevřít ${document.file.fileName}`}
-      >
-        <ExternalLink aria-hidden />
-        Otevřít
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={file.download}
-        disabled={file.isPending}
-        aria-label={`Stáhnout ${document.file.fileName}`}
-      >
-        <Download aria-hidden />
-        Stáhnout
-      </Button>
-      {file.error && (
-        <p role="alert" className="w-full text-xs text-destructive">
-          {fileErrorText(file.error)}
-        </p>
-      )}
-    </div>
+    <StoredFileActions
+      load={() => downloadDocument(document.animalId, document.id)}
+      fileName={document.file.fileName}
+      contentType={document.file.contentType}
+    />
   );
 }
 
@@ -138,17 +102,13 @@ export function VersionHistory({
             </dd>
             <dt className="text-muted-foreground">Odesláno</dt>
             <dd>
-              <time dateTime={version.submittedAt}>
-                {formatDateTime(version.submittedAt)}
-              </time>
+              <DateTime value={version.submittedAt} />
             </dd>
             {version.reviewedAt && (
               <>
                 <dt className="text-muted-foreground">Posouzeno</dt>
                 <dd>
-                  <time dateTime={version.reviewedAt}>
-                    {formatDateTime(version.reviewedAt)}
-                  </time>
+                  <DateTime value={version.reviewedAt} />
                 </dd>
               </>
             )}

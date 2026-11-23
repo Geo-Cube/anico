@@ -3,14 +3,7 @@ import {
   SafeReturnPathSchema,
 } from '@anico/shared-schemas';
 import { useQuery } from '@tanstack/react-query';
-import {
-  CircleCheck,
-  Info,
-  PawPrint,
-  RotateCw,
-  TriangleAlert,
-  X,
-} from 'lucide-react';
+import { CircleCheck, Info, PawPrint, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, type ReactNode } from 'react';
 import {
   Link,
@@ -21,8 +14,9 @@ import {
 } from 'react-router';
 import { cn } from '@/shared/lib/cn';
 import { Alert } from '@/shared/ui/alert';
-import { Button, buttonVariants } from '@/shared/ui/button';
+import { buttonVariants } from '@/shared/ui/button';
 import { Logo } from '@/shared/ui/logo';
+import { InlineQueryError } from '@/shared/ui/state-panel';
 import { loginUrl } from './api';
 import { loginErrorMessages, providerNames } from './messages';
 import { ProviderIcon } from './ProviderIcon';
@@ -177,25 +171,11 @@ export function LoginPage() {
             )}
 
             {providers.isError && (
-              <Alert variant="error">
-                <TriangleAlert aria-hidden />
-                <div className="flex flex-col items-start gap-2">
-                  <p>
-                    Přihlášení je teď nedostupné. Zkuste to prosím za chvíli.
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={providers.isFetching}
-                    onClick={() => void providers.refetch()}
-                  >
-                    <RotateCw
-                      className={cn(providers.isFetching && 'animate-spin')}
-                    />
-                    Zkusit znovu
-                  </Button>
-                </div>
-              </Alert>
+              <InlineQueryError
+                message="Přihlášení je teď nedostupné. Zkuste to prosím za chvíli."
+                onRetry={() => void providers.refetch()}
+                retrying={providers.isFetching}
+              />
             )}
 
             {!session.data &&

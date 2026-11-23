@@ -8,16 +8,22 @@ import { Images, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useOutlet, useParams } from 'react-router';
 import { breedLabel, sexLabel, speciesLabel } from '@/features/animals/api';
-import { sessionGeneration, useCurrentSession } from '@/features/auth';
-import { ApproveRequestDialog } from '@/features/breeders/ApproveRequestDialog';
-import { RejectRequestDialog } from '@/features/breeders/RejectRequestDialog';
-import type { DecisionNoticeState } from '@/features/breeders/queue-location';
-import { formatDateTime } from '@/shared/lib/format';
-import { isApiError } from '@/shared/lib/http';
+import { sessionGuard, useCurrentSession } from '@/features/auth';
+import { ApproveRequestDialog } from '@/features/review/ApproveRequestDialog';
+import type { DecisionNoticeState } from '@/features/review/decision-notice';
+import { RejectRequestDialog } from '@/features/review/RejectRequestDialog';
+import { apiErrorText } from '@/shared/lib/error-text';
 import { Alert } from '@/shared/ui/alert';
+import { Breadcrumb } from '@/shared/ui/breadcrumb';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
-import { QueryErrorState } from '@/shared/ui/state-panel';
+import { DateTime } from '@/shared/ui/date-time';
+import { eyebrowClassName, pageTitleClassName } from '@/shared/ui/page-header';
+import {
+  LoadingText,
+  NotFoundPanel,
+  QueryErrorState,
+} from '@/shared/ui/state-panel';
 import {
   DOCUMENT_TYPE_LABEL,
   QUEUE_PATH,
@@ -31,64 +37,50 @@ import {
 import { AssessmentChip, FileActions, VersionHistory } from './DocumentParts';
 import type { DocumentPhotosContext } from './DocumentPhotos';
 
-const eyebrow =
-  'text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase';
+const decisionErrorText = (error: unknown) =>
+  apiErrorText(error, {
+    statuses: {
+      403: 'K posuzování dokladů nemáte oprávnění.',
+      404: 'Doklad už neexistuje (zvíře mohlo být smazáno).',
+      400: 'Rozhodnutí není platné. Zkontrolujte důvod zamítnutí (nejvýše 500 znaků).',
+    },
+    fallback:
+      'Rozhodnutí se nepodařilo uložit kvůli chybě spojení. Zkuste to znovu.',
+  });
 
-function decisionErrorText(error: unknown): string {
-  if (isApiError(error, 'forbidden'))
-    return 'K posuzování dokladů nemáte oprávnění.';
-  if (isApiError(error) && error.status === 404)
-    return 'Doklad už neexistuje (zvíře mohlo být smazáno).';
-  if (isApiError(error) && error.status === 400)
-    return 'Rozhodnutí není platné. Zkontrolujte důvod zamítnutí (nejvýše 500 znaků).';
-  return 'Rozhodnutí se nepodařilo uložit kvůli chybě spojení. Zkuste to znovu.';
-}
+const documentNotFound = (
+  <NotFoundPanel
+    title="Doklad nebyl nalezen"
+    to={QUEUE_PATH}
+    backLabel="Zpět na doklady"
+  >
+    Doklad neexistuje nebo bylo zvíře mezitím smazáno.
+  </NotFoundPanel>
+);
 
 /** WF 05 detail s historií, WF 06 důvod zamítnutí, WF 07 návrat do fronty se zprávou. */
 export function DocumentReviewDetail() {
   const { animalId = '', documentId = '' } = useParams();
   const history = useQuery(historyQuery(animalId, documentId));
 
-  if (history.isPending)
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        Načítám doklad…
-      </p>
-    );
+  if (history.isPending) return <LoadingText>Načítám doklad…</LoadingText>;
   if (history.isError)
-    return isApiError(history.error) && history.error.status === 404 ? (
-      <DocumentNotFound />
-    ) : (
+    return (
       <QueryErrorState
         error={history.error}
         onRetry={() => void history.refetch()}
         retrying={history.isFetching}
+        notFound={documentNotFound}
       />
     );
   const target = history.data.versions.find(({ id }) => id === documentId);
-  if (!target) return <DocumentNotFound />;
+  if (!target) return documentNotFound;
   return (
     <ReviewPanel
       target={target}
       versions={history.data.versions}
       animal={history.data.animal}
     />
-  );
-}
-
-function DocumentNotFound() {
-  return (
-    <section className="flex flex-col items-start gap-4">
-      <h1 className="text-[28px] font-semibold tracking-[-0.03em]">
-        Doklad nebyl nalezen
-      </h1>
-      <p className="text-sm text-muted-foreground">
-        Doklad neexistuje nebo bylo zvíře mezitím smazáno.
-      </p>
-      <Link to={QUEUE_PATH} className={buttonVariants({ variant: 'outline' })}>
-        Zpět na doklady
-      </Link>
-    </section>
   );
 }
 
@@ -127,16 +119,16 @@ function ReviewPanel({
       decideDocument(target.animalId, target.id, input, session.csrfToken),
     onMutate: () => {
       setConflict(false);
-      return { generation: sessionGeneration(client) };
+      return { session: sessionGuard(client) };
     },
-    onSuccess: async (saved, _input, { generation }) => {
+    onSuccess: async (saved, _input, context) => {
       // Odpověď z relace jiného účtu nesmí měnit cache ani přesměrovat.
-      if (generation !== sessionGeneration(client)) return;
+      if (!context.session.isCurrent()) return;
       await Promise.all([
         client.invalidateQueries({ queryKey: reviewQueueKey }),
         client.invalidateQueries({ queryKey: documentsKey(target.animalId) }),
       ]);
-      if (generation !== sessionGeneration(client)) return;
+      if (!context.session.isCurrent()) return;
       const subject = `Doklad ${typeLabel} zvířete ${animal.name}`;
       void navigate(QUEUE_PATH, {
         state: {
@@ -148,7 +140,7 @@ function ReviewPanel({
       });
     },
     onError: async (error, _input, context) => {
-      if (!context || context.generation !== sessionGeneration(client)) return;
+      if (!context?.session.isCurrent()) return;
       if (!documentConflict(error)) return;
       // A4: jiný administrátor rozhodl dřív; obnovená historie ukáže uložený výsledek.
       setDialog(null);
@@ -171,27 +163,13 @@ function ReviewPanel({
       aria-labelledby="document-title"
     >
       <div className="flex flex-col gap-1">
-        <nav
-          aria-label="Drobečková navigace"
-          className="text-sm text-muted-foreground"
-        >
-          <Link
-            to={QUEUE_PATH}
-            className="hover:text-foreground hover:underline"
-          >
-            Doklady zvířat
-          </Link>
-          <span aria-hidden="true" className="px-1.5">
-            /
-          </span>
-          <span aria-current="page">
-            {animal.name} – {typeLabel}
-          </span>
-        </nav>
-        <h1
-          id="document-title"
-          className="text-[28px] font-semibold tracking-[-0.03em]"
-        >
+        <Breadcrumb
+          items={[
+            { label: 'Doklady zvířat', to: QUEUE_PATH },
+            { label: `${animal.name} – ${typeLabel}` },
+          ]}
+        />
+        <h1 id="document-title" className={pageTitleClassName}>
           Posoudit doklad
         </h1>
       </div>
@@ -209,7 +187,7 @@ function ReviewPanel({
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1">
-            <p className={eyebrow}>Zvíře</p>
+            <p className={eyebrowClassName}>Zvíře</p>
             <h2 className="text-lg font-semibold">{animal.name}</h2>
             <p className="text-sm text-muted-foreground">
               {speciesLabel(animal.species)} / {sexLabel(animal.sex)} ·{' '}
@@ -248,7 +226,7 @@ function ReviewPanel({
         <Card className="flex flex-col justify-between gap-4 p-6">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <p className={eyebrow}>Doklad</p>
+              <p className={eyebrowClassName}>Doklad</p>
               <h2 className="text-lg font-semibold">{typeLabel}</h2>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
@@ -263,9 +241,7 @@ function ReviewPanel({
               <dd>{target.versionNumber}</dd>
               <dt className="font-semibold">Odesláno</dt>
               <dd>
-                <time dateTime={target.submittedAt}>
-                  {formatDateTime(target.submittedAt)}
-                </time>
+                <DateTime value={target.submittedAt} />
               </dd>
               <dt className="font-semibold">Stav</dt>
               <dd>
@@ -279,7 +255,7 @@ function ReviewPanel({
 
       <Card className="flex flex-col gap-4 p-6">
         <div className="flex flex-col gap-1">
-          <p className={eyebrow}>Historie verzí</p>
+          <p className={eyebrowClassName}>Historie verzí</p>
           <p className="text-sm text-muted-foreground">
             Předchozí verze a důvody jejich zamítnutí.
           </p>

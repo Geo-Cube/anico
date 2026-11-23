@@ -18,13 +18,14 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, ImagePlus, Star, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { sessionGeneration, useCurrentSession } from '@/features/auth';
+import { sessionGuard, useCurrentSession } from '@/features/auth';
 import { cn } from '@/shared/lib/cn';
 import { Alert } from '@/shared/ui/alert';
 import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
 import { controlClassName, Field } from '@/shared/ui/field';
 import { PageHeader } from '@/shared/ui/page-header';
+import { LoadingText } from '@/shared/ui/state-panel';
 import { AnimalError } from './AnimalError';
 import {
   animalKey,
@@ -32,6 +33,8 @@ import {
   breedsQuery,
   photoUrl,
   saveAnimal,
+  SEX_OPTIONS,
+  SPECIES_OPTIONS,
 } from './api';
 import { optionalFields, type OptionalField } from './fields';
 import type { ResultState } from './ResultMessage';
@@ -226,15 +229,14 @@ export function AnimalFormPage() {
     enabled: Boolean(animalId),
   });
   if (!animalId) return <AnimalForm />;
-  if (query.isPending)
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        Načítám zvíře…
-      </p>
-    );
+  if (query.isPending) return <LoadingText>Načítám zvíře…</LoadingText>;
   if (query.isError)
     return (
-      <AnimalError error={query.error} onRetry={() => void query.refetch()} />
+      <AnimalError
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        retrying={query.isFetching}
+      />
     );
   return <AnimalForm key={query.data.id} animal={query.data} />;
 }
@@ -284,18 +286,17 @@ function AnimalForm({ animal }: { animal?: Animal }) {
 
   const mutation = useMutation({
     mutationFn: async (input: Parameters<typeof saveAnimal>[0]) => {
-      // Generace relace v okamžiku odeslání: odpověď pro jiný účet se zahodí.
-      const generation = sessionGeneration(client);
+      // Relace v okamžiku odeslání: odpověď pro jiný účet se zahodí.
+      const guard = sessionGuard(client);
       return {
-        generation,
+        guard,
         saved: await saveAnimal(input, files, session.csrfToken, animal?.id),
       };
     },
-    onSuccess: async ({ generation, saved }) => {
-      const current = () => generation === sessionGeneration(client);
-      if (!current()) return;
+    onSuccess: async ({ guard, saved }) => {
+      if (!guard.isCurrent()) return;
       await client.invalidateQueries({ queryKey: animalKey });
-      if (!current()) return;
+      if (!guard.isCurrent()) return;
       client.setQueryData([...animalKey, saved.id], saved);
       void navigate(`/zvirata/${saved.id}`, {
         state: {
@@ -505,8 +506,11 @@ function AnimalForm({ animal }: { animal?: Animal }) {
                         setBreedId('');
                       }}
                     >
-                      <option value="dog">Pes</option>
-                      <option value="horse">Kůň</option>
+                      {SPECIES_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
                     </select>
                   )}
                 </Field>
@@ -542,6 +546,7 @@ function AnimalForm({ animal }: { animal?: Animal }) {
                     <AnimalError
                       error={breeds.error}
                       onRetry={() => void breeds.refetch()}
+                      retrying={breeds.isFetching}
                     />
                   </div>
                 )}
@@ -554,12 +559,7 @@ function AnimalForm({ animal }: { animal?: Animal }) {
                     </span>
                   </legend>
                   <div className="flex gap-2">
-                    {(
-                      [
-                        ['male', 'Samec'],
-                        ['female', 'Samice'],
-                      ] as const
-                    ).map(([value, label]) => (
+                    {SEX_OPTIONS.map(([value, label]) => (
                       <label
                         key={value}
                         className={cn(

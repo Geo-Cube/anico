@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { canAdminister, displayName, useCurrentSession } from '@/features/auth';
 import { VerificationStatusCard } from '@/features/verification/VerificationStatusCard';
+import { cn } from '@/shared/lib/cn';
 import { Card } from '@/shared/ui/card';
+import { eyebrowClassName, pageTitleClassName } from '@/shared/ui/page-header';
 
 function Shortcut({
   to,
@@ -47,10 +49,10 @@ export function DashboardPage() {
   return (
     <div className="flex flex-col gap-7">
       <div>
-        <p className="text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
-          Přehled
-        </p>
-        <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.03em] text-brand md:text-[32px]">
+        <p className={eyebrowClassName}>Přehled</p>
+        <h1
+          className={cn('mt-1 text-brand md:text-[32px]', pageTitleClassName)}
+        >
           Vítejte, {displayName(session.identity)}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">

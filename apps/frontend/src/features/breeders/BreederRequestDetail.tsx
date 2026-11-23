@@ -5,14 +5,22 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router';
-import { sessionGeneration, useCurrentSession } from '@/features/auth';
-import { isApiError } from '@/shared/lib/http';
-import { useFileDownload } from '@/shared/lib/file-download';
+import { useLocation, useNavigate, useParams } from 'react-router';
+import { sessionGuard, useCurrentSession } from '@/features/auth';
+import { apiErrorText, type ErrorTexts } from '@/shared/lib/error-text';
+import { contentTypeLabel } from '@/shared/lib/format';
 import { Alert } from '@/shared/ui/alert';
-import { Button, buttonVariants } from '@/shared/ui/button';
+import { Breadcrumb } from '@/shared/ui/breadcrumb';
+import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
-import { QueryErrorState } from '@/shared/ui/state-panel';
+import { DateTime } from '@/shared/ui/date-time';
+import { FileActions } from '@/shared/ui/file-actions';
+import { eyebrowClassName, pageTitleClassName } from '@/shared/ui/page-header';
+import {
+  LoadingText,
+  NotFoundPanel,
+  QueryErrorState,
+} from '@/shared/ui/state-panel';
 import {
   breederName,
   decideRequest,
@@ -23,25 +31,12 @@ import {
   STATUS_LABEL,
   verificationKey,
 } from './api';
-import { formatDateTime } from '@/shared/lib/format';
-import {
-  isQueueLocationState,
-  PENDING_QUEUE_SEARCH,
-  type DecisionNoticeState,
-} from './queue-location';
-import { ApproveRequestDialog } from './ApproveRequestDialog';
-import { RejectRequestDialog } from './RejectRequestDialog';
-import { ReturnRequestDialog } from './ReturnRequestDialog';
+import { isQueueLocationState, PENDING_QUEUE_SEARCH } from './queue-location';
+import { ApproveRequestDialog } from '@/features/review/ApproveRequestDialog';
+import type { DecisionNoticeState } from '@/features/review/decision-notice';
+import { RejectRequestDialog } from '@/features/review/RejectRequestDialog';
+import { ReturnRequestDialog } from '@/features/review/ReturnRequestDialog';
 import { StatusChip } from './StatusChip';
-
-const FORMAT_LABEL: Record<
-  AdminVerificationRequest['breedingStationCertificate']['contentType'],
-  string
-> = {
-  'application/pdf': 'PDF',
-  'image/jpeg': 'JPEG',
-  'image/png': 'PNG',
-};
 
 const CONFLICT_TEXT = {
   'already-decided':
@@ -62,68 +57,46 @@ type DecisionKind = 'approve' | 'reject' | 'return';
 const EMAIL_SIMULATION_TEXT =
   'E-mail s výsledkem byl odeslán chovateli (simulace, skutečné e-maily se zatím neodesílají).';
 
-function decisionErrorText(error: unknown): string {
-  if (isApiError(error, 'forbidden'))
-    return 'K posuzování žádostí nemáte oprávnění.';
-  if (isApiError(error) && error.status === 404) return 'Žádost už neexistuje.';
-  if (isApiError(error) && error.status === 400)
-    return 'Rozhodnutí není platné. Zkontrolujte uvedený důvod (nejvýše 500 znaků).';
-  return 'Rozhodnutí se nepodařilo uložit kvůli chybě spojení. Zkuste to znovu.';
-}
+const DECISION_ERROR_TEXTS: ErrorTexts = {
+  statuses: {
+    403: 'K posuzování žádostí nemáte oprávnění.',
+    404: 'Žádost už neexistuje.',
+    400: 'Rozhodnutí není platné. Zkontrolujte uvedený důvod (nejvýše 500 znaků).',
+  },
+  fallback:
+    'Rozhodnutí se nepodařilo uložit kvůli chybě spojení. Zkuste to znovu.',
+};
 
-function certificateErrorText(error: unknown): string {
-  if (isApiError(error, 'forbidden')) return 'K certifikátu nemáte oprávnění.';
-  if (isApiError(error) && error.status === 404)
-    return 'Certifikát nebyl nalezen.';
-  return 'Certifikát se nepodařilo načíst. Zkuste to znovu.';
-}
+const CERTIFICATE_ERROR_TEXTS = {
+  forbidden: 'K certifikátu nemáte oprávnění.',
+  notFound: 'Certifikát nebyl nalezen.',
+  failed: 'Certifikát se nepodařilo načíst. Zkuste to znovu.',
+};
 
 export function BreederRequestDetail() {
   const { requestId = '' } = useParams();
   const query = useQuery(requestDetailQuery(requestId));
 
-  if (query.isPending)
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        Načítám žádost…
-      </p>
-    );
+  if (query.isPending) return <LoadingText>Načítám žádost…</LoadingText>;
   if (query.isError)
-    return isApiError(query.error) && query.error.status === 404 ? (
-      <RequestNotFound />
-    ) : (
+    return (
       <QueryErrorState
         error={query.error}
         onRetry={() => void query.refetch()}
         retrying={query.isFetching}
+        notFound={
+          <NotFoundPanel
+            title="Žádost nebyla nalezena"
+            titleId="breeder-detail-missing-title"
+            to={{ pathname: '..', search: PENDING_QUEUE_SEARCH }}
+            backLabel="Zpět na žádosti"
+          >
+            Žádost o ověření s tímto označením neexistuje.
+          </NotFoundPanel>
+        }
       />
     );
   return <RequestReview request={query.data} />;
-}
-
-function RequestNotFound() {
-  return (
-    <section
-      className="flex flex-col items-start gap-4"
-      aria-labelledby="breeder-detail-missing-title"
-    >
-      <h1
-        id="breeder-detail-missing-title"
-        className="text-[28px] font-semibold tracking-[-0.03em]"
-      >
-        Žádost nebyla nalezena
-      </h1>
-      <p className="text-sm text-muted-foreground">
-        Žádost o ověření s tímto označením neexistuje.
-      </p>
-      <Link
-        to={{ pathname: '..', search: PENDING_QUEUE_SEARCH }}
-        className={buttonVariants({ variant: 'outline' })}
-      >
-        Zpět na žádosti
-      </Link>
-    </section>
-  );
 }
 
 function RequestReview({ request }: { request: AdminVerificationRequest }) {
@@ -154,14 +127,14 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
       decideRequest(request.id, input, session.csrfToken),
     onMutate: () => {
       setConflict(null);
-      return { generation: sessionGeneration(client) };
+      return { session: sessionGuard(client) };
     },
-    onSuccess: async (saved, _input, { generation }) => {
+    onSuccess: async (saved, _input, { session }) => {
       // Odpověď z relace jiného účtu nesmí měnit cache ani přesměrovat.
-      if (generation !== sessionGeneration(client)) return;
+      if (!session.isCurrent()) return;
       client.setQueryData(requestDetailKey(request.id), saved);
       await client.invalidateQueries({ queryKey: verificationKey });
-      if (generation !== sessionGeneration(client)) return;
+      if (!session.isCurrent()) return;
       if (saved.status === 'PENDING') return;
       const notice: DecisionNoticeState = {
         notice: `${SAVED_TEXT[saved.status]} ${EMAIL_SIMULATION_TEXT}`,
@@ -173,7 +146,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
     },
     onError: async (error, _input, context) => {
       // Totéž pro 409: `current` po odhlášení nebo změně účtu nesmí zpět do cache.
-      if (!context || context.generation !== sessionGeneration(client)) return;
+      if (!context?.session.isCurrent()) return;
       const found = decisionConflict(error);
       if (!found) return;
       setOpenDialog(null);
@@ -190,15 +163,11 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
     },
   });
 
-  const certificateFile = useFileDownload({
-    load: () => downloadCertificate(request.id),
-    fileName: certificate.fileName,
-    contentType: certificate.contentType,
-  });
-
   const isSaving = decide.isPending;
-  const decisionError =
-    decide.isError && !decisionConflict(decide.error) ? decide.error : null;
+  const decisionErrorMessage =
+    decide.isError && !decisionConflict(decide.error)
+      ? apiErrorText(decide.error, DECISION_ERROR_TEXTS)
+      : null;
   const isOwnDecision = request.reviewedBy === session.identity.userId;
   // Žádost se mezitím změnila (obnovení detailu): dialog se zavře a admin musí
   // aktuální podání zkontrolovat znovu. Během ukládání platí odeslaná revize.
@@ -226,46 +195,31 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
       aria-labelledby="breeder-detail-title"
     >
       <div className="flex flex-col gap-1">
-        <nav
-          aria-label="Drobečková navigace"
-          className="text-sm text-muted-foreground"
-        >
-          <Link
-            to={{ pathname: '..', search: queueSearch }}
-            className="hover:text-foreground hover:underline"
-          >
-            Žádosti chovatelů
-          </Link>
-          <span aria-hidden="true" className="px-1.5">
-            /
-          </span>
-          <span aria-current="page">{fullName}</span>
-        </nav>
-        <h1
-          id="breeder-detail-title"
-          className="text-[28px] font-semibold tracking-[-0.03em]"
-        >
+        <Breadcrumb
+          items={[
+            {
+              label: 'Žádosti chovatelů',
+              to: { pathname: '..', search: queueSearch },
+            },
+            { label: fullName },
+          ]}
+        />
+        <h1 id="breeder-detail-title" className={pageTitleClassName}>
           Posoudit žádost chovatele
         </h1>
       </div>
 
       {shownConflict && (
-        <Alert variant="warning">
-          <p role="status">{CONFLICT_TEXT[shownConflict]}</p>
-        </Alert>
+        <Alert variant="warning">{CONFLICT_TEXT[shownConflict]}</Alert>
       )}
-      {decisionError !== null && dialog === null && (
-        <Alert variant="error">
-          <p role="alert">{decisionErrorText(decisionError)}</p>
-        </Alert>
+      {decisionErrorMessage !== null && dialog === null && (
+        <Alert variant="error">{decisionErrorMessage}</Alert>
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1">
-            <p className="text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
-              Chovatel
-            </p>
+            <p className={eyebrowClassName}>Chovatel</p>
             <h2 className="text-lg font-semibold">{fullName}</h2>
             <p className="text-sm text-muted-foreground">
               {breeder.emailAddress ?? 'E-mail neuveden'}
@@ -278,9 +232,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
             <dd>{breeder.breedingStationNumber ?? 'Neuvedeno'}</dd>
             <dt className="font-semibold">Odesláno</dt>
             <dd>
-              <time dateTime={request.lastSubmittedAt}>
-                {formatDateTime(request.lastSubmittedAt)}
-              </time>
+              <DateTime value={request.lastSubmittedAt} />
               {request.revision > 1 && ` (verze ${request.revision})`}
             </dd>
           </dl>
@@ -303,39 +255,24 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
                   {certificate.fileName}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Formát: {FORMAT_LABEL[certificate.contentType]}
+                  Formát: {contentTypeLabel(certificate.contentType)}
                 </p>
               </div>
             </div>
-            {certificateFile.error && (
-              <p role="alert" className="text-sm text-destructive">
-                {certificateErrorText(certificateFile.error)}
-              </p>
-            )}
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button
-              variant="outline"
-              onClick={certificateFile.open}
-              disabled={certificateFile.isPending}
-            >
-              Otevřít dokument
-            </Button>
-            <Button
-              variant="outline"
-              onClick={certificateFile.download}
-              disabled={certificateFile.isPending}
-            >
-              Stáhnout
-            </Button>
-          </div>
+          <FileActions
+            load={() => downloadCertificate(request.id)}
+            fileName={certificate.fileName}
+            contentType={certificate.contentType}
+            errorTexts={CERTIFICATE_ERROR_TEXTS}
+            size="default"
+            className="grid sm:grid-cols-2 [&>p]:col-span-full"
+          />
         </Card>
       </div>
 
       <Card className="flex flex-col items-start gap-3 p-6">
-        <p className="text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase">
-          Stav žádosti
-        </p>
+        <p className={eyebrowClassName}>Stav žádosti</p>
         <StatusChip status={request.status} />
         {request.status === 'PENDING' && request.revision > 1 && (
           <p className="text-sm font-semibold">
@@ -357,9 +294,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
               </dd>
               <dt className="font-semibold">Rozhodnuto</dt>
               <dd>
-                <time dateTime={request.reviewedAt}>
-                  {formatDateTime(request.reviewedAt)}
-                </time>
+                <DateTime value={request.reviewedAt} />
               </dd>
             </dl>
             {request.rejectionReason && (
@@ -399,9 +334,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
                   </strong>{' '}
                   <span className="text-muted-foreground">
                     · verze {review.revision} ·{' '}
-                    <time dateTime={review.reviewedAt}>
-                      {formatDateTime(review.reviewedAt)}
-                    </time>
+                    <DateTime value={review.reviewedAt} />
                   </span>
                 </p>
                 {review.reason && (
@@ -457,11 +390,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
             Rozhodnutí je konečné a nelze ho změnit.
           </>
         }
-        error={
-          dialog?.kind === 'approve' && decisionError !== null
-            ? decisionErrorText(decisionError)
-            : null
-        }
+        error={dialog?.kind === 'approve' ? decisionErrorMessage : null}
         onClose={() => setOpenDialog(null)}
         onConfirm={() =>
           dialog &&
@@ -471,11 +400,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
       <RejectRequestDialog
         open={dialog?.kind === 'reject'}
         isSaving={isSaving}
-        error={
-          dialog?.kind === 'reject' && decisionError !== null
-            ? decisionErrorText(decisionError)
-            : null
-        }
+        error={dialog?.kind === 'reject' ? decisionErrorMessage : null}
         title="Zamítnout žádost"
         placeholder="Např.: Na certifikátu není čitelné registrační číslo stanice."
         note="Důvod se zobrazí u výsledku posouzení a v e-mailu pro chovatele."
@@ -492,11 +417,7 @@ function RequestReview({ request }: { request: AdminVerificationRequest }) {
       <ReturnRequestDialog
         open={dialog?.kind === 'return'}
         isSaving={isSaving}
-        error={
-          dialog?.kind === 'return' && decisionError !== null
-            ? decisionErrorText(decisionError)
-            : null
-        }
+        error={dialog?.kind === 'return' ? decisionErrorMessage : null}
         title="Vrátit žádost k doplnění"
         placeholder="Např.: Nahrajte čitelný sken certifikátu včetně registračního čísla stanice."
         note="Důvod uvidí chovatel u žádosti a v e-mailu; podle něj žádost opraví a odešle znovu."

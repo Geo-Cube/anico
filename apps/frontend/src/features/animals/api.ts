@@ -14,9 +14,11 @@ import {
   todayInCzechia,
 } from '@anico/shared-schemas';
 import { z } from 'zod';
-import { apiRequest } from '@/shared/lib/http';
+import { plural } from '@/shared/lib/format';
+import { apiRequest, isApiError } from '@/shared/lib/http';
 
-const base = '/api/animal';
+export const ANIMAL_API_BASE = '/api/animal';
+const base = ANIMAL_API_BASE;
 /** Prefix všech dotazů na zvířata: seznamy `[…, 'list', filtr]` i detaily `[…, id]`. */
 export const animalKey = ['animals'] as const;
 export const breedsQuery = (species: AnimalSpecies) => ({
@@ -97,17 +99,31 @@ export const deleteAnimal = (id: string, csrfToken: string) =>
     method: 'DELETE',
     csrfToken,
   });
+const fileUrl = (path: string, photoId: string, size?: AnimalPhotoSize) =>
+  `${base}/${path}/photos/${encodeURIComponent(photoId)}/file${size ? `?size=${size}` : ''}`;
 /** Bez `size` originál (otevření v plné velikosti); karty a galerie berou zmenšeniny. */
 export const photoUrl = (
   animalId: string,
   photoId: string,
   size?: AnimalPhotoSize,
-) =>
-  `${base}/animals/${encodeURIComponent(animalId)}/photos/${encodeURIComponent(photoId)}/file${size ? `?size=${size}` : ''}`;
+) => fileUrl(`animals/${encodeURIComponent(animalId)}`, photoId, size);
+/** Fotografie zvířete z pohledu nabídky; čte ji každý ověřený chovatel (US-06). */
+export const offerPhotoUrl = (
+  offerId: string,
+  photoId: string,
+  size: AnimalPhotoSize,
+) => fileUrl(`offers/${encodeURIComponent(offerId)}`, photoId, size);
 export const speciesLabel = (species: AnimalSpecies) =>
   species === 'dog' ? 'Pes' : 'Kůň';
 export const sexLabel = (sex: AnimalSex) =>
   sex === 'male' ? 'Samec' : 'Samice';
+/** Volby výběru v pořadí enumu: `[hodnota, popisek]`. */
+export const SPECIES_OPTIONS = AnimalSpeciesSchema.options.map(
+  (species) => [species, speciesLabel(species)] as const,
+);
+export const SEX_OPTIONS = AnimalSexSchema.options.map(
+  (sex) => [sex, sexLabel(sex)] as const,
+);
 export const breedLabel = (animal: Pick<Animal, 'species' | 'breedId'>) =>
   animalBreeds(animal.species).find((breed) => breed.id === animal.breedId)
     ?.name ?? animal.breedId;
@@ -118,8 +134,11 @@ export const DOCUMENTS_STATE_LABEL: Record<AnimalDocumentsState, string> = {
   REJECTED: 'Doklady zamítnuté',
 };
 
-const plural = (count: number, one: string, few: string, many: string) =>
-  `${count} ${count === 1 ? one : count >= 2 && count <= 4 ? few : many}`;
+/** 403 animal-service pro chovatele, jehož účet ještě není ověřený. */
+export const isUnverifiedBreeder = (error: unknown) =>
+  isApiError(error) &&
+  error.status === 403 &&
+  error.code === 'Breeder is not verified';
 
 /** Věk z data narození podle českého kalendáře: „8 měsíců“, „3 roky“, „5 let“. */
 export function ageLabel(birthDate: string, today = todayInCzechia()) {
@@ -130,6 +149,8 @@ export function ageLabel(birthDate: string, today = todayInCzechia()) {
     (month! - birthMonth!) -
     (day! < birthDay! ? 1 : 0);
   if (months < 1) return 'méně než měsíc';
-  if (months < 12) return plural(months, 'měsíc', 'měsíce', 'měsíců');
-  return plural(Math.floor(months / 12), 'rok', 'roky', 'let');
+  if (months < 12)
+    return `${months} ${plural(months, 'měsíc', 'měsíce', 'měsíců')}`;
+  const years = Math.floor(months / 12);
+  return `${years} ${plural(years, 'rok', 'roky', 'let')}`;
 }

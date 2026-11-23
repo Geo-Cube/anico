@@ -30,6 +30,26 @@ export function isApiError(
   return error instanceof ApiError && (!kind || error.kind === kind);
 }
 
+export const isNotFound = (error: unknown) =>
+  isApiError(error) && error.status === 404;
+
+/**
+ * 409 whose body carries the stored state as `current`. Returns `null` for any
+ * other error and `current: null` when the body does not match `schema`.
+ */
+export function conflictCurrent<T>(
+  error: unknown,
+  schema: ZodType<T>,
+): { current: T | null } | null {
+  if (!isApiError(error) || error.status !== 409) return null;
+  const body = error.body;
+  const parsed =
+    body && typeof body === 'object' && 'current' in body
+      ? schema.safeParse(body.current)
+      : null;
+  return { current: parsed?.success ? parsed.data : null };
+}
+
 type RequestOptions<T> = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** Required by the gateway for every state-changing request. */

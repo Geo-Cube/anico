@@ -2,7 +2,11 @@ import type { ReactNode } from 'react';
 
 /** Small uppercase label above headings and filter sections (v0 design). */
 export const eyebrowClassName =
-  'text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase';
+  'text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase';
+
+/** Title of administration and account pages (28 px, no brand colour). */
+export const pageTitleClassName =
+  'text-[28px] font-semibold tracking-[-0.03em]';
 
 /** Page title block: eyebrow, large title, description and actions on the right. */
 export function PageHeader({

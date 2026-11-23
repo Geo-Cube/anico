@@ -1,5 +1,21 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { sessionGeneration } from '@/features/auth/session';
+import { sessionGuard } from '@/features/auth/session';
+import { apiErrorText } from './error-text';
+
+/** Message for a failed protected file read; callers may name the file (e.g. certificate). */
+export function fileErrorText(
+  error: unknown,
+  {
+    forbidden = 'K souboru nemáte oprávnění.',
+    notFound = 'Soubor nebyl nalezen.',
+    failed = 'Soubor se nepodařilo načíst. Zkuste to znovu.',
+  } = {},
+) {
+  return apiErrorText(error, {
+    statuses: { 403: forbidden, 404: notFound },
+    fallback: failed,
+  });
+}
 
 /**
  * Otevření nebo stažení chráněného souboru přes API (blob, ne přímý odkaz), aby
@@ -18,12 +34,12 @@ export function useFileDownload({
   const client = useQueryClient();
   const mutation = useMutation({
     mutationFn: async (tab: Window | null) => {
-      const generation = sessionGeneration(client);
-      return { blob: await load(), tab, generation };
+      const session = sessionGuard(client);
+      return { blob: await load(), tab, session };
     },
-    onSuccess: ({ blob, tab, generation }) => {
+    onSuccess: ({ blob, tab, session }) => {
       // Soubor načtený pro předchozí relaci (odhlášení, jiný účet) se nezobrazí.
-      if (generation !== sessionGeneration(client)) {
+      if (!session.isCurrent()) {
         tab?.close();
         return;
       }

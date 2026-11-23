@@ -4,22 +4,22 @@ import {
   AnimalDocumentSchema,
   AnimalPhotoListSchema,
   DocumentReviewListSchema,
-  type AnimalDocument,
   type AnimalDocumentFile,
   type AnimalDocumentType,
   type AssessmentStatus,
   type DecideAnimalDocumentInput,
 } from '@anico/shared-schemas';
-import { animalKey } from '@/features/animals/api';
-import { isUnverifiedBreeder } from '@/features/animals/AnimalError';
-import { apiBlob, apiRequest, isApiError } from '@/shared/lib/http';
+import { ANIMAL_API_BASE, animalKey } from '@/features/animals/api';
+import { apiErrorText } from '@/shared/lib/error-text';
+import { contentTypeLabel } from '@/shared/lib/format';
+import { apiBlob, apiRequest, conflictCurrent } from '@/shared/lib/http';
 
 /** Absolutní cesta fronty; detail leží o dvě úrovně níž (`:animalId/:documentId`). */
 export const QUEUE_PATH = '/administrace/chovatele/doklady';
 
-const base = '/api/animal';
-const documentsPath = (animalId: string) =>
-  `${base}/animals/${encodeURIComponent(animalId)}/documents`;
+const animalPath = (animalId: string) =>
+  `${ANIMAL_API_BASE}/animals/${encodeURIComponent(animalId)}`;
+const documentsPath = (animalId: string) => `${animalPath(animalId)}/documents`;
 const documentPath = (animalId: string, documentId: string) =>
   `${documentsPath(animalId)}/${encodeURIComponent(documentId)}`;
 
@@ -52,7 +52,7 @@ export const historyQuery = (animalId: string, documentId: string) => ({
 export const animalPhotosQuery = (animalId: string) => ({
   queryKey: [...animalKey, animalId, 'photos'] as const,
   queryFn: ({ signal }: { signal: AbortSignal }) =>
-    apiRequest(`${base}/animals/${encodeURIComponent(animalId)}/photos`, {
+    apiRequest(`${animalPath(animalId)}/photos`, {
       signal,
       schema: AnimalPhotoListSchema,
     }),
@@ -64,7 +64,7 @@ export const reviewQueueKey = ['document-reviews'] as const;
 export const reviewQueueQuery = {
   queryKey: reviewQueueKey,
   queryFn: ({ signal }: { signal: AbortSignal }) =>
-    apiRequest(`${base}/document-reviews`, {
+    apiRequest(`${ANIMAL_API_BASE}/document-reviews`, {
       signal,
       schema: DocumentReviewListSchema,
     }),
@@ -123,17 +123,8 @@ export const downloadDocument = (animalId: string, documentId: string) =>
   apiBlob(`${documentPath(animalId, documentId)}/file`);
 
 /** 409: verzi mezitím někdo posoudil nebo nahradil; `current` je aktuální verze řady. */
-export function documentConflict(
-  error: unknown,
-): { current: AnimalDocument | null } | null {
-  if (!isApiError(error) || error.status !== 409) return null;
-  const body = error.body;
-  const parsed =
-    body && typeof body === 'object' && 'current' in body
-      ? AnimalDocumentSchema.safeParse(body.current)
-      : null;
-  return { current: parsed?.success ? parsed.data : null };
-}
+export const documentConflict = (error: unknown) =>
+  conflictCurrent(error, AnimalDocumentSchema);
 
 export const DOCUMENT_TYPE_LABEL: Record<AnimalDocumentType, string> = {
   PEDIGREE: 'Průkaz původu',
@@ -150,12 +141,6 @@ export const ASSESSMENT_LABEL: Record<AssessmentStatus, string> = {
   REJECTED: 'Zamítnuto',
 };
 
-const FORMAT_LABEL: Record<AnimalDocumentFile['contentType'], string> = {
-  'application/pdf': 'PDF',
-  'image/jpeg': 'JPEG',
-  'image/png': 'PNG',
-};
-
 const sizeFormat = new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 1 });
 /** „PDF · 1,2 MB“ */
 export function fileSummary(file: AnimalDocumentFile) {
@@ -163,7 +148,7 @@ export function fileSummary(file: AnimalDocumentFile) {
     file.size < 1024 * 1024
       ? `${sizeFormat.format(Math.max(1, Math.round(file.size / 1024)))} kB`
       : `${sizeFormat.format(file.size / 1024 / 1024)} MB`;
-  return `${FORMAT_LABEL[file.contentType]} · ${size}`;
+  return `${contentTypeLabel(file.contentType)} · ${size}`;
 }
 
 /** Stejný limit jako animal-service (R5, ADR-0005); formát server kontroluje znovu podle obsahu. */
@@ -181,21 +166,18 @@ export function fileProblem(file: File): string | null {
 }
 
 /** Česká zpráva k chybě API dokladů. */
-export function documentErrorText(error: unknown): string {
-  if (!isApiError(error))
-    return 'Služba je dočasně nedostupná. Zkuste to prosím znovu.';
-  if (isUnverifiedBreeder(error))
-    return 'Nejdřív musí být ověřen váš chovatelský účet. Pokud vás administrátor právě schválil, zkuste to za chvíli znovu.';
-  if (error.status === 403) return 'K této operaci nemáte oprávnění.';
-  if (error.status === 404)
-    return 'Zvíře nebo doklad nebyly nalezeny, nebo k nim nemáte přístup.';
-  if (error.status === 413)
-    return 'Soubor je příliš velký. Každý doklad může mít nejvýše 10 MiB.';
-  if (error.status === 415)
-    return 'Doklad musí být soubor PDF, JPEG nebo PNG. Nic nebylo uloženo.';
-  if (error.status === 409)
-    return 'Doklady se mezitím změnily. Načtěte aktuální stav a zkuste to znovu.';
-  if (error.status === 400)
-    return 'Podání není platné. Zkontrolujte soubory a typy dokladů.';
-  return 'Služba je dočasně nedostupná. Zkuste to prosím znovu.';
-}
+export const documentErrorText = (error: unknown) =>
+  apiErrorText(error, {
+    codes: {
+      'Breeder is not verified':
+        'Nejdřív musí být ověřen váš chovatelský účet. Pokud vás administrátor právě schválil, zkuste to za chvíli znovu.',
+    },
+    statuses: {
+      403: 'K této operaci nemáte oprávnění.',
+      404: 'Zvíře nebo doklad nebyly nalezeny, nebo k nim nemáte přístup.',
+      413: 'Soubor je příliš velký. Každý doklad může mít nejvýše 10 MiB.',
+      415: 'Doklad musí být soubor PDF, JPEG nebo PNG. Nic nebylo uloženo.',
+      409: 'Doklady se mezitím změnily. Načtěte aktuální stav a zkuste to znovu.',
+      400: 'Podání není platné. Zkontrolujte soubory a typy dokladů.',
+    },
+  });

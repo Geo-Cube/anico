@@ -1,16 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import { X } from 'lucide-react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { VerificationStatus } from '@anico/shared-schemas';
 import { cn } from '@/shared/lib/cn';
 import { Alert } from '@/shared/ui/alert';
-import { Button, buttonVariants } from '@/shared/ui/button';
-import { Card } from '@/shared/ui/card';
-import { QueryErrorState } from '@/shared/ui/state-panel';
-import { formatDateTime } from '@/shared/lib/format';
+import { Breadcrumb } from '@/shared/ui/breadcrumb';
+import { buttonVariants } from '@/shared/ui/button';
+import { DataTable, rowClassName, tdClassName } from '@/shared/ui/data-table';
+import { DateTime } from '@/shared/ui/date-time';
+import { pageTitleClassName } from '@/shared/ui/page-header';
+import { LoadingText, QueryErrorState } from '@/shared/ui/state-panel';
 import { breederName, requestListQuery } from './api';
+import { isDecisionNoticeState } from '@/features/review/decision-notice';
 import {
-  isDecisionNoticeState,
   parseStatusFilter,
   STATUS_FILTER_PARAM,
   type QueueLocationState,
@@ -27,9 +28,6 @@ const FILTERS: { status: VerificationStatus; label: string }[] = [
 /** The breeder queue holds one request type only. */
 const REQUEST_TYPE = 'Ověření chovatele';
 
-const HEADER_CELL =
-  'px-4 py-3 text-left text-[11px] font-bold tracking-[0.14em] text-muted-foreground uppercase';
-
 export function BreederRequestQueue() {
   const [searchParams] = useSearchParams();
   const { search, state } = useLocation();
@@ -45,40 +43,23 @@ export function BreederRequestQueue() {
       aria-labelledby="breeder-queue-title"
     >
       <div className="flex flex-col gap-1">
-        <nav
-          aria-label="Drobečková navigace"
-          className="text-sm text-muted-foreground"
-        >
-          <Link to=".." className="hover:text-foreground hover:underline">
-            Přehled
-          </Link>
-          <span aria-hidden="true" className="px-1.5">
-            /
-          </span>
-          <span>Žádosti chovatelů</span>
-        </nav>
-        <h1
-          id="breeder-queue-title"
-          className="text-[28px] font-semibold tracking-[-0.03em]"
-        >
+        <Breadcrumb
+          items={[
+            { label: 'Přehled', to: '..' },
+            { label: 'Žádosti chovatelů' },
+          ]}
+        />
+        <h1 id="breeder-queue-title" className={pageTitleClassName}>
           Žádosti chovatelů
         </h1>
       </div>
 
       {notice && (
-        <Alert variant="info">
-          <p role="status" className="flex-1">
-            {notice}
-          </p>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="-my-1.5 size-7"
-            aria-label="Zavřít oznámení"
-            onClick={() => void navigate({ search }, { replace: true })}
-          >
-            <X aria-hidden="true" />
-          </Button>
+        <Alert
+          variant="info"
+          onDismiss={() => void navigate({ search }, { replace: true })}
+        >
+          {notice}
         </Alert>
       )}
 
@@ -106,9 +87,7 @@ export function BreederRequestQueue() {
       </nav>
 
       {query.isPending ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Načítám žádosti…
-        </p>
+        <LoadingText>Načítám žádosti…</LoadingText>
       ) : query.isError ? (
         <QueryErrorState
           error={query.error}
@@ -116,87 +95,64 @@ export function BreederRequestQueue() {
           retrying={query.isFetching}
         />
       ) : (
-        <Card className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead className="border-b border-border bg-muted/50">
-              <tr>
-                <th scope="col" className={HEADER_CELL}>
-                  Chovatel
+        <DataTable
+          columns={[
+            'Chovatel',
+            'Typ',
+            statusFilter === 'RETURNED' ? 'Vráceno' : 'Odesláno',
+            'Stav',
+            <span key="actions" className="sr-only">
+              Akce
+            </span>,
+          ]}
+          minWidthClassName="min-w-[720px]"
+          empty={
+            query.data.items.length === 0
+              ? 'V tomto stavu nejsou žádné žádosti chovatelů.'
+              : null
+          }
+        >
+          {query.data.items.map((request) => {
+            const name = breederName(request);
+            const action =
+              request.status === 'PENDING' ? 'Posoudit' : 'Zobrazit';
+            // Vrácená žádost čeká na chovatele od okamžiku vrácení.
+            const shownAt =
+              request.status === 'RETURNED' && request.reviewedAt
+                ? request.reviewedAt
+                : request.lastSubmittedAt;
+            return (
+              <tr key={request.id} className={rowClassName}>
+                <th
+                  scope="row"
+                  className={cn(tdClassName, 'text-left font-semibold')}
+                >
+                  {name}
                 </th>
-                <th scope="col" className={HEADER_CELL}>
-                  Typ
-                </th>
-                <th scope="col" className={HEADER_CELL}>
-                  {statusFilter === 'RETURNED' ? 'Vráceno' : 'Odesláno'}
-                </th>
-                <th scope="col" className={HEADER_CELL}>
-                  Stav
-                </th>
-                <th scope="col" className={HEADER_CELL}>
-                  <span className="sr-only">Akce</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {query.data.items.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-10 text-center text-muted-foreground"
+                <td className={tdClassName}>{REQUEST_TYPE}</td>
+                <td className={cn(tdClassName, 'text-muted-foreground')}>
+                  <DateTime value={shownAt} />
+                </td>
+                <td className={tdClassName}>
+                  <StatusChip status={request.status} />
+                </td>
+                <td className={cn(tdClassName, 'text-right')}>
+                  <Link
+                    to={request.id}
+                    state={detailState}
+                    className={buttonVariants({
+                      variant: 'outline',
+                      size: 'sm',
+                    })}
+                    aria-label={`${action} žádost: ${name}`}
                   >
-                    V tomto stavu nejsou žádné žádosti chovatelů.
-                  </td>
-                </tr>
-              ) : (
-                query.data.items.map((request) => {
-                  const name = breederName(request);
-                  const action =
-                    request.status === 'PENDING' ? 'Posoudit' : 'Zobrazit';
-                  // Vrácená žádost čeká na chovatele od okamžiku vrácení.
-                  const shownAt =
-                    request.status === 'RETURNED' && request.reviewedAt
-                      ? request.reviewedAt
-                      : request.lastSubmittedAt;
-                  return (
-                    <tr
-                      key={request.id}
-                      className="border-b border-border last:border-b-0"
-                    >
-                      <th
-                        scope="row"
-                        className="px-4 py-3 text-left font-semibold"
-                      >
-                        {name}
-                      </th>
-                      <td className="px-4 py-3">{REQUEST_TYPE}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        <time dateTime={shownAt}>
-                          {formatDateTime(shownAt)}
-                        </time>
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusChip status={request.status} />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link
-                          to={request.id}
-                          state={detailState}
-                          className={buttonVariants({
-                            variant: 'outline',
-                            size: 'sm',
-                          })}
-                          aria-label={`${action} žádost: ${name}`}
-                        >
-                          {action}
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </Card>
+                    {action}
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </DataTable>
       )}
     </section>
   );

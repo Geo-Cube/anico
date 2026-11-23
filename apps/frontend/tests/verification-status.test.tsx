@@ -3,14 +3,12 @@ import type {
   Role,
   VerificationStatus,
 } from '@anico/shared-schemas';
-import { focusManager, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { focusManager } from '@tanstack/react-query';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createQueryClient } from '@/app/query-client';
-import { routes } from '@/app/routes';
+import { renderApp as renderAppAt, withoutRetry } from './render-app';
 import { server, sessionFor, unsubmittedAccount } from './server';
 
 function reviewedAccount(
@@ -45,17 +43,7 @@ function respondWith(account: MyAccount) {
   );
 }
 
-function renderApp(path = '/') {
-  const client = createQueryClient();
-  client.setDefaultOptions({ queries: { retry: false } });
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(
-    <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return router;
-}
+const renderApp = (path = '/') => renderAppAt(path, withoutRetry()).router;
 
 beforeEach(() => {
   server.use(

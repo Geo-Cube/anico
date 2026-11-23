@@ -1,13 +1,12 @@
 import type { AdminVerificationRequest } from '@anico/shared-schemas';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQueryClient } from '@/app/query-client';
-import { routes } from '@/app/routes';
 import { requestDetailKey, verificationKey } from '@/features/breeders/api';
+import { heldResponse, settle } from './helpers';
+import { renderApp } from './render-app';
 import { anonymous, server, sessionFor } from './server';
 
 const api = '/api/breeder/verification-requests';
@@ -71,36 +70,6 @@ const resubmitted: AdminVerificationRequest = {
   reviewedAt: null,
   returnReason: null,
 };
-
-function renderApp(path: string, client = createQueryClient()) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(
-    <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return router;
-}
-
-/** Rozhodnutí čeká na `release`; `done` se splní, až ho MSW odešle. */
-function heldResponse(response: () => Response) {
-  let release!: () => void;
-  let sent!: () => void;
-  const gate = new Promise<void>((resolve) => (release = resolve));
-  const done = new Promise<void>((resolve) => (sent = resolve));
-  return {
-    release,
-    done,
-    handler: async () => {
-      await gate;
-      sent();
-      return response();
-    },
-  };
-}
-
-/** Doběhnutí zpožděné odpovědi včetně jejích callbacků. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
 
 /** Schválit ověření → Potvrdit schválení (WF 07 s potvrzením). */
 async function confirmApproval() {
@@ -208,7 +177,7 @@ describe('administrace ověření chovatelů', () => {
         }),
       ),
     );
-    const router = renderApp('/administrace/chovatele');
+    const { router } = renderApp('/administrace/chovatele');
     expect(
       await screen.findByText('3 žádosti čekají na posouzení'),
     ).toBeInTheDocument();
@@ -298,7 +267,9 @@ describe('administrace ověření chovatelů', () => {
         return HttpResponse.json({ ...returned, id: pending.id, revision: 2 });
       }),
     );
-    const router = renderApp(`/administrace/chovatele/zadosti/${pending.id}`);
+    const { router } = renderApp(
+      `/administrace/chovatele/zadosti/${pending.id}`,
+    );
     await userEvent.click(
       await screen.findByRole('button', { name: 'Vrátit k doplnění' }),
     );
@@ -374,7 +345,9 @@ describe('administrace ověření chovatelů', () => {
         );
       }),
     );
-    const router = renderApp(`/administrace/chovatele/zadosti/${pending.id}`);
+    const { router } = renderApp(
+      `/administrace/chovatele/zadosti/${pending.id}`,
+    );
     await userEvent.click(
       await screen.findByRole('button', { name: 'Vrátit k doplnění' }),
     );
@@ -429,7 +402,9 @@ describe('administrace ověření chovatelů', () => {
         return HttpResponse.json(rejectedByOther);
       }),
     );
-    const router = renderApp(`/administrace/chovatele/zadosti/${pending.id}`);
+    const { router } = renderApp(
+      `/administrace/chovatele/zadosti/${pending.id}`,
+    );
     await userEvent.click(
       await screen.findByRole('button', { name: 'Zamítnout' }),
     );
@@ -470,7 +445,7 @@ describe('administrace ověření chovatelů', () => {
     expect(router.state.location.search).toBe('?stav=PENDING');
 
     await userEvent.click(
-      screen.getByRole('button', { name: 'Zavřít oznámení' }),
+      screen.getByRole('button', { name: 'Zavřít zprávu' }),
     );
     expect(
       screen.queryByText(/Ověření účtu bylo zamítnuto/),
@@ -486,7 +461,9 @@ describe('administrace ověření chovatelů', () => {
         ),
       ),
     );
-    const router = renderApp(`/administrace/chovatele/zadosti/${pending.id}`);
+    const { router } = renderApp(
+      `/administrace/chovatele/zadosti/${pending.id}`,
+    );
     await confirmApproval();
     expect(
       await screen.findByText(/Jiný administrátor už o této žádosti rozhodl/),
@@ -532,7 +509,9 @@ describe('administrace ověření chovatelů', () => {
         });
       }),
     );
-    const router = renderApp(`/administrace/chovatele/zadosti/${pending.id}`);
+    const { router } = renderApp(
+      `/administrace/chovatele/zadosti/${pending.id}`,
+    );
     await userEvent.click(
       await screen.findByRole('button', { name: 'Schválit ověření' }),
     );
@@ -586,7 +565,7 @@ describe('administrace ověření chovatelů', () => {
     );
     renderApp(`/administrace/chovatele/zadosti/${pending.id}`);
     await userEvent.click(
-      await screen.findByRole('button', { name: 'Stáhnout' }),
+      await screen.findByRole('button', { name: 'Stáhnout certifikat.pdf' }),
     );
     expect(
       await screen.findByText('Certifikát nebyl nalezen.'),
@@ -596,7 +575,9 @@ describe('administrace ověření chovatelů', () => {
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => undefined);
-    await userEvent.click(screen.getByRole('button', { name: 'Stáhnout' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Stáhnout certifikat.pdf' }),
+    );
     await waitFor(() => expect(click).toHaveBeenCalledOnce());
     expect(click.mock.contexts[0]).toMatchObject({
       download: 'certifikat.pdf',

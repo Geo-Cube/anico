@@ -1,12 +1,15 @@
 import type { DocumentAnimal } from '@anico/shared-schemas';
 import { useQuery } from '@tanstack/react-query';
-import { PawPrint, RotateCw } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Link, useOutletContext, useSearchParams } from 'react-router';
+import { photoUrl } from '@/features/animals/api';
 import { PhotoGallery } from '@/features/animals/PhotoGallery';
+import { cn } from '@/shared/lib/cn';
 import { isApiError } from '@/shared/lib/http';
-import { Button, buttonVariants } from '@/shared/ui/button';
-import { Card } from '@/shared/ui/card';
+import { Breadcrumb } from '@/shared/ui/breadcrumb';
+import { buttonVariants } from '@/shared/ui/button';
+import { pageTitleClassName } from '@/shared/ui/page-header';
+import { InlineQueryError, LoadingText } from '@/shared/ui/state-panel';
 import { animalPhotosQuery, QUEUE_PATH } from './api';
 
 /** Co `DocumentReviewDetail` předává do vnořené trasy přes `useOutlet`. */
@@ -46,32 +49,18 @@ export function DocumentPhotos() {
     <section className="flex flex-col gap-6" aria-labelledby="photos-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <nav
-            aria-label="Drobečková navigace"
-            className="text-sm text-muted-foreground"
-          >
-            <Link
-              to={QUEUE_PATH}
-              className="hover:text-foreground hover:underline"
-            >
-              Doklady zvířat
-            </Link>
-            <span aria-hidden="true" className="px-1.5">
-              /
-            </span>
-            <Link to=".." className="hover:text-foreground hover:underline">
-              {animal.name} – {typeLabel}
-            </Link>
-            <span aria-hidden="true" className="px-1.5">
-              /
-            </span>
-            <span aria-current="page">Fotografie</span>
-          </nav>
+          <Breadcrumb
+            items={[
+              { label: 'Doklady zvířat', to: QUEUE_PATH },
+              { label: `${animal.name} – ${typeLabel}`, to: '..' },
+              { label: 'Fotografie' },
+            ]}
+          />
           <h1
             id="photos-title"
             ref={heading}
             tabIndex={-1}
-            className="text-[28px] font-semibold tracking-[-0.03em] outline-none"
+            className={cn(pageTitleClassName, 'outline-none')}
           >
             Fotografie zvířete
           </h1>
@@ -83,44 +72,30 @@ export function DocumentPhotos() {
       </div>
 
       {photos.isPending ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Načítám fotografie…
-        </p>
+        <LoadingText>Načítám fotografie…</LoadingText>
       ) : photos.isError ? (
-        <div className="flex flex-col items-start gap-3 text-sm">
-          {isApiError(photos.error, 'forbidden') ? (
-            <p>K fotografiím zvířete nemáte oprávnění.</p>
-          ) : (
-            <>
-              <p>Fotografie se nepodařilo načíst.</p>
-              <Button
-                variant="outline"
-                onClick={() => void photos.refetch()}
-                disabled={photos.isFetching}
-              >
-                <RotateCw
-                  className={photos.isFetching ? 'animate-spin' : undefined}
-                />
-                Zkusit znovu
-              </Button>
-            </>
-          )}
-        </div>
-      ) : items.length === 0 ? (
-        <Card className="flex aspect-[4/3] flex-col items-center justify-center gap-2 rounded-2xl text-muted-foreground">
-          <PawPrint className="size-10" aria-hidden />
-          <p className="text-sm">Zvíře nemá žádné fotografie.</p>
-        </Card>
+        isApiError(photos.error, 'forbidden') ? (
+          <InlineQueryError message="K fotografiím zvířete nemáte oprávnění." />
+        ) : (
+          <InlineQueryError
+            message="Fotografie se nepodařilo načíst."
+            onRetry={() => void photos.refetch()}
+            retrying={photos.isFetching}
+          />
+        )
       ) : (
-        <PhotoGallery
-          animalId={animal.id}
-          name={animal.name}
-          photos={items}
-          selected={selected}
-          onSelect={(index) =>
-            setParams({ foto: String(index + 1) }, { replace: true })
-          }
-        />
+        <div className="mx-auto w-full max-w-3xl">
+          <PhotoGallery
+            name={animal.name}
+            photos={items}
+            src={(photoId, size) => photoUrl(animal.id, photoId, size)}
+            selected={selected}
+            onSelect={(index) =>
+              setParams({ foto: String(index + 1) }, { replace: true })
+            }
+            emptyText="Zvíře nemá žádné fotografie."
+          />
+        </div>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">

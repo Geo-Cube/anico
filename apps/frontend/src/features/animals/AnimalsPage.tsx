@@ -11,6 +11,7 @@ import {
 import { useId } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { cn } from '@/shared/lib/cn';
+import { formatWeightKg } from '@/shared/lib/format';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
 import { controlClassName } from '@/shared/ui/field';
@@ -24,7 +25,9 @@ import {
   listAnimals,
   parseAnimalFilter,
   photoUrl,
+  SEX_OPTIONS,
   sexLabel,
+  SPECIES_OPTIONS,
   speciesLabel,
   type AnimalFilter,
 } from './api';
@@ -107,11 +110,7 @@ function FilterPanel({
       <ChoiceChips<AnimalSpecies>
         label="Druh zvířete"
         value={species ?? ''}
-        options={[
-          ['', 'Všechny'],
-          ['dog', 'Pes'],
-          ['horse', 'Kůň'],
-        ]}
+        options={[['', 'Všechny'], ...SPECIES_OPTIONS]}
         onChange={(next) => {
           // plemeno patří k druhu, změna druhu ho proto vždy zruší
           const { species: _species, breedId: _breed, ...rest } = filter;
@@ -156,17 +155,14 @@ function FilterPanel({
           <AnimalError
             error={breeds.error}
             onRetry={() => void breeds.refetch()}
+            retrying={breeds.isFetching}
           />
         )}
       </div>
       <ChoiceChips<AnimalSex>
         label="Pohlaví"
         value={sex ?? ''}
-        options={[
-          ['', 'Obě'],
-          ['male', 'Samec'],
-          ['female', 'Samice'],
-        ]}
+        options={[['', 'Obě'], ...SEX_OPTIONS]}
         onChange={(next) =>
           onChange(next ? { ...without('sex'), sex: next } : without('sex'))
         }
@@ -187,8 +183,7 @@ function FilterPanel({
 function AnimalCard({ animal }: { animal: Animal }) {
   const photo = animal.photos.find((item) => item.isPrimary);
   const details = [
-    animal.weightKg !== null &&
-      `${new Intl.NumberFormat('cs-CZ').format(animal.weightKg)} kg`,
+    animal.weightKg !== null && formatWeightKg(animal.weightKg),
     animal.coatColor,
   ].filter(Boolean);
   return (
@@ -318,6 +313,7 @@ export function AnimalsPage() {
             <AnimalError
               error={query.error}
               onRetry={() => void query.refetch()}
+              retrying={query.isFetching}
             />
           )}
           {query.isSuccess && animals.length === 0 && (

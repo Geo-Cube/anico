@@ -65,3 +65,18 @@ export function Field({
     </div>
   );
 }
+
+/** Error announced on change, e.g. a failed save inside a dialog or a file row. */
+export function FieldError({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <p role="alert" className={cn('text-sm text-destructive', className)}>
+      {children}
+    </p>
+  );
+}

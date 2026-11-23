@@ -1,24 +1,17 @@
 import type { AnimalDocumentsState } from '@anico/shared-schemas';
 import { Check, Clock, FileQuestion, X, type LucideIcon } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
+import { chipClassName, chipTone, type ChipTone } from '@/shared/ui/chip';
 import { DOCUMENTS_STATE_LABEL } from './api';
 
 const STYLE: Record<
   AnimalDocumentsState,
-  { icon: LucideIcon; text: string; soft: string }
+  { icon: LucideIcon; tone: ChipTone }
 > = {
-  NOT_SUBMITTED: {
-    icon: FileQuestion,
-    text: 'text-muted-foreground',
-    soft: 'bg-muted',
-  },
-  PENDING: { icon: Clock, text: 'text-warning', soft: 'bg-warning-soft' },
-  APPROVED: {
-    icon: Check,
-    text: 'text-accent-foreground',
-    soft: 'bg-accent',
-  },
-  REJECTED: { icon: X, text: 'text-destructive', soft: 'bg-destructive-soft' },
+  NOT_SUBMITTED: { icon: FileQuestion, tone: 'neutral' },
+  PENDING: { icon: Clock, tone: 'pending' },
+  APPROVED: { icon: Check, tone: 'ok' },
+  REJECTED: { icon: X, tone: 'bad' },
 };
 
 /** Stav dokladů; `onImage` je bílý štítek přes fotografii karty (v0). */
@@ -31,13 +24,14 @@ export function DocumentsStateChip({
   onImage?: boolean;
   className?: string;
 }) {
-  const { icon: Icon, text, soft } = STYLE[state];
+  const { icon: Icon, tone } = STYLE[state];
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium',
-        text,
-        onImage ? 'bg-card/95 shadow-sm backdrop-blur' : soft,
+        chipClassName,
+        'gap-1 text-xs font-medium',
+        chipTone[tone],
+        onImage && 'bg-card/95 shadow-sm backdrop-blur',
         className,
       )}
     >

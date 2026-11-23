@@ -38,6 +38,17 @@ export function sessionGeneration(client: QueryClient) {
   return generations.get(client) ?? 0;
 }
 
+export type SessionGuard = { isCurrent: () => boolean };
+
+/**
+ * Captures the current session generation. Check `isCurrent()` before writing a
+ * response into the cache or navigating, and again after every `await`.
+ */
+export function sessionGuard(client: QueryClient): SessionGuard {
+  const generation = sessionGeneration(client);
+  return { isCurrent: () => generation === sessionGeneration(client) };
+}
+
 /** Drops all non-session queries and starts a new session generation. */
 export function discardUserData(client: QueryClient) {
   generations.set(client, sessionGeneration(client) + 1);

@@ -2,7 +2,7 @@ import type { CreateTestAccountInput } from '@anico/shared-schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlaskConical } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { displayName, useCurrentSession } from '@/features/auth';
+import { displayName, roleName, useCurrentSession } from '@/features/auth';
 import { formatDateTime } from '@/shared/lib/format';
 import { isApiError } from '@/shared/lib/http';
 import { Alert } from '@/shared/ui/alert';
@@ -10,15 +10,14 @@ import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
 import { controlClassName, Field } from '@/shared/ui/field';
 import { PageHeader } from '@/shared/ui/page-header';
-import { ForbiddenState, StatePanel } from '@/shared/ui/state-panel';
+import {
+  ForbiddenState,
+  InlineQueryError,
+  LoadingText,
+  StatePanel,
+} from '@/shared/ui/state-panel';
 import { createTestAccount, testAccountsKey, testAccountsQuery } from './api';
 import { useAccountSwitch } from './use-account-switch';
-
-const roleNames = {
-  breeder: 'Chovatel',
-  admin: 'Administrátor',
-  owner: 'Vlastník',
-};
 
 function failureText(error: unknown) {
   if (isApiError(error) && error.code === 'OWNER_REQUIRED')
@@ -129,25 +128,14 @@ function TestAccountList() {
   const accounts = useQuery(testAccountsQuery);
   const switchAccount = useAccountSwitch();
   if (accounts.isPending)
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        Načítám testovací účty…
-      </p>
-    );
+    return <LoadingText>Načítám testovací účty…</LoadingText>;
   if (accounts.isError)
     return (
-      <Alert variant="error">
-        <p>
-          Testovací účty se nepodařilo načíst.{' '}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void accounts.refetch()}
-          >
-            Zkusit znovu
-          </Button>
-        </p>
-      </Alert>
+      <InlineQueryError
+        message="Testovací účty se nepodařilo načíst."
+        onRetry={() => void accounts.refetch()}
+        retrying={accounts.isFetching}
+      />
     );
   if (accounts.data.length === 0)
     return (
@@ -195,7 +183,7 @@ function TestAccountList() {
                 <td className="px-4 py-3 font-medium">{name}</td>
                 <td className="px-4 py-3">{identity.email}</td>
                 <td className="px-4 py-3">
-                  {identity.roles.map((role) => roleNames[role]).join(', ')}
+                  {identity.roles.map((role) => roleName[role]).join(', ')}
                 </td>
                 <td className="px-4 py-3">{formatDateTime(createdAt)}</td>
                 <td className="px-4 py-3 text-right">

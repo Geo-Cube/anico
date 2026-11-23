@@ -3,13 +3,11 @@ import {
   type MyAccount,
   type SubmitVerificationRequestInput,
 } from '@anico/shared-schemas';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   CircleCheck,
   Clock,
-  Download,
-  ExternalLink,
   FileUp,
   ShieldCheck,
   ShieldX,
@@ -17,21 +15,22 @@ import {
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  canAdminister,
-  sessionGeneration,
+  sessionGuard,
   useCurrentSession,
+  type SessionGuard,
 } from '@/features/auth';
 import { cn } from '@/shared/lib/cn';
-import { useFileDownload } from '@/shared/lib/file-download';
-import { formatDateTime } from '@/shared/lib/format';
 import { isApiError } from '@/shared/lib/http';
 import { Alert } from '@/shared/ui/alert';
 import { Button, buttonVariants } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
+import { DateTime } from '@/shared/ui/date-time';
 import { controlClassName, Field } from '@/shared/ui/field';
+import { FileActions } from '@/shared/ui/file-actions';
 import { PageHeader } from '@/shared/ui/page-header';
 import {
   ForbiddenState,
+  LoadingText,
   QueryErrorState,
   StatePanel,
 } from '@/shared/ui/state-panel';
@@ -44,6 +43,7 @@ import {
   myAccountQuery,
   rejectedFields,
   submitVerificationRequest,
+  useBreederAccount,
 } from './api';
 
 type TextField = keyof SubmitVerificationRequestInput;
@@ -175,9 +175,7 @@ type Outcome = {
  */
 export function VerificationRequestPage() {
   const session = useCurrentSession();
-  const isBreeder =
-    session.identity.roles.includes('breeder') && !canAdminister(session);
-  const account = useQuery({ ...myAccountQuery, enabled: isBreeder });
+  const { isBreeder, account } = useBreederAccount();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const shown = outcome?.userId === session.identity.userId ? outcome : null;
   const report = (kind: Outcome['kind']) =>
@@ -189,11 +187,7 @@ export function VerificationRequestPage() {
   else if (shown?.kind === 'sent' || shown?.kind === 'resent')
     content = <Confirmation resent={shown.kind === 'resent'} />;
   else if (account.isPending)
-    content = (
-      <p role="status" className="text-sm text-muted-foreground">
-        Načítám stav ověření účtu…
-      </p>
-    );
+    content = <LoadingText>Načítám stav ověření účtu…</LoadingText>;
   else if (account.isError)
     content = (
       <QueryErrorState
@@ -337,16 +331,16 @@ function RequestForm({
     }: {
       input: SubmitVerificationRequestInput;
       certificate: File | null;
-      /** Generace relace při odeslání: odpověď pro jiný účet se zahodí. */
-      generation: number;
+      /** Relace při odeslání: odpověď pro jiný účet se zahodí. */
+      submittedSession: SessionGuard;
     }) => submitVerificationRequest(input, certificate, session.csrfToken),
-    onSuccess: (saved, { generation }) => {
-      if (generation !== sessionGeneration(client)) return;
+    onSuccess: (saved, { submittedSession }) => {
+      if (!submittedSession.isCurrent()) return;
       client.setQueryData(myAccountQuery.queryKey, saved);
       onSent();
     },
-    onError: async (error, { generation }) => {
-      if (generation !== sessionGeneration(client)) return;
+    onError: async (error, { submittedSession }) => {
+      if (!submittedSession.isCurrent()) return;
       const conflict = accountConflict(error);
       if (conflict) {
         // A3: žádost už existuje; ukážeme její aktuální stav místo formuláře.
@@ -354,7 +348,7 @@ function RequestForm({
           client.setQueryData(myAccountQuery.queryKey, conflict.current);
         else
           await client.invalidateQueries({ queryKey: myAccountQuery.queryKey });
-        if (generation === sessionGeneration(client)) onConflict();
+        if (submittedSession.isCurrent()) onConflict();
         return;
       }
       const found = serverFieldErrors(error);
@@ -401,7 +395,7 @@ function RequestForm({
     mutation.mutate({
       input: parsed.data,
       certificate: file,
-      generation: sessionGeneration(client),
+      submittedSession: sessionGuard(client),
     });
   }
 
@@ -419,10 +413,7 @@ function RequestForm({
             {request.returnReason && <p>Důvod: {request.returnReason}</p>}
             {request.reviewedAt && (
               <p>
-                Vráceno{' '}
-                <time dateTime={request.reviewedAt}>
-                  {formatDateTime(request.reviewedAt)}
-                </time>
+                Vráceno <DateTime value={request.reviewedAt} />
               </p>
             )}
             <p>Opravte údaje nebo osvědčení a žádost odešlete znovu.</p>
@@ -564,12 +555,6 @@ function RequestForm({
   );
 }
 
-function fileErrorText(error: unknown) {
-  if (isApiError(error, 'forbidden')) return 'K souboru nemáte oprávnění.';
-  if (isApiError(error) && error.status === 404) return 'Soubor nebyl nalezen.';
-  return 'Soubor se nepodařilo načíst. Zkuste to znovu.';
-}
-
 /** Při opravě vrácené žádosti zůstává uložené osvědčení, pokud chovatel nevybere nové. */
 function StoredCertificate({
   fileName,
@@ -582,11 +567,6 @@ function StoredCertificate({
   replaced: boolean;
   onKeep: () => void;
 }) {
-  const file = useFileDownload({
-    load: downloadMyCertificate,
-    fileName,
-    contentType,
-  });
   return (
     <div className="space-y-3 rounded-xl border border-border p-4">
       <p className="text-sm">
@@ -598,35 +578,16 @@ function StoredCertificate({
           : 'Pokud nevyberete nový soubor, zůstane uložené osvědčení beze změny.'}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={file.open}
-          disabled={file.isPending}
-          aria-label={`Otevřít ${fileName}`}
-        >
-          <ExternalLink aria-hidden />
-          Otevřít
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={file.download}
-          disabled={file.isPending}
-          aria-label={`Stáhnout ${fileName}`}
-        >
-          <Download aria-hidden />
-          Stáhnout
-        </Button>
+        <FileActions
+          load={downloadMyCertificate}
+          fileName={fileName}
+          contentType={contentType}
+          className="contents"
+        />
         {replaced && (
           <Button variant="ghost" size="sm" onClick={onKeep}>
             Ponechat uložené osvědčení
           </Button>
-        )}
-        {file.error && (
-          <p role="alert" className="w-full text-xs text-destructive">
-            {fileErrorText(file.error)}
-          </p>
         )}
       </div>
     </div>

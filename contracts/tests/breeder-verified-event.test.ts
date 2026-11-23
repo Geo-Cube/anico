@@ -13,8 +13,7 @@ import {
   BreederVerifiedEventSchema,
   ANIMAL_VERIFIED_BREEDERS_CONSUMER,
 } from '@anico/shared-schemas';
-import { listAnimals } from '@/features/animals/api';
-import { isUnverifiedBreeder } from '@/features/animals/AnimalError';
+import { isUnverifiedBreeder, listAnimals } from '@/features/animals/api';
 import { decideRequest } from '@/features/breeders/api';
 import {
   myAccountQuery,
