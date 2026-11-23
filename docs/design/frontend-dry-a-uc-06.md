@@ -1,7 +1,7 @@
 # Frontend: odstranění duplicit a napojení detailu nabídky (US-06)
 
-Stav: fáze 0–6 implementovány na větvi `feature/us06-offer-detail-frontend` z `dev` (`be26427`), nenasazeno,
-necommitováno. Otevřená rozhodnutí (kap. 5) jsou zatím implementována podle návrhu a čekají na potvrzení.
+Stav: fáze 0–6 implementovány na větvi `feature/us06-offer-detail-frontend` z `dev` (`be26427`), draft PR #58,
+nenasazeno. Otevřená rozhodnutí (kap. 5) jsou zatím implementována podle návrhu a čekají na potvrzení.
 Rozsah: celý `apps/frontend` (sdílené části, všechny featury, testy) a napojení stránky detailu nabídky na backend US-06.
 Vstupy: [návrh UC-06](uc-06-detail-nabidky.md), [testovací plán UC-06](../qa/uc-06-test-plan.md),
 `OfferDetailSchema` v `packages/shared-schemas/src/offer.ts`, PR #52 (`7280534`) a PR #57.
