@@ -724,6 +724,76 @@
       }
     },
     "/offers": {
+      "get": {
+        "tags": ["offers"],
+        "operationId": "listActiveOffers",
+        "summary": "Vyhledat aktivní nabídky",
+        "description": "Ověřený chovatel (US-05). Vrací pouze aktivní nabídky (`ACTIVE` k okamžiku požadavku) s volitelným filtrováním podle druhu, plemene (vyžaduje odpovídající `species`), kraje a pohlaví. Stránkování přes kurzor `before=nextCursor`.",
+        "parameters": [
+          {
+            "name": "species",
+            "in": "query",
+            "required": false,
+            "description": "Filtr druhu.",
+            "schema": { "$ref": "#/components/schemas/AnimalSpecies" }
+          },
+          {
+            "name": "breedId",
+            "in": "query",
+            "required": false,
+            "description": "Filtr plemene; vyžaduje odpovídající `species`.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 160 }
+          },
+          {
+            "name": "regionId",
+            "in": "query",
+            "required": false,
+            "description": "Filtr kraje ČR.",
+            "schema": { "$ref": "#/components/schemas/RegionId" }
+          },
+          {
+            "name": "sex",
+            "in": "query",
+            "required": false,
+            "description": "Filtr pohlaví.",
+            "schema": { "$ref": "#/components/schemas/AnimalSex" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Velikost stránky.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "Kurzor `nextCursor` z předchozí stránky.",
+            "schema": { "$ref": "#/components/schemas/OfferId" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stránka aktivních nabídek.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OfferList" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/BreederForbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" },
+          "503": { "$ref": "#/components/responses/VerificationUnavailable" }
+        }
+      },
       "post": {
         "tags": ["offers"],
         "operationId": "createOffer",
@@ -1683,6 +1753,103 @@
             "items": { "$ref": "#/components/schemas/MyOffer" }
           },
           "nextCursor": { "type": "null" }
+        },
+        "required": ["items", "nextCursor"],
+        "additionalProperties": false
+      },
+      "OfferListItem": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/OfferId" },
+          "animalId": { "$ref": "#/components/schemas/AnimalId" },
+          "regionId": { "$ref": "#/components/schemas/RegionId" },
+          "validFrom": { "type": "string", "format": "date-time" },
+          "validTo": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "message": { "type": ["string", "null"] },
+          "animal": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "species": { "$ref": "#/components/schemas/AnimalSpecies" },
+              "breedId": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "sex": { "$ref": "#/components/schemas/AnimalSex" },
+              "birthDate": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  { "type": "null" }
+                ]
+              },
+              "city": {
+                "anyOf": [
+                  { "type": "string", "minLength": 1, "maxLength": 120 },
+                  { "type": "null" }
+                ]
+              },
+              "primaryPhotoId": {
+                "anyOf": [
+                  { "$ref": "#/components/schemas/AnimalPhotoId" },
+                  { "type": "null" }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "species",
+              "breedId",
+              "sex",
+              "birthDate",
+              "city",
+              "primaryPhotoId"
+            ],
+            "additionalProperties": false
+          },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "verified": { "type": "boolean" },
+              "documentTypes": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AnimalDocumentType" }
+              }
+            },
+            "required": ["verified", "documentTypes"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "animalId",
+          "regionId",
+          "validFrom",
+          "validTo",
+          "message",
+          "animal",
+          "verification"
+        ],
+        "additionalProperties": false
+      },
+      "OfferList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/OfferListItem" }
+          },
+          "nextCursor": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/OfferId" },
+              { "type": "null" }
+            ]
+          }
         },
         "required": ["items", "nextCursor"],
         "additionalProperties": false

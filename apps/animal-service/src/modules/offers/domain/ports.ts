@@ -1,4 +1,4 @@
-import type { AnimalSpecies } from '@anico/shared-schemas';
+import type { AnimalSex, AnimalSpecies, RegionId } from '@anico/shared-schemas';
 import type { DocumentVersion } from '../../documents/domain/animal-documents.js';
 import type { AnimalPhoto, ProfileValues } from '../../animal/domain/entity.js';
 import type {
@@ -40,6 +40,34 @@ export interface OfferDetailSource {
   animal: OfferDetailAnimal;
   /** Jen poptávky čtenáře (filtr podle odesílatele v repozitáři), jen `status`. */
   viewerInquiries: Pick<InquiryRecord, 'status'>[];
+}
+
+/** Vstupní filtry pro vyhledávání aktivních nabídek (US-05). */
+export interface ActiveOfferFilter {
+  species?: AnimalSpecies | undefined;
+  breedId?: string | undefined;
+  regionId?: RegionId | undefined;
+  sex?: AnimalSex | undefined;
+  limit: number;
+  before?: string | undefined;
+}
+
+/** Data jedné aktivní nabídky se zvířetem a doklady pro odvození ověření (US-05). */
+export interface ActiveOfferSource {
+  offer: OfferRecord;
+  animal: {
+    name: string;
+    species: AnimalSpecies;
+    breedId: string;
+    sex: AnimalSex;
+    birthDate: string | null;
+    city: string | null;
+    primaryPhotoId: string | null;
+    documents: Pick<
+      DocumentVersion,
+      'documentType' | 'isCurrent' | 'assessmentStatus'
+    >[];
+  };
 }
 
 export interface OfferRepository {
@@ -92,4 +120,12 @@ export interface OfferRepository {
     senderBreederId: string,
     now: Date,
   ): Promise<boolean>;
+  /**
+   * Vyhledá aktivní nabídky (k `now`) podle volitelných filtrů (druh, plemeno, kraj, pohlaví)
+   * s kurzorovým stránkováním (US-05).
+   */
+  findActive(
+    filter: ActiveOfferFilter,
+    now: Date,
+  ): Promise<ActiveOfferSource[]>;
 }

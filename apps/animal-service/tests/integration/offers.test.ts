@@ -2303,7 +2303,11 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       expect(names.every((name) => name.length > 0)).toBe(true);
 
       for (const photoId of [pngId, jpegId])
-        for (const query of [{}, { size: 'thumbnail' }, { size: 'preview' }]) {
+        for (const query of [
+          {},
+          { size: 'thumbnail' },
+          { size: 'preview' },
+        ] as { size?: string }[]) {
           const res = await fileOf(offerId, photoId, stranger, query).expect(
             200,
           );
@@ -2468,7 +2472,6 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       ['put', '/offers/<id>'],
       ['patch', '/offers/<id>'],
       ['delete', '/offers/<id>'],
-      ['get', '/offers'],
       ['put', '/offers/<id>/withdraw'],
       ['delete', '/offers/<id>/withdraw'],
       ['get', '/offers/<id>/withdraw'],
@@ -2484,6 +2487,84 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       expect([404, 405]).toContain(res.status);
       expect(res.status).toBe(404);
       expect(await storedOffers(animalId)).toEqual(before);
+    });
+  });
+  describe('US-05 list active offers', () => {
+    it('returns only ACTIVE offers with animal summary and verification badge', async () => {
+      const activeDogId = await createAnimal(owner, {
+        name: 'Rex',
+        species: 'dog',
+        breedId: dogBreed,
+        sex: 'male',
+        city: 'Praha',
+      });
+      const scheduledDogId = await createAnimal(owner, {
+        name: 'Max',
+        species: 'dog',
+        breedId: dogBreed,
+        sex: 'male',
+      });
+      const withdrawnDogId = await createAnimal(owner, {
+        name: 'Baryk',
+        species: 'dog',
+        breedId: dogBreed,
+        sex: 'male',
+      });
+
+      const activeOfferId = await storeOffer(activeDogId, {
+        regionId: 'praha',
+        message: 'Kryti Praha',
+      });
+      await storeOffer(scheduledDogId, {
+        regionId: 'praha',
+        validFrom: new Date(NOW.getTime() + 60 * 60 * 1000),
+      });
+      const withdrawnOfferId = await storeOffer(withdrawnDogId, {
+        regionId: 'praha',
+      });
+      await request(fixed)
+        .post(`/offers/${withdrawnOfferId}/withdraw`)
+        .set(auth(owner))
+        .expect(200);
+
+      const res = await request(fixed)
+        .get('/offers')
+        .set(auth(stranger))
+        .expect(200);
+
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0]).toMatchObject({
+        id: activeOfferId,
+        animalId: activeDogId,
+        regionId: 'praha',
+        message: 'Kryti Praha',
+        animal: {
+          name: 'Rex',
+          species: 'dog',
+          breedId: dogBreed,
+          sex: 'male',
+          city: 'Praha',
+        },
+        verification: {
+          verified: false,
+          documentTypes: [],
+        },
+      });
+      expect(res.body.nextCursor).toBeNull();
+    });
+
+    it('rejects breedId without matching species with 400', async () => {
+      await request(fixed)
+        .get('/offers')
+        .query({ breedId: dogBreed })
+        .set(auth(stranger))
+        .expect(400);
+
+      await request(fixed)
+        .get('/offers')
+        .query({ species: 'horse', breedId: dogBreed })
+        .set(auth(stranger))
+        .expect(400);
     });
   });
 });

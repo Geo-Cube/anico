@@ -345,6 +345,9 @@ export {
   MyOfferSchema,
   OfferDetailSchema,
   MyOfferListSchema,
+  ListOffersQuerySchema,
+  OfferListItemSchema,
+  OfferListSchema,
   regions,
   type RegionId,
   type OfferStatus,
@@ -358,4 +361,7 @@ export {
   type Offer,
   type MyOffer,
   type MyOfferList,
+  type ListOffersQuery,
+  type OfferListItem,
+  type OfferList,
 } from './offer.js';

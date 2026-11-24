@@ -25,6 +25,7 @@ import {
   DocumentReviewListSchema,
   DocumentReviewSchema,
   InquiryUnavailableReasonSchema,
+  ListOffersQuerySchema,
   MAX_DOCUMENTS_PER_SUBMISSION,
   MAX_PHOTOS_PER_ANIMAL,
   MyOfferListSchema,
@@ -32,6 +33,8 @@ import {
   OfferDetailSchema,
   OfferIdSchema,
   OfferSchema,
+  OfferListItemSchema,
+  OfferListSchema,
   OfferStatusSchema,
   RegionIdSchema,
   SubmitInquiryResponseSchema,
@@ -163,6 +166,8 @@ const components = [
   ['Offer', OfferSchema],
   ['MyOffer', MyOfferSchema],
   ['MyOfferList', MyOfferListSchema],
+  ['OfferListItem', OfferListItemSchema],
+  ['OfferList', OfferListSchema],
   ['InquiryUnavailableReason', InquiryUnavailableReasonSchema],
   ['OfferDetail', OfferDetailSchema],
   ['OfferConflict', OfferConflictSchema],
@@ -748,6 +753,45 @@ export function openApiDocument(): JsonObject {
         },
       },
       '/offers': {
+        get: {
+          tags: ['offers'],
+          operationId: 'listActiveOffers',
+          summary: 'Vyhledat aktivní nabídky',
+          description:
+            'Ověřený chovatel (US-05). Vrací pouze aktivní nabídky (`ACTIVE` k okamžiku požadavku) s volitelným filtrováním podle druhu, plemene (vyžaduje odpovídající `species`), kraje a pohlaví. Stránkování přes kurzor `before=nextCursor`.',
+          parameters: [
+            queryParameter('species', 'Filtr druhu.', ref('AnimalSpecies')),
+            queryParameter(
+              'breedId',
+              'Filtr plemene; vyžaduje odpovídající `species`.',
+              { type: 'string', minLength: 1, maxLength: 160 },
+            ),
+            queryParameter('regionId', 'Filtr kraje ČR.', ref('RegionId')),
+            queryParameter('sex', 'Filtr pohlaví.', ref('AnimalSex')),
+            queryParameter('limit', 'Velikost stránky.', {
+              type: 'integer',
+              minimum: 1,
+              maximum: 100,
+              default: 20,
+            }),
+            queryParameter(
+              'before',
+              'Kurzor `nextCursor` z předchozí stránky.',
+              ref('OfferId'),
+            ),
+          ],
+          responses: {
+            '200': {
+              description: 'Stránka aktivních nabídek.',
+              content: json(ref('OfferList')),
+            },
+            '400': responseRef('BadRequest'),
+            '401': responseRef('Unauthorized'),
+            '403': responseRef('BreederForbidden'),
+            '500': responseRef('InternalError'),
+            '503': responseRef('VerificationUnavailable'),
+          },
+        },
         post: {
           tags: ['offers'],
           operationId: 'createOffer',

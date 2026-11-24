@@ -6,7 +6,7 @@ import {
   type StoredOffer,
 } from '../../animal/infrastructure/animal-model.js';
 import type { InquiryRecord, OfferRecord } from '../domain/offer.js';
-import type { OfferRepository } from '../domain/ports.js';
+import type { ActiveOfferFilter, OfferRepository } from '../domain/ports.js';
 import { blockingOfferMatch } from './offer-filters.js';
 
 /** Vlastník a identita zvířete, ke kterému nabídka patří (`offers` je podřízené pole). */
@@ -304,6 +304,73 @@ export function mongooseOffersRepository(
         { runValidators: true, timestamps: false },
       );
       return result.modifiedCount === 1;
+    },
+
+    async findActive(filter: ActiveOfferFilter, now: Date) {
+      const offerMatch = {
+        ...blockingOfferMatch(now),
+        validFrom: { $lte: now },
+        ...(filter.regionId && { regionId: filter.regionId }),
+      };
+
+      const query: Record<string, unknown> = {
+        offers: { $elemMatch: offerMatch },
+        ...(filter.species && { species: filter.species }),
+        ...(filter.breedId && { breedId: filter.breedId }),
+        ...(filter.sex && { sex: filter.sex }),
+        ...(filter.before &&
+          isValidObjectId(filter.before) && {
+            _id: { $lt: new Types.ObjectId(filter.before) },
+          }),
+      };
+
+      const docs = await model
+        .find(query, {
+          ownerUserId: 1,
+          name: 1,
+          species: 1,
+          breedId: 1,
+          sex: 1,
+          birthDate: 1,
+          city: 1,
+          'photos._id': 1,
+          'photos.isPrimary': 1,
+          'documents.documentType': 1,
+          'documents.isCurrent': 1,
+          'documents.assessmentStatus': 1,
+          offers: { $elemMatch: offerMatch },
+        })
+        .sort({ _id: -1 })
+        .limit(filter.limit)
+        .lean();
+
+      return docs.flatMap((doc) => {
+        const offer = doc.offers?.[0];
+        if (!offer) return [];
+        const primaryPhoto = (doc.photos ?? []).find((p) => p.isPrimary);
+        return [
+          {
+            offer: toDomain(offer, {
+              animalId: doc._id,
+              ownerUserId: doc.ownerUserId,
+            }),
+            animal: {
+              name: doc.name,
+              species: doc.species,
+              breedId: doc.breedId,
+              sex: doc.sex,
+              birthDate: doc.birthDate ?? null,
+              city: doc.city ?? null,
+              primaryPhotoId: primaryPhoto ? primaryPhoto._id.toString() : null,
+              documents: (doc.documents ?? []).map((document) => ({
+                documentType: document.documentType,
+                isCurrent: document.isCurrent,
+                assessmentStatus: document.assessmentStatus,
+              })),
+            },
+          },
+        ];
+      });
     },
   };
 }

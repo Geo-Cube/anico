@@ -261,6 +261,7 @@ function memoryRepository(initial: AnimalOffers[] = []) {
   const blocking = (offer: OfferRecord, now: Date) =>
     canWithdraw(offerStatus(offer, now));
   const repository: OfferRepository = {
+    findActive: vi.fn(),
     load: vi.fn(async (animalId: string) => {
       const found = animals.get(animalId);
       return found ? { ...found, offers: [...found.offers] } : null;
