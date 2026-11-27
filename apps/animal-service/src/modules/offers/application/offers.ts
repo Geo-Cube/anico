@@ -184,7 +184,7 @@ export function offerUseCases(dependencies: {
       });
       const nextCursor =
         items.length === filter.limit
-          ? (items[items.length - 1]?.offer.animalId ?? null)
+          ? (items[items.length - 1]?.offer.id ?? null)
           : null;
       return { items, nextCursor };
     },
