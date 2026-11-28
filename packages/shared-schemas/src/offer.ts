@@ -4,7 +4,9 @@ import {
   AnimalIdSchema,
   AnimalPhotoIdSchema,
   AnimalSchema,
+  AnimalSexSchema,
   AnimalSpeciesSchema,
+  animalBreeds,
 } from './animal.js';
 import { AnimalDocumentTypeSchema } from './animal-document.js';
 
@@ -192,3 +194,62 @@ export const OfferDetailSchema = z
     'Verified exactly when at least one approved document type exists',
   );
 export type OfferDetail = z.infer<typeof OfferDetailSchema>;
+
+export const ListOffersQuerySchema = z
+  .strictObject({
+    species: AnimalSpeciesSchema.optional(),
+    breedId: AnimalSchema.shape.breedId.optional(),
+    regionId: RegionIdSchema.optional(),
+    sex: AnimalSexSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    before: OfferIdSchema.optional(),
+  })
+  .refine(
+    (value) =>
+      !value.breedId ||
+      (!!value.species &&
+        animalBreeds(value.species).some(
+          (breed) => breed.id === value.breedId,
+        )),
+    {
+      path: ['breedId'],
+      message: 'A breed filter requires its matching species',
+    },
+  );
+export type ListOffersQuery = z.infer<typeof ListOffersQuerySchema>;
+
+export const OfferListItemSchema = z
+  .strictObject({
+    id: OfferIdSchema,
+    animalId: AnimalIdSchema,
+    regionId: RegionIdSchema,
+    validFrom: z.iso.datetime(),
+    validTo: z.iso.datetime().nullable(),
+    message: z.string().nullable(),
+    animal: z.strictObject({
+      name: AnimalSchema.shape.name,
+      species: AnimalSpeciesSchema,
+      breedId: AnimalSchema.shape.breedId,
+      sex: AnimalSexSchema,
+      birthDate: AnimalSchema.shape.birthDate,
+      city: AnimalSchema.shape.city,
+      primaryPhotoId: AnimalPhotoIdSchema.nullable(),
+    }),
+    verification: z.strictObject({
+      verified: z.boolean(),
+      documentTypes: z.array(AnimalDocumentTypeSchema),
+    }),
+  })
+  .refine(
+    (value) =>
+      value.verification.verified ===
+      value.verification.documentTypes.length > 0,
+    'Verified exactly when at least one approved document type exists',
+  );
+export type OfferListItem = z.infer<typeof OfferListItemSchema>;
+
+export const OfferListSchema = z.strictObject({
+  items: z.array(OfferListItemSchema),
+  nextCursor: OfferIdSchema.nullable(),
+});
+export type OfferList = z.infer<typeof OfferListSchema>;

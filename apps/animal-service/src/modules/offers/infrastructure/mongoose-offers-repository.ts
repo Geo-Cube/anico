@@ -6,7 +6,11 @@ import {
   type StoredOffer,
 } from '../../animal/infrastructure/animal-model.js';
 import type { InquiryRecord, OfferRecord } from '../domain/offer.js';
-import type { OfferRepository } from '../domain/ports.js';
+import type {
+  ActiveOfferFilter,
+  ActiveOfferSource,
+  OfferRepository,
+} from '../domain/ports.js';
 import { blockingOfferMatch } from './offer-filters.js';
 
 /** Vlastník a identita zvířete, ke kterému nabídka patří (`offers` je podřízené pole). */
@@ -304,6 +308,125 @@ export function mongooseOffersRepository(
         { runValidators: true, timestamps: false },
       );
       return result.modifiedCount === 1;
+    },
+
+    async findActive(
+      filter: ActiveOfferFilter,
+      now: Date,
+    ): Promise<ActiveOfferSource[]> {
+      const offerMatch = {
+        ...blockingOfferMatch(now),
+        validFrom: { $lte: now },
+        ...(filter.regionId && { regionId: filter.regionId }),
+      };
+
+      const animalMatch: Record<string, unknown> = {
+        offers: { $elemMatch: offerMatch },
+        ...(filter.species && { species: filter.species }),
+        ...(filter.breedId && { breedId: filter.breedId }),
+        ...(filter.sex && { sex: filter.sex }),
+      };
+
+      let cursorOffer: { _id: Types.ObjectId; createdAt: Date } | null = null;
+      if (filter.before && isValidObjectId(filter.before)) {
+        const beforeId = new Types.ObjectId(filter.before);
+        const cursorDoc = await model
+          .findOne(
+            { 'offers._id': beforeId },
+            { offers: { $elemMatch: { _id: beforeId } } },
+          )
+          .lean();
+        const found = cursorDoc?.offers?.[0];
+        if (!found) return [];
+        cursorOffer = { _id: found._id, createdAt: found.createdAt };
+      }
+
+      const unwoundOfferMatch: Record<string, unknown> = {
+        'offers.withdrawnAt': null,
+        'offers.validFrom': { $lte: now },
+        $or: [{ 'offers.validTo': null }, { 'offers.validTo': { $gt: now } }],
+        ...(filter.regionId && { 'offers.regionId': filter.regionId }),
+        ...(cursorOffer && {
+          $and: [
+            {
+              $or: [
+                { 'offers.createdAt': { $lt: cursorOffer.createdAt } },
+                {
+                  'offers.createdAt': cursorOffer.createdAt,
+                  'offers._id': { $lt: cursorOffer._id },
+                },
+              ],
+            },
+          ],
+        }),
+      };
+
+      interface AggregatedOfferRow {
+        _id: Types.ObjectId;
+        ownerUserId: string;
+        name: string;
+        species: ActiveOfferFilter['species'] & string;
+        breedId: string;
+        sex: ActiveOfferFilter['sex'] & string;
+        birthDate?: string | null;
+        city?: string | null;
+        photos?: { _id: Types.ObjectId; isPrimary: boolean }[];
+        documents?: {
+          documentType: string;
+          isCurrent: boolean;
+          assessmentStatus: string;
+        }[];
+        offers: StoredOffer;
+      }
+
+      const rows = await model.aggregate<AggregatedOfferRow>([
+        { $match: animalMatch },
+        { $unwind: '$offers' },
+        { $match: unwoundOfferMatch },
+        { $sort: { 'offers.createdAt': -1, 'offers._id': -1 } },
+        { $limit: filter.limit },
+        {
+          $project: {
+            ownerUserId: 1,
+            name: 1,
+            species: 1,
+            breedId: 1,
+            sex: 1,
+            birthDate: 1,
+            city: 1,
+            'photos._id': 1,
+            'photos.isPrimary': 1,
+            'documents.documentType': 1,
+            'documents.isCurrent': 1,
+            'documents.assessmentStatus': 1,
+            offers: 1,
+          },
+        },
+      ]);
+
+      return rows.map((doc) => {
+        const primaryPhoto = (doc.photos ?? []).find((p) => p.isPrimary);
+        return {
+          offer: toDomain(doc.offers, {
+            animalId: doc._id,
+            ownerUserId: doc.ownerUserId,
+          }),
+          animal: {
+            name: doc.name,
+            species: doc.species,
+            breedId: doc.breedId,
+            sex: doc.sex,
+            birthDate: doc.birthDate ?? null,
+            city: doc.city ?? null,
+            primaryPhotoId: primaryPhoto ? primaryPhoto._id.toString() : null,
+            documents: (doc.documents ?? []) as {
+              documentType: 'PEDIGREE' | 'HEALTH_RESULTS' | 'BREEDING_APPROVAL';
+              isCurrent: boolean;
+              assessmentStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+            }[],
+          },
+        };
+      });
     },
   };
 }

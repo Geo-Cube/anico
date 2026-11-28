@@ -2303,7 +2303,11 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       expect(names.every((name) => name.length > 0)).toBe(true);
 
       for (const photoId of [pngId, jpegId])
-        for (const query of [{}, { size: 'thumbnail' }, { size: 'preview' }]) {
+        for (const query of [
+          {},
+          { size: 'thumbnail' },
+          { size: 'preview' },
+        ] as { size?: string }[]) {
           const res = await fileOf(offerId, photoId, stranger, query).expect(
             200,
           );
@@ -2468,7 +2472,6 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       ['put', '/offers/<id>'],
       ['patch', '/offers/<id>'],
       ['delete', '/offers/<id>'],
-      ['get', '/offers'],
       ['put', '/offers/<id>/withdraw'],
       ['delete', '/offers/<id>/withdraw'],
       ['get', '/offers/<id>/withdraw'],
@@ -2484,6 +2487,189 @@ describe('US-04 offers over HTTP with MongoDB', () => {
       expect([404, 405]).toContain(res.status);
       expect(res.status).toBe(404);
       expect(await storedOffers(animalId)).toEqual(before);
+    });
+  });
+
+  describe('US-05 list active offers', () => {
+    it('filters active offers by species, breedId, regionId and sex', async () => {
+      const matchingDogId = await createAnimal(owner, {
+        name: 'Rex',
+        species: 'dog',
+        breedId: dogBreed,
+        sex: 'male',
+      });
+      const femaleDogId = await createAnimal(owner, {
+        name: 'Luna',
+        species: 'dog',
+        breedId: dogBreed,
+        sex: 'female',
+      });
+      const horseId = await createAnimal(owner, {
+        name: 'Sultán',
+        species: 'horse',
+        breedId: horseBreed,
+        sex: 'male',
+      });
+
+      const matchingOfferId = await storeOffer(matchingDogId, {
+        regionId: 'jihomoravsky',
+      });
+      await storeOffer(femaleDogId, { regionId: 'jihomoravsky' });
+      await storeOffer(horseId, { regionId: 'jihomoravsky' });
+
+      const res = await request(fixed)
+        .get('/offers')
+        .query({
+          species: 'dog',
+          breedId: dogBreed,
+          regionId: 'jihomoravsky',
+          sex: 'male',
+        })
+        .set(auth(stranger))
+        .expect(200);
+
+      expect(res.body.items.map((item: { id: string }) => item.id)).toEqual([
+        matchingOfferId,
+      ]);
+    });
+
+    it('orders active offers by offer creation newest first, not by animal creation', async () => {
+      const olderAnimalId = await createAnimal(owner, { name: 'Starší' });
+      const newerAnimalId = await createAnimal(owner, { name: 'Novější' });
+
+      const earlierOfferId = await storeOffer(newerAnimalId, {
+        createdAt: at(-2 * HOUR),
+        validFrom: at(-2 * HOUR),
+      });
+      const latestOfferId = await storeOffer(olderAnimalId, {
+        createdAt: at(-HOUR),
+        validFrom: at(-HOUR),
+      });
+
+      const res = await request(fixed)
+        .get('/offers')
+        .set(auth(stranger))
+        .expect(200);
+
+      expect(res.body.items.map((item: { id: string }) => item.id)).toEqual([
+        latestOfferId,
+        earlierOfferId,
+      ]);
+    });
+
+    it('supports pagination via limit and before cursor', async () => {
+      const a1 = await createAnimal(owner, { name: 'A1' });
+      const a2 = await createAnimal(owner, { name: 'A2' });
+      const a3 = await createAnimal(owner, { name: 'A3' });
+
+      const o1 = await storeOffer(a1, { createdAt: at(-3 * HOUR) });
+      const o2 = await storeOffer(a2, { createdAt: at(-2 * HOUR) });
+      const o3 = await storeOffer(a3, { createdAt: at(-HOUR) });
+
+      const page1 = await request(fixed)
+        .get('/offers')
+        .query({ limit: 2 })
+        .set(auth(stranger))
+        .expect(200);
+
+      expect(page1.body.items.map((item: { id: string }) => item.id)).toEqual([
+        o3,
+        o2,
+      ]);
+      expect(page1.body.nextCursor).toBeTruthy();
+
+      const page2 = await request(fixed)
+        .get('/offers')
+        .query({ limit: 2, before: page1.body.nextCursor })
+        .set(auth(stranger))
+        .expect(200);
+
+      expect(page2.body.items.map((item: { id: string }) => item.id)).toEqual([
+        o1,
+      ]);
+      expect(page2.body.nextCursor).toBeNull();
+    });
+
+    it('requires authentication (401) and verified breeder (403)', async () => {
+      await request(fixed).get('/offers').expect(401);
+      await request(fixed).get('/offers').set(auth(unverified)).expect(403);
+    });
+
+    it('returns only ACTIVE offers with animal summary and verification badge', async () => {
+      const activeDogId = await createAnimal(owner, {
+        name: 'Rex',
+        species: 'dog',
+        breedId: dogBreed,
+        sex: 'male',
+        city: 'Praha',
+      });
+      const scheduledDogId = await createAnimal(owner, {
+        name: 'Max',
+        species: 'dog',
+        breedId: dogBreed,
+        sex: 'male',
+      });
+      const withdrawnDogId = await createAnimal(owner, {
+        name: 'Baryk',
+        species: 'dog',
+        breedId: dogBreed,
+        sex: 'male',
+      });
+
+      const activeOfferId = await storeOffer(activeDogId, {
+        regionId: 'praha',
+        message: 'Kryti Praha',
+      });
+      await storeOffer(scheduledDogId, {
+        regionId: 'praha',
+        validFrom: new Date(NOW.getTime() + 60 * 60 * 1000),
+      });
+      const withdrawnOfferId = await storeOffer(withdrawnDogId, {
+        regionId: 'praha',
+      });
+      await request(fixed)
+        .post(`/offers/${withdrawnOfferId}/withdraw`)
+        .set(auth(owner))
+        .expect(200);
+
+      const res = await request(fixed)
+        .get('/offers')
+        .set(auth(stranger))
+        .expect(200);
+
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0]).toMatchObject({
+        id: activeOfferId,
+        animalId: activeDogId,
+        regionId: 'praha',
+        message: 'Kryti Praha',
+        animal: {
+          name: 'Rex',
+          species: 'dog',
+          breedId: dogBreed,
+          sex: 'male',
+          city: 'Praha',
+        },
+        verification: {
+          verified: false,
+          documentTypes: [],
+        },
+      });
+      expect(res.body.nextCursor).toBeNull();
+    });
+
+    it('rejects breedId without matching species with 400', async () => {
+      await request(fixed)
+        .get('/offers')
+        .query({ breedId: dogBreed })
+        .set(auth(stranger))
+        .expect(400);
+
+      await request(fixed)
+        .get('/offers')
+        .query({ species: 'horse', breedId: dogBreed })
+        .set(auth(stranger))
+        .expect(400);
     });
   });
 });

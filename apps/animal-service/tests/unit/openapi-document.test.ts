@@ -84,6 +84,7 @@ describe('OpenAPI document of animal-service', () => {
       ...routesOf(
         OffersRouter({
           repository: {
+            findActive: () => Promise.resolve([]),
             load: unused,
             append: unused,
             listByOwner: unused,

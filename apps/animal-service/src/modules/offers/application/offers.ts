@@ -28,6 +28,8 @@ import {
   type OfferRecord,
 } from '../domain/offer.js';
 import type {
+  ActiveOfferFilter,
+  ActiveOfferSource,
   OfferAnimal,
   OfferDetailAnimal,
   OfferRepository,
@@ -60,6 +62,13 @@ export interface OfferDetailView {
   verification: { verified: boolean; documentTypes: AnimalDocumentType[] };
   canSendInquiry: boolean;
   inquiryUnavailableReason: InquiryUnavailableReason | null;
+}
+
+/** Položka aktivní nabídky ve výsledcích vyhledávání (US-05). */
+export interface ActiveOfferView {
+  offer: OfferRecord;
+  animal: Omit<ActiveOfferSource['animal'], 'documents'>;
+  verification: { verified: boolean; documentTypes: AnimalDocumentType[] };
 }
 
 function viewOf(offer: OfferRecord, now: Date): OfferView {
@@ -154,6 +163,30 @@ export function offerUseCases(dependencies: {
             Number(b.canWithdraw) - Number(a.canWithdraw) ||
             b.offer.createdAt.getTime() - a.offer.createdAt.getTime(),
         );
+    },
+
+    /** Vyhledávání aktivních nabídek pro ověřeného chovatele (US-05). */
+    async listActive(
+      actor: Identity | undefined,
+      filter: ActiveOfferFilter,
+    ): Promise<{ items: ActiveOfferView[]; nextCursor: string | null }> {
+      await breeder(actor);
+      const now = clock();
+      const rows = await repository.findActive(filter, now);
+      const items = rows.map(({ offer, animal }) => {
+        const { documents, ...animalProfile } = animal;
+        const documentTypes = approvedDocumentTypes(documents);
+        return {
+          offer,
+          animal: animalProfile,
+          verification: { verified: documentTypes.length > 0, documentTypes },
+        };
+      });
+      const nextCursor =
+        items.length === filter.limit
+          ? (items[items.length - 1]?.offer.id ?? null)
+          : null;
+      return { items, nextCursor };
     },
 
     /** Stažení vlastní blokující nabídky; nevratné, znovu aktivovat nelze. */

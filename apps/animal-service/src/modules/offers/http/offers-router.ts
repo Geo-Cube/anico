@@ -4,9 +4,11 @@ import {
   AnimalPhotoIdSchema,
   CreateInquirySchema,
   CreateOfferSchema,
+  ListOffersQuerySchema,
   MyOfferListSchema,
   OfferDetailSchema,
   OfferIdSchema,
+  OfferListSchema,
   OfferSchema,
   SubmitInquiryResponseSchema,
   type Offer,
@@ -125,6 +127,26 @@ export function OffersRouter(dependencies: {
       'Offer created',
     );
     res.status(201).json(contract(OfferSchema, toDto(created)));
+  });
+
+  router.get('/offers', async (req, res) => {
+    const query = ListOffersQuerySchema.parse(req.query);
+    const result = await offers.listActive(req.auth, query);
+    res.json(
+      contract(OfferListSchema, {
+        items: result.items.map(({ offer, animal, verification }) => ({
+          id: offer.id,
+          animalId: offer.animalId,
+          regionId: offer.regionId,
+          validFrom: offer.validFrom.toISOString(),
+          validTo: offer.validTo?.toISOString() ?? null,
+          message: offer.message,
+          animal,
+          verification,
+        })),
+        nextCursor: result.nextCursor,
+      }),
+    );
   });
 
   router.get('/offers/mine', async (req, res) => {
